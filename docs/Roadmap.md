@@ -1,0 +1,131 @@
+
+# Stage 1 - Base App
+
+Create an app with asset-loading functionality and only some static screens.
+
+Assets:
+- assets/images/shining-grimace-logo.png
+- assets/images/shining-emulator-logo.png
+- assets/fonts/UbuntuMono-Regular.ttf
+- assets/images/theme-*.png
+- assets/images/icons.png
+
+Steps:
+a. Install Bevy 0.19 (using the first release candidate, version 0.19.0-rc.1)
+   with Cargo audio features disabled, and set up the App with a 2D camera and
+   showing the loading UI
+b. Include the flake.nix file from Bevy's documentation on Linux dependencies
+c. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
+   press of the left Ctrl key, conditionally in debug builds only
+d. Define app states and a resource to hold all asset handles
+e. Initialise on app startup a resource which chooses at random one of the
+   16 themes and stores its 3 palette colours and background asset name in a
+   Bevy resource (background asset is "theme-*.png" where * is 1-16)
+f. Implement the loading functionality, and the splash screen, and progress to
+   the splash screen once all assets are loaded (use the UbuntuMono font)
+
+# Stage 2 - Local Storage, User Input, User Interfaces
+
+Implement local storage, ROM providers, and settings screens.
+
+Assets:
+- assets/images/controller.png
+- assets/images/storage.png
+- assets/images/sync.png
+
+Steps:
+a. Create functionality (using modular coding patterns, and a Bevy plugin if
+   appropriate) to initialise, fetch, or save, of the local storage data
+   types
+b. Create a plugin for collecting raw inputs from keyboards and controllers
+c. Create a plugin for managing the rendering of the background image, including
+   fading it in and out as needed, and rendering the particle effects
+d. Create a plugin for managing the circuit board overlay, including code to
+   manage all of the animations
+e. Define common reusable UI element styles, and add a custom font, and build the
+   interface demo screen
+f. Create a plugin for creating user interfaces and heads-up displays, and
+   for managing the background image
+g. Use the UI components to build the Home screen (without the ROM list working
+   yet)
+h. Use the UI components to build the Settings screen (without the ROM provider
+   list or the ROM list working yet), and make sure the button hints in the
+   lower-right corner of menu screens is functional, is based on the inferred
+   primary input device, and adapts to the current UI context
+i. Use the UI components to build the ROM Provider screen, and make the ROM lists
+   on the Home screen and Settings screen work, as well as the providers list in
+   Settings
+j. Use the UI components to build the input device mapping screen
+k. Use the UI components to build the ROM data storage screen
+l. Use the UI components to build the Audio Settings screen (but without the
+   audio playback being implemented yet)
+
+# Stage 3 - Android App
+
+Create an Android version of the app.
+
+Steps:
+a. Use the conventional Android app structure for a native activity that's
+   compatible with Bevy and sets the minimum Android version to Oreo
+b. Build the Rust crate using a Gradle task
+c. Ensure screen rotation works well and that the software keyboard works
+   as needed
+d. Ensure local storage is functional for all supported Android versions for
+   local settings storage and ROM download files
+
+# Stage 4 - Rendering Setup
+
+Without the emulation yet, implement a rendering structure.
+
+Steps:
+a. Implement the design features of the emulation screen: fade background
+   elements away, fade audio away, show a placeholder error message "Not
+   Implemented", and allow the user to navigate back to the Home screen
+b. Create a plugin for writing to GameBoy frames from a ring buffer, drawing
+   random greyscale pixels every frame, scheduled to produce frames as close
+   as possible to the refresh rate of a real GameBoy
+c. Create a plugin for rendering the last-written GameBoy frame buffer
+
+# Stage 5 - Audio Setup
+
+Still without emulation, integrate the MIDI Graph Bevy plugin and the
+music playback for menus.
+
+Assets:
+- assets/audio/music.mid
+- assets/audio/sample-*.wav
+
+Steps:
+a. Add the plugin to the project
+b. Load the MIDI file and defeult audio configuration during the loading
+   screen
+c. Implement the track control as per the current theme on the transition from
+   the Splash screen of the app
+d. Ensure that playback stops when a game is launched from the Home screen, and
+   starts again when navigating back
+e. Ensure everything in the Audio Settings screen works as expected
+f. Ensure that changing the theme in the Settings screen immediately seeks to
+   the corresponding audio playback position
+
+# Stage 6 - Emulation
+
+Implement the whole emulation module and hook it into the existing
+rendering and device input infrastructure.
+
+To be written.
+
+# Stage 7 - Emulation Validation
+
+Test the emulation using GameBoy validation ROMs.
+
+Steps:
+a. Add a ROM provider, disabled by default, which loads publicly-available
+   ROMs that validate emulation correctness
+b. Add integration tests to run emulation on validation ROMs
+
+# Stage 8 - Embellishments
+
+Add extra unnecessary things for charm and replayability.
+
+Steps:
+a. Easter eggs?
