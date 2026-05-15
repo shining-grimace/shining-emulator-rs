@@ -15,13 +15,11 @@ a. Install Bevy 0.19 (using the first release candidate, version 0.19.0-rc.1)
    with Cargo audio features disabled, and set up the App with a 2D camera and
    showing the loading UI
 b. Include the flake.nix file from Bevy's documentation on Linux dependencies
-c. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
-   press of the left Ctrl key, conditionally in debug builds only
-d. Define app states and a resource to hold all asset handles
-e. Initialise on app startup a resource which chooses at random one of the
+c. Define app states and a resource to hold all asset handles
+d. Initialise on app startup a resource which chooses at random one of the
    16 themes and stores its 3 palette colours and background asset name in a
    Bevy resource (background asset is "theme-*.png" where * is 1-16)
-f. Implement the loading functionality, and the splash screen, and progress to
+e. Implement the loading functionality, and the splash screen, and progress to
    the splash screen once all assets are loaded (use the UbuntuMono font)
 
 # Stage 2 - Local Storage, User Input, User Interfaces
@@ -78,13 +76,15 @@ d. Ensure local storage is functional for all supported Android versions for
 Without the emulation yet, implement a rendering structure.
 
 Steps:
-a. Implement the design features of the emulation screen: fade background
+a. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
+   press of the left Ctrl key, conditionally in debug builds only
+b. Implement the design features of the emulation screen: fade background
    elements away, fade audio away, show a placeholder error message "Not
    Implemented", and allow the user to navigate back to the Home screen
-b. Create a plugin for writing to GameBoy frames from a ring buffer, drawing
+c. Create a plugin for writing to GameBoy frames from a ring buffer, drawing
    random greyscale pixels every frame, scheduled to produce frames as close
    as possible to the refresh rate of a real GameBoy
-c. Create a plugin for rendering the last-written GameBoy frame buffer
+d. Create a plugin for rendering the last-written GameBoy frame buffer
 
 # Stage 5 - Audio Setup
 
