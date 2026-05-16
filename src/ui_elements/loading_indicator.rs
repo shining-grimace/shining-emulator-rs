@@ -1,18 +1,11 @@
 use bevy::prelude::*;
 
+use crate::app_theme::ActiveTheme;
+
 pub const LOADING_INDICATOR_SQUARE_SIZE: f32 = 24.0;
 pub const LOADING_INDICATOR_GRID_SIZE: f32 = LOADING_INDICATOR_SQUARE_SIZE * 2.0;
 
 const LOADING_INDICATOR_STEP_SECONDS: f32 = 0.25;
-const MINIMAL_THEME_PRIMARY: Color = Color::srgb_u8(0xbc, 0x31, 0xff);
-const MINIMAL_THEME_SECONDARY: Color = Color::srgb_u8(0xe4, 0xbd, 0xa3);
-const MINIMAL_THEME_TERTIARY: Color = Color::srgb_u8(0x8c, 0xb9, 0xca);
-const LOADING_INDICATOR_COLOURS: [Color; 4] = [
-    Color::BLACK,
-    MINIMAL_THEME_TERTIARY,
-    MINIMAL_THEME_SECONDARY,
-    MINIMAL_THEME_PRIMARY,
-];
 const CLOCKWISE_SQUARE_ORDER: [LoadingIndicatorSquarePosition; 4] = [
     LoadingIndicatorSquarePosition {
         grid_column: 1,
@@ -51,7 +44,9 @@ struct LoadingIndicatorSquarePosition {
     grid_row: i16,
 }
 
-pub fn spawn_loading_indicator(parent: &mut ChildSpawnerCommands) {
+pub fn spawn_loading_indicator(parent: &mut ChildSpawnerCommands, theme: &ActiveTheme) {
+    let colours = loading_indicator_colours(theme);
+
     parent
         .spawn((
             Node {
@@ -74,7 +69,7 @@ pub fn spawn_loading_indicator(parent: &mut ChildSpawnerCommands) {
                         height: Val::Px(LOADING_INDICATOR_SQUARE_SIZE),
                         ..default()
                     },
-                    BackgroundColor(LOADING_INDICATOR_COLOURS[clockwise_position]),
+                    BackgroundColor(colours[clockwise_position]),
                     LoadingIndicatorSquare { clockwise_position },
                 ));
             }
@@ -83,16 +78,21 @@ pub fn spawn_loading_indicator(parent: &mut ChildSpawnerCommands) {
 
 fn update_loading_indicator(
     time: Res<Time>,
+    theme: Res<ActiveTheme>,
     mut squares: Query<(&LoadingIndicatorSquare, &mut BackgroundColor)>,
 ) {
+    let colours = loading_indicator_colours(&theme);
     let animation_step =
         (time.elapsed_secs() / LOADING_INDICATOR_STEP_SECONDS).floor() as usize % 4;
 
     for (square, mut background) in &mut squares {
-        let colour_index = (square.clockwise_position + LOADING_INDICATOR_COLOURS.len()
-            - animation_step)
-            % LOADING_INDICATOR_COLOURS.len();
+        let colour_index =
+            (square.clockwise_position + colours.len() - animation_step) % colours.len();
 
-        background.0 = LOADING_INDICATOR_COLOURS[colour_index];
+        background.0 = colours[colour_index];
     }
+}
+
+fn loading_indicator_colours(theme: &ActiveTheme) -> [Color; 4] {
+    [Color::BLACK, theme.tertiary, theme.secondary, theme.primary]
 }

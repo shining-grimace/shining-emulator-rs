@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::app_theme::ActiveTheme;
 use crate::dimensions::UI_HINT_MARGIN;
 use crate::ui_elements::loading_indicator::{
     LOADING_INDICATOR_GRID_SIZE, LoadingIndicatorPlugin, spawn_loading_indicator,
@@ -14,7 +15,7 @@ impl Plugin for LoadingScenePlugin {
     }
 }
 
-fn spawn_loading_scene(mut commands: Commands) {
+fn spawn_loading_scene(mut commands: Commands, theme: Res<ActiveTheme>) {
     commands
         .spawn((
             Node {
@@ -27,5 +28,5 @@ fn spawn_loading_scene(mut commands: Commands) {
             },
             Name::new("Loading scene"),
         ))
-        .with_children(spawn_loading_indicator);
+        .with_children(|parent| spawn_loading_indicator(parent, &theme));
 }

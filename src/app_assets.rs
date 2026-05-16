@@ -15,9 +15,3 @@ pub struct AppAssets {
     pub icons: Handle<Image>,
     pub theme_background: Handle<Image>,
 }
-
-impl AppAssets {
-    pub fn theme_background_path(index: usize) -> String {
-        format!("images/theme-{index}.png")
-    }
-}

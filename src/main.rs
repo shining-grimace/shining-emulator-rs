@@ -1,5 +1,6 @@
 mod app_assets;
 mod app_state;
+mod app_theme;
 mod dimensions;
 mod scenes;
 mod ui_elements;
@@ -8,6 +9,7 @@ use bevy::prelude::*;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
+use crate::app_theme::ActiveTheme;
 
 const WINDOW_TITLE: &str = "Shining Emulator";
 
@@ -15,6 +17,7 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .init_resource::<AppAssets>()
+        .init_resource::<ActiveTheme>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: WINDOW_TITLE.to_string(),
