@@ -29,7 +29,10 @@ fn main() {
         }))
         .init_state::<AppState>()
         .add_systems(Startup, camera_scene.spawn())
-        .add_plugins(scenes::loading::LoadingScenePlugin)
+        .add_plugins((
+            scenes::loading::LoadingScenePlugin,
+            scenes::splash::SplashScenePlugin,
+        ))
         .run();
 }
 

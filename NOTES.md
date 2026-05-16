@@ -1,2 +1,3 @@
 
-(Steps 1a-1c done)
+Done: Stage 1
+Next: Step 2a

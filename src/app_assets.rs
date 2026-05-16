@@ -13,5 +13,5 @@ pub struct AppAssets {
     pub shining_emulator_logo: Handle<Image>,
     pub ubuntu_mono_font: Handle<Font>,
     pub icons: Handle<Image>,
-    pub theme_background: Handle<Image>,
+    pub theme_background: Option<Handle<Image>>,
 }
