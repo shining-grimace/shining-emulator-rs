@@ -732,6 +732,7 @@ dependencies = [
  "bevy_ptr",
  "bevy_reflect",
  "bevy_render",
+ "bevy_scene",
  "bevy_shader",
  "bevy_sprite",
  "bevy_sprite_render",
@@ -1011,6 +1012,39 @@ version = "0.19.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b59345694497e51cb70146f564d2575e9ff4f4cb613f5ceea26c42ef957df296"
 dependencies = [
+ "bevy_macro_utils",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "bevy_scene"
+version = "0.19.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e779dd9d4285940ab77c5070d97d6aa75dc2a260603d92bc26c623568f85dc28"
+dependencies = [
+ "bevy_app",
+ "bevy_asset",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_platform",
+ "bevy_reflect",
+ "bevy_scene_macros",
+ "bevy_utils",
+ "thiserror 2.0.18",
+ "tracing",
+ "variadics_please",
+]
+
+[[package]]
+name = "bevy_scene_macros"
+version = "0.19.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "848e3816c7050ccfacc679a4edd492f90d88384cdb89806d6a4107b49c0541e5"
+dependencies = [
+ "bevy_ecs_macro_logic",
  "bevy_macro_utils",
  "proc-macro2",
  "quote",

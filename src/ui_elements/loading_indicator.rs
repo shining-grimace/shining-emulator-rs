@@ -6,24 +6,6 @@ pub const LOADING_INDICATOR_SQUARE_SIZE: f32 = 24.0;
 pub const LOADING_INDICATOR_GRID_SIZE: f32 = LOADING_INDICATOR_SQUARE_SIZE * 2.0;
 
 const LOADING_INDICATOR_STEP_SECONDS: f32 = 0.25;
-const CLOCKWISE_SQUARE_ORDER: [LoadingIndicatorSquarePosition; 4] = [
-    LoadingIndicatorSquarePosition {
-        grid_column: 1,
-        grid_row: 1,
-    },
-    LoadingIndicatorSquarePosition {
-        grid_column: 2,
-        grid_row: 1,
-    },
-    LoadingIndicatorSquarePosition {
-        grid_column: 2,
-        grid_row: 2,
-    },
-    LoadingIndicatorSquarePosition {
-        grid_column: 1,
-        grid_row: 2,
-    },
-];
 
 pub struct LoadingIndicatorPlugin;
 
@@ -33,47 +15,72 @@ impl Plugin for LoadingIndicatorPlugin {
     }
 }
 
-#[derive(Component)]
+#[derive(Clone, Component, Default, FromTemplate)]
 struct LoadingIndicatorSquare {
     clockwise_position: usize,
 }
 
-#[derive(Clone, Copy)]
-struct LoadingIndicatorSquarePosition {
-    grid_column: i16,
-    grid_row: i16,
-}
+pub fn loading_indicator_scene(theme: ActiveTheme) -> impl Scene {
+    let colours = loading_indicator_colours(&theme);
 
-pub fn spawn_loading_indicator(parent: &mut ChildSpawnerCommands, theme: &ActiveTheme) {
-    let colours = loading_indicator_colours(theme);
-
-    parent
-        .spawn((
-            Node {
-                display: Display::Grid,
-                grid_template_columns: RepeatedGridTrack::px(2, LOADING_INDICATOR_SQUARE_SIZE),
-                grid_template_rows: RepeatedGridTrack::px(2, LOADING_INDICATOR_SQUARE_SIZE),
-                width: Val::Px(LOADING_INDICATOR_GRID_SIZE),
-                height: Val::Px(LOADING_INDICATOR_GRID_SIZE),
-                ..default()
-            },
-            Name::new("Loading indicator"),
-        ))
-        .with_children(|indicator| {
-            for (clockwise_position, square_position) in CLOCKWISE_SQUARE_ORDER.iter().enumerate() {
-                indicator.spawn((
-                    Node {
-                        grid_column: GridPlacement::start(square_position.grid_column),
-                        grid_row: GridPlacement::start(square_position.grid_row),
-                        width: Val::Px(LOADING_INDICATOR_SQUARE_SIZE),
-                        height: Val::Px(LOADING_INDICATOR_SQUARE_SIZE),
-                        ..default()
-                    },
-                    BackgroundColor(colours[clockwise_position]),
-                    LoadingIndicatorSquare { clockwise_position },
-                ));
-            }
-        });
+    bsn! {
+        #LoadingIndicator
+        Node {
+            display: Display::Grid,
+            grid_template_columns: {vec![RepeatedGridTrack::px::<RepeatedGridTrack>(
+                2,
+                LOADING_INDICATOR_SQUARE_SIZE,
+            )]},
+            grid_template_rows: {vec![RepeatedGridTrack::px::<RepeatedGridTrack>(
+                2,
+                LOADING_INDICATOR_SQUARE_SIZE,
+            )]},
+            width: px(LOADING_INDICATOR_GRID_SIZE),
+            height: px(LOADING_INDICATOR_GRID_SIZE),
+        }
+        Children [
+            (
+                Node {
+                    grid_column: GridPlacement::start(1),
+                    grid_row: GridPlacement::start(1),
+                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
+                }
+                BackgroundColor({colours[0]})
+                LoadingIndicatorSquare { clockwise_position: 0 }
+            ),
+            (
+                Node {
+                    grid_column: GridPlacement::start(2),
+                    grid_row: GridPlacement::start(1),
+                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
+                }
+                BackgroundColor({colours[1]})
+                LoadingIndicatorSquare { clockwise_position: 1 }
+            ),
+            (
+                Node {
+                    grid_column: GridPlacement::start(2),
+                    grid_row: GridPlacement::start(2),
+                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
+                }
+                BackgroundColor({colours[2]})
+                LoadingIndicatorSquare { clockwise_position: 2 }
+            ),
+            (
+                Node {
+                    grid_column: GridPlacement::start(1),
+                    grid_row: GridPlacement::start(2),
+                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
+                }
+                BackgroundColor({colours[3]})
+                LoadingIndicatorSquare { clockwise_position: 3 }
+            ),
+        ]
+    }
 }
 
 fn update_loading_indicator(

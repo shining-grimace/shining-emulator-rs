@@ -28,11 +28,13 @@ fn main() {
             ..default()
         }))
         .init_state::<AppState>()
-        .add_systems(Startup, spawn_camera)
+        .add_systems(Startup, camera_scene.spawn())
         .add_plugins(scenes::loading::LoadingScenePlugin)
         .run();
 }
 
-fn spawn_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+fn camera_scene() -> impl Scene {
+    bsn! {
+        Camera2d
+    }
 }

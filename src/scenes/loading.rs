@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::UI_HINT_MARGIN;
 use crate::ui_elements::loading_indicator::{
-    LOADING_INDICATOR_GRID_SIZE, LoadingIndicatorPlugin, spawn_loading_indicator,
+    LOADING_INDICATOR_GRID_SIZE, LoadingIndicatorPlugin, loading_indicator_scene,
 };
 
 pub struct LoadingScenePlugin;
@@ -16,17 +16,21 @@ impl Plugin for LoadingScenePlugin {
 }
 
 fn spawn_loading_scene(mut commands: Commands, theme: Res<ActiveTheme>) {
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                right: Val::Px(UI_HINT_MARGIN),
-                bottom: Val::Px(UI_HINT_MARGIN),
-                width: Val::Px(LOADING_INDICATOR_GRID_SIZE),
-                height: Val::Px(LOADING_INDICATOR_GRID_SIZE),
-                ..default()
-            },
-            Name::new("Loading scene"),
-        ))
-        .with_children(|parent| spawn_loading_indicator(parent, &theme));
+    commands.spawn_scene(loading_scene(*theme));
+}
+
+fn loading_scene(theme: ActiveTheme) -> impl Scene {
+    bsn! {
+        #LoadingScene
+        Node {
+            position_type: PositionType::Absolute,
+            right: px(UI_HINT_MARGIN),
+            bottom: px(UI_HINT_MARGIN),
+            width: px(LOADING_INDICATOR_GRID_SIZE),
+            height: px(LOADING_INDICATOR_GRID_SIZE),
+        }
+        Children [
+            {bsn_list![loading_indicator_scene(theme)]}
+        ]
+    }
 }
