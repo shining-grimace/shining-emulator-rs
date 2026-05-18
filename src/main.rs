@@ -3,6 +3,7 @@ mod app_state;
 mod app_theme;
 mod dimensions;
 mod scenes;
+mod storage;
 mod ui_elements;
 
 use bevy::prelude::*;
@@ -30,6 +31,7 @@ fn main() {
         .init_state::<AppState>()
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins((
+            storage::StoragePlugin,
             scenes::loading::LoadingScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))

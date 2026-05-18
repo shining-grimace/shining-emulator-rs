@@ -1,3 +1,3 @@
 
-Done: Stage 1
-Next: Step 2a
+Done: Step 2a
+Next: Step 2b
