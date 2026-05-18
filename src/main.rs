@@ -1,6 +1,7 @@
 mod app_assets;
 mod app_state;
 mod app_theme;
+mod background;
 mod dimensions;
 mod input;
 mod scenes;
@@ -34,6 +35,8 @@ fn main() {
         .add_plugins((
             storage::StoragePlugin,
             input::InputPlugin,
+            background::BackgroundPlugin,
+            scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::loading::LoadingScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))

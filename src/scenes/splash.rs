@@ -9,17 +9,39 @@ const DEVELOPER_LOGO_SIZE: f32 = 72.0;
 const DEVELOPER_BRANDING_MARGIN: f32 = 32.0;
 const DEVELOPER_BRANDING_GAP: f32 = 16.0;
 const DEVELOPER_TEXT_SIZE: f32 = 28.0;
+pub const SPLASH_SCREEN_SECONDS: f32 = 2.0;
 
 pub struct SplashScenePlugin;
 
 impl Plugin for SplashScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::Splash), spawn_splash_scene);
+        app.add_systems(OnEnter(AppState::Splash), spawn_splash_scene)
+            .add_systems(
+                Update,
+                transition_to_interface_demo.run_if(in_state(AppState::Splash)),
+            );
     }
 }
 
 fn spawn_splash_scene(mut commands: Commands, assets: Res<AppAssets>) {
+    commands.insert_resource(SplashScreenTimer(Timer::from_seconds(
+        SPLASH_SCREEN_SECONDS,
+        TimerMode::Once,
+    )));
     commands.spawn_scene(splash_scene(&assets));
+}
+
+#[derive(Resource)]
+struct SplashScreenTimer(Timer);
+
+fn transition_to_interface_demo(
+    time: Res<Time>,
+    mut timer: ResMut<SplashScreenTimer>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if timer.0.tick(time.delta()).just_finished() {
+        next_state.set(AppState::InterfaceDemo);
+    }
 }
 
 fn splash_scene(assets: &AppAssets) -> impl Scene {
