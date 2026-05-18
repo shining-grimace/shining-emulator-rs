@@ -181,7 +181,7 @@ The items in the `map` key contain:
   "quitROM", "resetROM", "saveState0", "loadState0", "saveStateModifier",
   "loadStateModifier", "speedUp", "speedDown", or "pauseAndResume", or it maps
   to the emulated GameBoy input state which is activated by this key, from
-  "dleft", "dright", "dup", "ddown", "s", "b", "start", or "select"
+  "dleft", "dright", "dup", "ddown", "a", "b", "start", or "select"
 
 ### Audio Graph Configurations
 

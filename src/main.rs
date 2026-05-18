@@ -2,6 +2,7 @@ mod app_assets;
 mod app_state;
 mod app_theme;
 mod dimensions;
+mod input;
 mod scenes;
 mod storage;
 mod ui_elements;
@@ -32,6 +33,7 @@ fn main() {
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins((
             storage::StoragePlugin,
+            input::InputPlugin,
             scenes::loading::LoadingScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))
