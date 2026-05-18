@@ -1,0 +1,19 @@
+use crate::background::constants::BACKGROUND_WINDOW_MARGIN;
+
+pub const CIRCUIT_MAX_OPACITY: f32 = 0.48;
+pub const CIRCUIT_FADE_SECONDS: f32 = 0.45;
+pub const CIRCUIT_NODE_ANIMATION_SECONDS: f32 = 0.55;
+pub const CIRCUIT_WINDOW_MARGIN: f32 = BACKGROUND_WINDOW_MARGIN * 0.5;
+pub const CIRCUIT_MIN_WINDOW_MARGIN: f32 = 22.0;
+pub const CIRCUIT_NODE_WIDTH: f32 = 92.0;
+pub const CIRCUIT_NODE_HEIGHT: f32 = 76.0;
+pub const CIRCUIT_NODE_MIN_SCALE: f32 = 0.62;
+pub const CIRCUIT_TRACE_THICKNESS: f32 = 2.4;
+pub const CIRCUIT_NODE_THICKNESS: f32 = 2.6;
+pub const CIRCUIT_ROUNDING_SEGMENTS: usize = 5;
+pub const CIRCUIT_ELEMENT_SIZE: f32 = 46.0;
+pub const CIRCUIT_LAYOUT_WIDTH: f32 = 1040.0;
+pub const CIRCUIT_LAYOUT_HEIGHT: f32 = 560.0;
+pub const CIRCUIT_Z: f32 = -80.0;
+pub const CIRCUIT_NODE_Z: f32 = -78.0;
+pub const CIRCUIT_ELEMENT_Z: f32 = -76.0;

@@ -3,7 +3,7 @@
 pub mod effects;
 
 mod components;
-mod constants;
+pub(crate) mod constants;
 mod systems;
 mod utils;
 

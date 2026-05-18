@@ -2,6 +2,7 @@ mod app_assets;
 mod app_state;
 mod app_theme;
 mod background;
+mod circuit_board;
 mod dimensions;
 mod input;
 mod scenes;
@@ -36,7 +37,9 @@ fn main() {
             storage::StoragePlugin,
             input::InputPlugin,
             background::BackgroundPlugin,
+            circuit_board::CircuitBoardPlugin,
             scenes::interface_demo::InterfaceDemoScenePlugin,
+            scenes::input_mapping::InputMappingScenePlugin,
             scenes::loading::LoadingScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))

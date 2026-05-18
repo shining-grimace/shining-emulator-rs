@@ -1,6 +1,6 @@
 
-Done: Step 2c
-Next: Step 2d
+Done: Step 2d
+Next: Step 2e
 
 Cleanup for later:
 - Remove all allow-dead-code annotations
