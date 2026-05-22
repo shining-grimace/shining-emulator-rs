@@ -63,7 +63,7 @@ pub(super) fn collect_keyboard_input(
             continue;
         }
 
-        if let Some(action) = mappings.keyboard_action(event.key_code) {
+        for action in mappings.keyboard_actions(event.key_code) {
             mapped_events.write(MappedInputEvent {
                 action,
                 state: event.state,
@@ -83,7 +83,7 @@ pub(super) fn collect_controller_input(
             continue;
         };
 
-        if let Some(action) = mappings.controller_action(&controller.model_id, event.button) {
+        for action in mappings.controller_actions(&controller.model_id, event.button) {
             mapped_events.write(MappedInputEvent {
                 action,
                 state: event.state,

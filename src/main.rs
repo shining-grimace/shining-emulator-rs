@@ -38,6 +38,7 @@ fn main() {
             input::InputPlugin,
             background::BackgroundPlugin,
             circuit_board::CircuitBoardPlugin,
+            ui_elements::interactions::UiInteractionsPlugin,
             scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,
             scenes::loading::LoadingScenePlugin,

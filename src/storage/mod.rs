@@ -13,9 +13,10 @@ use std::path::{Path, PathBuf};
 use bevy::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::input::mappings::ensure_essential_navigation_mappings;
 use crate::storage::data::{GeneralSettings, LastPlayedTimestamps, LocalStorageData, RomMetadata};
 use crate::storage::errors::StorageError;
-use crate::storage::input_mappings::default_input_mappings;
+use crate::storage::input_mappings::{InputDeviceType, default_input_mappings};
 use crate::storage::paths::StoragePaths;
 use crate::storage::providers::default_rom_providers;
 
@@ -58,7 +59,21 @@ impl LocalStorage {
         let roms = read_or_create_json(&paths.roms_file, &Vec::<RomMetadata>::new())?;
         let timestamps =
             read_or_create_json(&paths.timestamps_file, &LastPlayedTimestamps::default())?;
-        let input_mappings = read_or_create_json(&paths.input_file, &default_input_mappings())?;
+        let mut input_mappings = read_or_create_json(&paths.input_file, &default_input_mappings())?;
+        let mut input_mappings_changed = false;
+        for mapping in &mut input_mappings {
+            input_mappings_changed |= ensure_essential_navigation_mappings(mapping);
+        }
+        if !input_mappings
+            .iter()
+            .any(|mapping| mapping.r#type == InputDeviceType::Keyboard)
+        {
+            input_mappings.extend(default_input_mappings());
+            input_mappings_changed = true;
+        }
+        if input_mappings_changed {
+            write_json(&paths.input_file, &input_mappings)?;
+        }
 
         ensure_default_audio_preset(&paths)?;
 

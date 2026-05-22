@@ -15,8 +15,8 @@ use crate::storage::input_mappings::{
 
 #[derive(Resource, Clone, Debug)]
 pub struct RuntimeInputMappings {
-    keyboard: HashMap<KeyCode, InputAction>,
-    controllers: HashMap<String, HashMap<GamepadButton, InputAction>>,
+    keyboard: HashMap<KeyCode, Vec<InputAction>>,
+    controllers: HashMap<String, HashMap<GamepadButton, Vec<InputAction>>>,
 }
 
 impl RuntimeInputMappings {
@@ -42,7 +42,10 @@ impl RuntimeInputMappings {
                 InputDeviceType::Keyboard => {
                     for entry in &mapping.map {
                         if let Some(key_code) = key_code_from_id(entry.key_id) {
-                            self.keyboard.insert(key_code, entry.map_to);
+                            self.keyboard
+                                .entry(key_code)
+                                .or_default()
+                                .push(entry.map_to);
                         }
                     }
                 }
@@ -51,7 +54,7 @@ impl RuntimeInputMappings {
                         let controller_map = self.controllers.entry(model_id.clone()).or_default();
                         for entry in &mapping.map {
                             if let Some(button) = gamepad_button_from_id(entry.key_id) {
-                                controller_map.insert(button, entry.map_to);
+                                controller_map.entry(button).or_default().push(entry.map_to);
                             }
                         }
                     }
@@ -61,7 +64,7 @@ impl RuntimeInputMappings {
     }
 
     pub fn set_keyboard_mapping(&mut self, key_code: KeyCode, action: InputAction) {
-        self.keyboard.insert(key_code, action);
+        self.keyboard.entry(key_code).or_default().push(action);
     }
 
     pub fn set_controller_mapping(
@@ -73,21 +76,37 @@ impl RuntimeInputMappings {
         self.controllers
             .entry(model_id.into())
             .or_default()
-            .insert(button, action);
+            .entry(button)
+            .or_default()
+            .push(action);
     }
 
-    pub(super) fn keyboard_action(&self, key_code: KeyCode) -> Option<InputAction> {
-        self.keyboard.get(&key_code).copied()
+    pub fn keyboard_action(&self, key_code: KeyCode) -> Option<InputAction> {
+        self.keyboard
+            .get(&key_code)
+            .and_then(|actions| actions.first().copied())
     }
 
-    pub(super) fn controller_action(
+    pub fn keyboard_actions(&self, key_code: KeyCode) -> impl Iterator<Item = InputAction> + '_ {
+        self.keyboard.get(&key_code).into_iter().flatten().copied()
+    }
+
+    pub fn keyboard_key_for_action(&self, action: InputAction) -> Option<KeyCode> {
+        self.keyboard
+            .iter()
+            .find_map(|(key_code, actions)| actions.contains(&action).then_some(*key_code))
+    }
+
+    pub(super) fn controller_actions(
         &self,
         model_id: &str,
         button: GamepadButton,
-    ) -> Option<InputAction> {
+    ) -> impl Iterator<Item = InputAction> + '_ {
         self.controllers
             .get(model_id)
-            .and_then(|controller| controller.get(&button))
+            .and_then(move |controller| controller.get(&button))
+            .into_iter()
+            .flatten()
             .copied()
     }
 }
@@ -112,10 +131,12 @@ pub fn sync_storage_mappings_from_runtime(
         map: runtime_mappings
             .keyboard
             .iter()
-            .filter_map(|(key_code, action)| {
-                Some(InputMapEntry {
-                    key_id: key_code_id(*key_code)?,
-                    map_to: *action,
+            .flat_map(|(key_code, actions)| {
+                actions.iter().filter_map(|action| {
+                    Some(InputMapEntry {
+                        key_id: key_code_id(*key_code)?,
+                        map_to: *action,
+                    })
                 })
             })
             .collect(),
@@ -127,10 +148,12 @@ pub fn sync_storage_mappings_from_runtime(
             controller_model_id: Some(model_id.clone()),
             map: controller_mapping
                 .iter()
-                .filter_map(|(button, action)| {
-                    Some(InputMapEntry {
-                        key_id: gamepad_button_id(*button)?,
-                        map_to: *action,
+                .flat_map(|(button, actions)| {
+                    actions.iter().filter_map(|action| {
+                        Some(InputMapEntry {
+                            key_id: gamepad_button_id(*button)?,
+                            map_to: *action,
+                        })
                     })
                 })
                 .collect(),
@@ -141,24 +164,59 @@ pub fn sync_storage_mappings_from_runtime(
     storage.save_input_mappings()
 }
 
-pub fn ensure_essential_navigation_mappings(mapping: &mut InputDeviceMapping) {
+pub fn ensure_essential_navigation_mappings(mapping: &mut InputDeviceMapping) -> bool {
+    let mut changed = ensure_keyboard_quit_app_mapping(mapping);
     let mut mapped_actions = mapping
         .map
         .iter()
         .map(|entry| entry.map_to)
         .collect::<HashSet<_>>();
-
+    let mut mapped_keys = mapping
+        .map
+        .iter()
+        .map(|entry| entry.key_id)
+        .collect::<HashSet<_>>();
     for entry in default_navigation_entries(mapping.r#type) {
-        if !mapped_actions.contains(&entry.map_to) {
+        if !mapped_actions.contains(&entry.map_to) && !mapped_keys.contains(&entry.key_id) {
             mapped_actions.insert(entry.map_to);
+            mapped_keys.insert(entry.key_id);
             mapping.map.push(entry);
+            changed = true;
         }
+    }
+
+    changed
+}
+
+fn ensure_keyboard_quit_app_mapping(mapping: &mut InputDeviceMapping) -> bool {
+    if mapping.r#type != InputDeviceType::Keyboard
+        || mapping
+            .map
+            .iter()
+            .any(|entry| entry.map_to == InputAction::QuitApp)
+    {
+        return false;
+    }
+
+    if let Some(entry) = mapping
+        .map
+        .iter_mut()
+        .find(|entry| entry.key_id == InputKeyId::Escape)
+    {
+        entry.map_to = InputAction::QuitApp;
+        true
+    } else {
+        false
     }
 }
 
 fn default_navigation_entries(device_type: InputDeviceType) -> Vec<InputMapEntry> {
     match device_type {
         InputDeviceType::Keyboard => vec![
+            InputMapEntry {
+                key_id: InputKeyId::Escape,
+                map_to: InputAction::QuitApp,
+            },
             InputMapEntry {
                 key_id: InputKeyId::ArrowLeft,
                 map_to: InputAction::Dleft,
@@ -247,8 +305,65 @@ mod tests {
         let runtime = RuntimeInputMappings::from_storage_mappings(&mappings);
 
         assert_eq!(
-            runtime.controller_action("controller-a", GamepadButton::South),
-            Some(InputAction::B)
+            runtime
+                .controller_actions("controller-a", GamepadButton::South)
+                .collect::<Vec<_>>(),
+            vec![InputAction::B]
+        );
+    }
+
+    #[test]
+    fn essential_navigation_mappings_do_not_duplicate_existing_keys() {
+        let mut mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Keyboard,
+            controller_model_id: None,
+            map: vec![InputMapEntry {
+                key_id: InputKeyId::KeyX,
+                map_to: InputAction::Select,
+            }],
+        };
+
+        assert!(ensure_essential_navigation_mappings(&mut mapping));
+
+        assert_eq!(
+            mapping
+                .map
+                .iter()
+                .filter(|entry| entry.key_id == InputKeyId::KeyX)
+                .count(),
+            1
+        );
+        assert!(
+            !mapping
+                .map
+                .iter()
+                .any(|entry| entry.map_to == InputAction::A)
+        );
+    }
+
+    #[test]
+    fn old_escape_quit_rom_mapping_is_migrated_to_quit_app() {
+        let mut mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Keyboard,
+            controller_model_id: None,
+            map: vec![InputMapEntry {
+                key_id: InputKeyId::Escape,
+                map_to: InputAction::QuitRom,
+            }],
+        };
+
+        assert!(ensure_essential_navigation_mappings(&mut mapping));
+
+        assert!(mapping.map.iter().any(
+            |entry| entry.key_id == InputKeyId::Escape && entry.map_to == InputAction::QuitApp
+        ));
+        assert_eq!(
+            mapping
+                .map
+                .iter()
+                .filter(|entry| entry.key_id == InputKeyId::Escape)
+                .count(),
+            1
         );
     }
 }

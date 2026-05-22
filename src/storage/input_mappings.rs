@@ -115,6 +115,10 @@ pub(super) fn default_input_mappings() -> Vec<InputDeviceMapping> {
                 map_to: InputAction::Ddown,
             },
             InputMapEntry {
+                key_id: InputKeyId::Escape,
+                map_to: InputAction::QuitApp,
+            },
+            InputMapEntry {
                 key_id: InputKeyId::KeyZ,
                 map_to: InputAction::B,
             },
@@ -129,10 +133,6 @@ pub(super) fn default_input_mappings() -> Vec<InputDeviceMapping> {
             InputMapEntry {
                 key_id: InputKeyId::ShiftRight,
                 map_to: InputAction::Select,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::Escape,
-                map_to: InputAction::QuitRom,
             },
             InputMapEntry {
                 key_id: InputKeyId::ControlLeft,

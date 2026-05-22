@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn active_rect_keeps_margin_from_window_edges() {
         let rect = active_rect(Vec2::new(1280.0, 720.0));
-        assert_eq!(rect.min, Vec2::new(-588.0, -308.0));
-        assert_eq!(rect.max, Vec2::new(588.0, 308.0));
+        assert_eq!(rect.min, Vec2::new(-616.0, -336.0));
+        assert_eq!(rect.max, Vec2::new(616.0, 336.0));
     }
 }

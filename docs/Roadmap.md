@@ -40,22 +40,23 @@ c. Create a plugin for managing the rendering of the background image, including
    fading it in and out as needed, and rendering the particle effects
 d. Create a plugin for managing the circuit board overlay, including code to
    manage all of the animations
-e. Define common reusable UI element styles, and add a custom font, and build the
-   interface demo screen
-f. Create a plugin for creating user interfaces and heads-up displays, and
-   for managing the background image
+e. Define common reusable UI element styles, and build the interface demo screen
+f. Create a plugin for managing the binary text effects background layer, including code
+   to manage all of the animations
 g. Use the UI components to build the Home screen (without the ROM list working
    yet)
 h. Use the UI components to build the Settings screen (without the ROM provider
    list or the ROM list working yet), and make sure the button hints in the
    lower-right corner of menu screens is functional, is based on the inferred
    primary input device, and adapts to the current UI context
-i. Use the UI components to build the ROM Provider screen, and make the ROM lists
+i. Add UI Scaling option in the settings screen, with a drop-down offering five options
+   to choose from
+j. Use the UI components to build the ROM Provider screen, and make the ROM lists
    on the Home screen and Settings screen work, as well as the providers list in
    Settings
-j. Use the UI components to build the input device mapping screen
-k. Use the UI components to build the ROM data storage screen
-l. Use the UI components to build the Audio Settings screen (but without the
+k. Use the UI components to build the input device mapping screen
+l. Use the UI components to build the ROM data storage screen
+m. Use the UI components to build the Audio Settings screen (but without the
    audio playback being implemented yet)
 
 # Stage 3 - Android App
