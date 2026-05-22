@@ -13,7 +13,7 @@ pub fn rom_identifier(rom_data: &[u8]) -> String {
         hasher.update(&rom_data[header_end_exclusive..]);
     }
 
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 #[cfg(test)]
