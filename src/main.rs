@@ -2,12 +2,14 @@ mod app_assets;
 mod app_state;
 mod app_theme;
 mod background;
+mod binary_text;
 mod circuit_board;
 mod dimensions;
 mod input;
 mod scenes;
 mod storage;
 mod ui_elements;
+mod visual_effects;
 
 use bevy::prelude::*;
 
@@ -38,6 +40,7 @@ fn main() {
             input::InputPlugin,
             background::BackgroundPlugin,
             circuit_board::CircuitBoardPlugin,
+            binary_text::BinaryTextPlugin,
             ui_elements::interactions::UiInteractionsPlugin,
             scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,

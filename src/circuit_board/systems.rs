@@ -8,8 +8,7 @@ use crate::circuit_board::components::{
     CircuitBoardLayer, CircuitNode, CircuitNodeStroke, CircuitSchematicStroke,
 };
 use crate::circuit_board::constants::{
-    CIRCUIT_ELEMENT_Z, CIRCUIT_FADE_SECONDS, CIRCUIT_MAX_OPACITY, CIRCUIT_NODE_ANIMATION_SECONDS,
-    CIRCUIT_NODE_Z, CIRCUIT_Z,
+    CIRCUIT_ELEMENT_Z, CIRCUIT_FADE_SECONDS, CIRCUIT_MAX_OPACITY, CIRCUIT_NODE_Z, CIRCUIT_Z,
 };
 use crate::circuit_board::effects::CircuitBoardDisplay;
 use crate::circuit_board::utils::{
@@ -18,6 +17,7 @@ use crate::circuit_board::utils::{
     rounded_rect_corner_radius, rounded_rect_stroke_segment, rounded_rect_strokes,
     schematic_segments, screen_has_circuit_board, transformed_base_rect,
 };
+use crate::visual_effects::ACTIVE_SCREEN_RECT_ANIMATION_SECONDS;
 
 pub(super) fn update_circuit_board_target(
     state: Res<State<AppState>>,
@@ -99,7 +99,8 @@ pub(super) fn animate_circuit_board(
         return;
     }
 
-    let max_rect_delta = window_size.max_element() / CIRCUIT_NODE_ANIMATION_SECONDS * delta_seconds;
+    let max_rect_delta =
+        window_size.max_element() / ACTIVE_SCREEN_RECT_ANIMATION_SECONDS * delta_seconds;
     let active_screen = display.active_screen.map(display_node_for_screen);
     let active_rect = active_screen.and_then(|screen| {
         nodes.iter().find(|node| node.screen == screen).map(|node| {

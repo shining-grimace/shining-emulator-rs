@@ -1,6 +1,6 @@
 
-Done: Step 2e
-Next: Step 2f
+Done: Step 2f
+Next: Step 2g
 
 Consider animation:
   - The entire UI tree fading in and out on screen change

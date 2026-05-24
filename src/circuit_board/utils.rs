@@ -33,7 +33,7 @@ pub(super) const CIRCUIT_SCREEN_NODES: [AppState; 7] = [
     AppState::Gameplay,
 ];
 
-pub(super) fn screen_has_circuit_board(screen: AppState) -> bool {
+pub(crate) fn screen_has_circuit_board(screen: AppState) -> bool {
     matches!(
         screen,
         AppState::InterfaceDemo
@@ -81,7 +81,7 @@ pub(super) fn base_rect(screen: AppState, window_size: Vec2) -> Rect {
     )
 }
 
-pub(super) fn active_rect(window_size: Vec2) -> Rect {
+pub(crate) fn active_rect(window_size: Vec2) -> Rect {
     let margin = CIRCUIT_WINDOW_MARGIN
         .min(window_size.x * 0.16)
         .min(window_size.y * 0.16)
