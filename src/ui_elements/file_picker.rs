@@ -11,6 +11,7 @@ use crate::ui_elements::styles::{
     UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_FILE_PICKER_WIDTH,
     UI_INNER_PADDING, control_fill, hover_fill, ui_border, ui_radius,
 };
+use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 const FILE_PICKER_VISIBLE_CHARS: usize = 20;
 const FILE_PICKER_GAP: f32 = 12.0;
@@ -54,6 +55,7 @@ pub fn file_picker(
         Button
         UiFocusNav { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
         UiElementKind::Button
+        UiElementTheme::TransparentControl
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: Color::NONE, hover_fill: Color::NONE }
         UiFilePicker
         Children [
@@ -80,6 +82,7 @@ pub fn file_picker(
                             font_size: px(UI_CONTROL_FONT_SIZE),
                         }
                         TextColor({theme.tertiary})
+                        UiThemeTextColor::Tertiary
                         TextLayout::new(Justify::Left, LineBreak::NoWrap)
                         IgnorePicking
                         UiFilePickerValue { picker: #FilePickerRoot }
@@ -97,6 +100,7 @@ pub fn file_picker(
                     justify_content: JustifyContent::Center,
                 }
                 BorderColor::all(theme.primary)
+                UiThemeBorderColor::Primary
                 BackgroundColor({background})
                 UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
                 IgnorePicking
@@ -108,6 +112,7 @@ pub fn file_picker(
                             font_size: px(UI_CONTROL_FONT_SIZE),
                         }
                         TextColor({theme.primary})
+                        UiThemeTextColor::Primary
                         UiElementLabel
                         IgnorePicking
                         TextLayout::new(Justify::Center, LineBreak::NoWrap)

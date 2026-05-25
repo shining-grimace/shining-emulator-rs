@@ -12,6 +12,9 @@ use crate::ui_elements::styles::{
     UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT, control_fill, hover_fill, transparent,
     ui_border, ui_padding, ui_radius,
 };
+use crate::ui_elements::theme::{
+    UiElementTheme, UiThemeBackgroundColor, UiThemeBorderColor, UiThemeTextColor,
+};
 
 #[derive(Clone, Copy)]
 pub struct ListColumn {
@@ -57,9 +60,11 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
         }
         Button
         BorderColor::all(theme.primary)
+        UiThemeBorderColor::Primary
         BackgroundColor({background})
         UiFocusNav { up: {config.nav.up}, right: {config.nav.right}, down: {config.nav.down}, left: {config.nav.left} }
         UiElementKind::List
+        UiElementTheme::List
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.primary}, fill: {background}, hover_fill: {background} }
         UiListViewFocus { remembered_item: {Entity::PLACEHOLDER} }
         Children [
@@ -70,6 +75,7 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                     height: px(2.0),
                 }
                 BackgroundColor({theme.primary})
+                UiThemeBackgroundColor::Primary
                 UiElementAccent
                 IgnorePicking
             ),
@@ -119,6 +125,7 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                                 Button
                                 UiFocusNav { up: {config.scrollbar_nav.up}, right: {config.scrollbar_nav.right}, down: {config.scrollbar_nav.down}, left: {config.scrollbar_nav.left} }
                                 UiElementKind::ScrollBar
+                                UiElementTheme::ScrollBar
                                 UiElementColors { primary: {theme.secondary}, secondary: {theme.secondary}, tertiary: {control_background}, fill: Color::NONE, hover_fill: Color::NONE }
                             ),
                         ]
@@ -156,6 +163,7 @@ fn list_row(
         BackgroundColor(Color::NONE)
         UiFocusNav { up: {row.nav.up}, right: {row.nav.right}, down: {row.nav.down}, left: {row.nav.left} }
         UiElementKind::ListItem
+        UiElementTheme::ListItem
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.primary}, fill: Color::NONE, hover_fill: {highlight_background} }
         Children [
             {cells}
@@ -218,6 +226,7 @@ fn list_cell(
                     font_size: px(UI_BODY_FONT_SIZE),
                 }
                 TextColor({colour})
+                UiThemeTextColor::Primary
                 UiElementLabel
                 IgnorePicking
                 TextLayout::new(Justify::Left, LineBreak::NoWrap)

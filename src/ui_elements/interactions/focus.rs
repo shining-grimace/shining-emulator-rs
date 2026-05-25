@@ -16,6 +16,21 @@ pub struct UiFocusNav {
     pub left: Entity,
 }
 
+pub const UI_FOCUS_NONE: u16 = u16::MAX;
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct UiFocusId {
+    pub id: u16,
+}
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct UiFocusNavIds {
+    pub up: u16,
+    pub right: u16,
+    pub down: u16,
+    pub left: u16,
+}
+
 impl Default for UiFocusNav {
     fn default() -> Self {
         Self {
@@ -24,6 +39,38 @@ impl Default for UiFocusNav {
             down: Entity::PLACEHOLDER,
             left: Entity::PLACEHOLDER,
         }
+    }
+}
+
+pub(super) fn bind_focus_nav_ids(
+    _added: On<Add, UiFocusNavIds>,
+    mut targets: ParamSet<(
+        Query<(Entity, &UiFocusId)>,
+        Query<(&UiFocusNavIds, &mut UiFocusNav)>,
+    )>,
+) {
+    let target_entities = targets
+        .p0()
+        .iter()
+        .map(|(entity, target)| (target.id, entity))
+        .collect::<Vec<_>>();
+    let target = |id| {
+        if id == UI_FOCUS_NONE {
+            return Entity::PLACEHOLDER;
+        }
+        target_entities
+            .iter()
+            .find_map(|(target_id, entity)| (*target_id == id).then_some(*entity))
+            .unwrap_or(Entity::PLACEHOLDER)
+    };
+
+    for (nav_ids, mut nav) in &mut targets.p1() {
+        *nav = UiFocusNav {
+            up: target(nav_ids.up),
+            right: target(nav_ids.right),
+            down: target(nav_ids.down),
+            left: target(nav_ids.left),
+        };
     }
 }
 

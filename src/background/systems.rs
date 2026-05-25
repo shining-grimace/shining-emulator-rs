@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::app_assets::AppAssets;
-use crate::app_theme::ActiveTheme;
+use crate::app_theme::{ActiveTheme, ActiveThemeChanged};
 use crate::background::components::{
     BackgroundImageLayer, BackgroundParticle, BackgroundParticleLayer,
 };
@@ -67,6 +67,36 @@ pub(super) fn spawn_background_entities(
                 Transform::from_xyz(particle.position.x, particle.position.y, PARTICLE_Z),
                 particle.behaviour,
             ));
+        }
+    }
+}
+
+pub(super) fn update_background_theme(
+    _theme_changed: On<ActiveThemeChanged>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    theme: Res<ActiveTheme>,
+    mut assets: ResMut<AppAssets>,
+    mut background_sprites: Query<(Entity, &mut Sprite), With<BackgroundImageLayer>>,
+    particles: Query<Entity, With<BackgroundParticleLayer>>,
+) {
+    assets.theme_background = theme
+        .background_asset_path
+        .map(|path| asset_server.load(path));
+
+    if let Some(background_image) = &assets.theme_background {
+        for (_, mut sprite) in &mut background_sprites {
+            sprite.image = background_image.clone();
+        }
+    } else {
+        for (entity, _) in &mut background_sprites {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    if theme.background_asset_path.is_none() {
+        for entity in &particles {
+            commands.entity(entity).despawn();
         }
     }
 }

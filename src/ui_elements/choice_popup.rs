@@ -9,6 +9,7 @@ use crate::ui_elements::interactions::{
     HoveredUiElement, InitialFocus, ModalUiElement, UiFocusNav, UiPointerClicked,
 };
 use crate::ui_elements::styles::{UI_BODY_FONT_SIZE, ui_border, ui_padding, ui_radius};
+use crate::ui_elements::theme::{UiThemeBorderColor, UiThemeTextColor};
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct ChoicePopupRoot;
@@ -52,6 +53,7 @@ pub fn choice_popup(
             row_gap: px(12.0),
         }
         BorderColor::all(theme.secondary)
+        UiThemeBorderColor::Secondary
         BackgroundColor(Color::BLACK)
         ModalUiElement
         ChoicePopupRoot
@@ -143,6 +145,7 @@ fn popup_label(font: Handle<Font>, theme: ActiveTheme, text: &'static str) -> im
             font_size: px(UI_BODY_FONT_SIZE),
         }
         TextColor({theme.primary})
+        UiThemeTextColor::Primary
         TextLayout::new(Justify::Left, LineBreak::WordBoundary)
     }
 }

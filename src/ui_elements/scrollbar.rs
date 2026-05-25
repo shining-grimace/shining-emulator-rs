@@ -5,12 +5,23 @@ use crate::ui_elements::interactions::{
     DraggableUiElement, IgnorePicking, UiScrollThumb, UiScrollThumbColors, UiScrollbar,
 };
 use crate::ui_elements::styles::{UI_SCROLLBAR_WIDTH, control_fill};
+use crate::ui_elements::theme::{UiScrollThumbTheme, UiThemeBackgroundColor};
 
 pub fn scrollbar(theme: ActiveTheme, thumb_height: f32, travel: f32) -> impl Scene {
+    scrollbar_with_display(theme, thumb_height, travel, Display::Flex)
+}
+
+pub fn scrollbar_with_display(
+    theme: ActiveTheme,
+    thumb_height: f32,
+    travel: f32,
+    display: Display,
+) -> impl Scene {
     let track_colour = control_fill(&theme);
     let thumb_colour = theme.primary;
     bsn! {
         Node {
+            display: {display},
             width: px(UI_SCROLLBAR_WIDTH),
             height: percent(100),
             padding: UiRect::vertical(px(6.0)),
@@ -26,6 +37,7 @@ pub fn scrollbar(theme: ActiveTheme, thumb_height: f32, travel: f32) -> impl Sce
                     border_radius: BorderRadius::MAX,
                 }
                 BackgroundColor({track_colour})
+                UiThemeBackgroundColor::ControlFill
                 IgnorePicking
             ),
             (
@@ -39,6 +51,7 @@ pub fn scrollbar(theme: ActiveTheme, thumb_height: f32, travel: f32) -> impl Sce
                 BackgroundColor({thumb_colour})
                 DraggableUiElement
                 UiScrollThumb { height: {thumb_height}, travel: {travel} }
+                UiScrollThumbTheme
                 UiScrollThumbColors { primary: {theme.primary}, secondary: {theme.secondary} }
             ),
         ]

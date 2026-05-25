@@ -1,6 +1,7 @@
 use bevy::input::{ButtonInput, ButtonState};
 use bevy::prelude::*;
 
+use crate::app_state::AppState;
 use crate::input::events::MappedInputEvent;
 use crate::storage::input_mappings::InputAction;
 use crate::ui_elements::file_picker::{UiFilePicker, UiFilePickerActivated};
@@ -34,6 +35,8 @@ pub(super) fn activate_controls(
     mut app_exit: MessageWriter<AppExit>,
     mut texts: Query<&mut Text, With<UiMultiSelectLabel>>,
     child_query: Query<&Children>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
 ) {
     let mut mapped_select = false;
     let mut mapped_quit = false;
@@ -52,7 +55,11 @@ pub(super) fn activate_controls(
     let pointer_released = mouse_buttons.just_released(MouseButton::Left);
 
     if mapped_quit {
-        app_exit.write(AppExit::Success);
+        if *state.get() == AppState::Home {
+            app_exit.write(AppExit::Success);
+        } else {
+            next_state.set(AppState::Home);
+        }
     }
 
     for (entity, kind) in &focused {

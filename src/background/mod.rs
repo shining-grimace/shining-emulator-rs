@@ -14,6 +14,7 @@ use crate::background::effects::BackgroundDisplay;
 use crate::background::systems::{
     animate_particles, configure_background_image_sampler, fade_background_in, fade_background_out,
     resize_background_image, spawn_background_entities, update_background_opacity,
+    update_background_theme,
 };
 
 pub struct BackgroundPlugin;
@@ -31,6 +32,7 @@ impl Plugin for BackgroundPlugin {
             .add_systems(OnEnter(AppState::RomData), fade_background_in)
             .add_systems(OnEnter(AppState::AudioSettings), fade_background_in)
             .add_systems(OnEnter(AppState::Gameplay), fade_background_out)
+            .add_observer(update_background_theme)
             .add_systems(
                 Update,
                 (

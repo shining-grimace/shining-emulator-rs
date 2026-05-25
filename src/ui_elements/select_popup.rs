@@ -7,6 +7,7 @@ use crate::ui_elements::interactions::{BlockPickingOnly, IgnorePicking};
 use crate::ui_elements::styles::{
     UI_BODY_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, hover_fill, ui_border, ui_radius,
 };
+use crate::ui_elements::theme::{UiThemeBorderColor, UiThemeTextColor};
 
 pub struct SelectPopupOption {
     pub label: &'static str,
@@ -41,6 +42,7 @@ pub fn select_popup(
             row_gap: px(12.0),
         }
         BorderColor::all(theme.primary)
+        UiThemeBorderColor::Primary
         BackgroundColor(Color::BLACK)
         BlockPickingOnly
         Children [
@@ -93,6 +95,7 @@ fn popup_label(font: Handle<Font>, colour: Color, text: &'static str) -> impl Sc
             font_size: px(UI_BODY_FONT_SIZE),
         }
         TextColor({colour})
+        UiThemeTextColor::Primary
         IgnorePicking
         TextLayout::new(Justify::Left, LineBreak::NoWrap)
     }

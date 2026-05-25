@@ -8,6 +8,7 @@ use crate::input::mappings::RuntimeInputMappings;
 use crate::storage::input_mappings::InputAction;
 use crate::ui_elements::interactions::IgnorePicking;
 use crate::ui_elements::styles::UI_BODY_FONT_SIZE;
+use crate::ui_elements::theme::{UiThemeImageColor, UiThemeTextColor};
 
 const ICON_TEXTURE_SIZE: f32 = 1024.0;
 const ICON_GRID_UNITS: f32 = 16.0;
@@ -22,6 +23,17 @@ pub fn action_hints(
     theme: ActiveTheme,
     input_mappings: &RuntimeInputMappings,
 ) -> impl Scene {
+    action_hints_with_labels(font, icons, theme, input_mappings, "Quit", "Select")
+}
+
+pub fn action_hints_with_labels(
+    font: Handle<Font>,
+    icons: Handle<Image>,
+    theme: ActiveTheme,
+    input_mappings: &RuntimeInputMappings,
+    back_label: &'static str,
+    action_label: &'static str,
+) -> impl Scene {
     let quit_key = action_key_label(input_mappings, InputAction::QuitApp).unwrap_or_default();
     let select_key = action_key_label(input_mappings, InputAction::A).unwrap_or_default();
 
@@ -32,8 +44,8 @@ pub fn action_hints(
             column_gap: px(42.0),
         }
         Children [
-            action_hint(font.clone(), icons.clone(), theme, quit_key, "Quit"),
-            action_hint(font, icons, theme, select_key, "Select")
+            action_hint(font.clone(), icons.clone(), theme, quit_key, back_label),
+            action_hint(font, icons, theme, select_key, action_label)
         ]
     }
 }
@@ -72,6 +84,7 @@ fn action_hint(
                         GENERIC_BUTTON_ICON_SIZE,
                     ))},
                 }
+                UiThemeImageColor::Primary
                 IgnorePicking
                 Children [
                     (
@@ -81,6 +94,7 @@ fn action_hint(
                             font_size: px(UI_BODY_FONT_SIZE),
                         }
                         TextColor(Color::BLACK)
+                        UiThemeTextColor::Black
                         IgnorePicking
                     )
                 ]
@@ -92,6 +106,7 @@ fn action_hint(
                     font_size: px(UI_BODY_FONT_SIZE),
                 }
                 TextColor({theme.primary})
+                UiThemeTextColor::Primary
                 IgnorePicking
             )
         ]

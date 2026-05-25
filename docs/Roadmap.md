@@ -58,6 +58,7 @@ k. Use the UI components to build the input device mapping screen
 l. Use the UI components to build the ROM data storage screen
 m. Use the UI components to build the Audio Settings screen (but without the
    audio playback being implemented yet)
+n. Remove the Interface Demo screen's code
 
 # Stage 3 - Android App
 

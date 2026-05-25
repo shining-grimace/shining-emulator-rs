@@ -2,6 +2,7 @@ use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
 use super::focus::FocusedUiElement;
+use super::multi_select::UiMultiSelectOption;
 use super::picking::{DraggableUiElement, HoveredUiElement, PressedUiElement};
 use super::tree::contains_entity;
 use super::visual_state::UiElementKind;
@@ -19,6 +20,36 @@ pub struct AutoScrollFocusedChild;
 pub struct UiScrollArea {
     pub offset: f32,
     pub max_offset: f32,
+}
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct UiPopupScrollArea {
+    pub option_count: usize,
+    pub max_visible_options: usize,
+    pub option_height: f32,
+    pub option_gap: f32,
+}
+
+impl UiPopupScrollArea {
+    pub fn has_overflow(self) -> bool {
+        self.option_count > self.max_visible_options
+    }
+
+    fn visible_height(self) -> f32 {
+        let visible_options = self.option_count.min(self.max_visible_options).max(1);
+        visible_options as f32 * self.option_height
+            + visible_options.saturating_sub(1) as f32 * self.option_gap
+    }
+
+    fn content_height(self) -> f32 {
+        self.option_count as f32 * self.option_height
+            + self.option_count.saturating_sub(1) as f32 * self.option_gap
+    }
+
+    fn option_bounds(self, option_index: usize) -> (f32, f32) {
+        let top = option_index as f32 * (self.option_height + self.option_gap);
+        (top, top + self.option_height)
+    }
 }
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -47,7 +78,13 @@ pub(super) struct KeyScrollRepeatState {
 }
 
 pub(super) fn update_dynamic_scroll_metrics(
-    mut areas: Query<(Entity, &ComputedNode, &mut UiScrollArea, &Children)>,
+    mut areas: Query<(
+        Entity,
+        &ComputedNode,
+        &mut UiScrollArea,
+        Option<&UiPopupScrollArea>,
+        &Children,
+    )>,
     mut scroll_nodes: ParamSet<(
         Query<(&ComputedNode, &mut Node), With<UiScrollContent>>,
         Query<(&mut UiScrollThumb, &mut Node, &ComputedNode)>,
@@ -56,14 +93,19 @@ pub(super) fn update_dynamic_scroll_metrics(
     )>,
     child_query: Query<&Children>,
 ) {
-    for (_, area_node, mut area, children) in &mut areas {
-        let Some(content_height) =
-            scroll_content_height(children, &scroll_nodes.p0(), &child_query)
-        else {
+    for (_, area_node, mut area, popup_scroll, children) in &mut areas {
+        let content_height = popup_scroll
+            .copied()
+            .map(UiPopupScrollArea::content_height)
+            .or_else(|| scroll_content_height(children, &scroll_nodes.p0(), &child_query));
+        let Some(content_height) = content_height else {
             continue;
         };
 
-        let viewport_height = logical_height(area_node);
+        let viewport_height = popup_scroll
+            .copied()
+            .map(UiPopupScrollArea::visible_height)
+            .unwrap_or_else(|| logical_height(area_node));
         let max_offset = (content_height - viewport_height).max(0.0);
         area.max_offset = max_offset;
         area.offset = area.offset.clamp(0.0, area.max_offset);
@@ -74,7 +116,10 @@ pub(super) fn update_dynamic_scroll_metrics(
         update_scroll_content_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
         update_scrollbar_visibility(
             children,
-            area.max_offset > 0.0,
+            popup_scroll
+                .copied()
+                .map(UiPopupScrollArea::has_overflow)
+                .unwrap_or(area.max_offset > 0.0),
             &mut scroll_nodes.p2(),
             &child_query,
         );
@@ -181,7 +226,13 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
 
 pub(super) fn scroll_areas(
     mut wheel_events: MessageReader<MouseWheel>,
-    mut areas: Query<(Entity, &mut UiScrollArea, Has<HoveredUiElement>, &Children)>,
+    mut areas: Query<(
+        Entity,
+        &mut UiScrollArea,
+        Has<HoveredUiElement>,
+        Has<UiPopupScrollArea>,
+        &Children,
+    )>,
     mut scroll_nodes: ParamSet<(
         Query<&mut Node, With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
@@ -195,26 +246,36 @@ pub(super) fn scroll_areas(
     }
 
     let target = {
+        let mut direct_popup_hover = None;
+        let mut descendant_popup_hover = None;
+        let mut direct_hover = None;
         let mut descendant_hover = None;
-        let mut direct_hover_or_focus = None;
-        for (entity, _, hovered, children) in &mut areas {
+        for (entity, _, hovered, popup_scroll, children) in &mut areas {
             if hovered {
-                direct_hover_or_focus = Some(entity);
-                break;
+                if popup_scroll {
+                    direct_popup_hover = Some(entity);
+                    break;
+                }
+                direct_hover.get_or_insert(entity);
             }
-            if descendant_hover.is_none()
-                && has_hovered_descendant(children, &pointer_states, &child_query)
-            {
-                descendant_hover = Some(entity);
+            if has_hovered_descendant(children, &pointer_states, &child_query) {
+                if popup_scroll {
+                    descendant_popup_hover.get_or_insert(entity);
+                } else {
+                    descendant_hover.get_or_insert(entity);
+                }
             }
         }
-        direct_hover_or_focus.or(descendant_hover)
+        direct_popup_hover
+            .or(descendant_popup_hover)
+            .or(direct_hover)
+            .or(descendant_hover)
     };
 
     let Some(target) = target else {
         return;
     };
-    let Ok((_, mut area, _, children)) = areas.get_mut(target) else {
+    let Ok((_, mut area, _, _, children)) = areas.get_mut(target) else {
         return;
     };
 
@@ -267,16 +328,16 @@ pub(super) fn drag_scroll_thumbs(
 }
 
 pub(super) fn keep_focused_list_item_visible(
-    focused_items: Query<
-        (Entity, &ComputedNode, &UiGlobalTransform),
-        (With<FocusedUiElement>, Added<FocusedUiElement>),
-    >,
+    focused_items: Query<(Entity, &ComputedNode, &UiGlobalTransform), With<FocusedUiElement>>,
+    added_focus: Query<(), Added<FocusedUiElement>>,
+    focused_options: Query<&UiMultiSelectOption, With<FocusedUiElement>>,
     mut areas: Query<
         (
             Entity,
             &ComputedNode,
             &UiGlobalTransform,
             &mut UiScrollArea,
+            Option<&UiPopupScrollArea>,
             &Children,
         ),
         With<AutoScrollFocusedChild>,
@@ -291,27 +352,34 @@ pub(super) fn keep_focused_list_item_visible(
     else {
         return;
     };
+    let focused_option = focused_options.get(focused_entity).ok();
+    if focused_option.is_none() && added_focus.get(focused_entity).is_err() {
+        return;
+    }
 
-    for (_, area_node, area_transform, mut area, children) in &mut areas {
+    for (_, area_node, area_transform, mut area, popup_scroll, children) in &mut areas {
         if !contains_entity(children, focused_entity, &child_query) {
             continue;
         }
-
-        let (_, _, area_center) = area_transform.to_scale_angle_translation();
-        let (_, _, focused_center) = focused_transform.to_scale_angle_translation();
-        let area_top = area_center.y - area_node.size().y / 2.0;
-        let area_bottom = area_center.y + area_node.size().y / 2.0;
-        let focused_top = focused_center.y - focused_node.size().y / 2.0;
-        let focused_bottom = focused_center.y + focused_node.size().y / 2.0;
-
-        let next_offset = if focused_top < area_top {
-            area.offset - (area_top - focused_top)
-        } else if focused_bottom > area_bottom {
-            area.offset + (focused_bottom - area_bottom)
-        } else {
-            area.offset
+        if focused_option.is_some() && popup_scroll.is_none() {
+            continue;
         }
-        .clamp(0.0, area.max_offset);
+
+        let next_offset = popup_scroll
+            .and_then(|popup_scroll| {
+                focused_option
+                    .map(|option| popup_option_scroll_offset(*popup_scroll, option, area.offset))
+            })
+            .unwrap_or_else(|| {
+                focused_child_scroll_offset(
+                    focused_node,
+                    focused_transform,
+                    area_node,
+                    area_transform,
+                    area.offset,
+                )
+            })
+            .clamp(0.0, area.max_offset);
 
         if (next_offset - area.offset).abs() <= f32::EPSILON {
             return;
@@ -327,6 +395,47 @@ pub(super) fn keep_focused_list_item_visible(
             &child_query,
         );
         return;
+    }
+}
+
+fn popup_option_scroll_offset(
+    popup_scroll: UiPopupScrollArea,
+    option: &UiMultiSelectOption,
+    current_offset: f32,
+) -> f32 {
+    let (option_top, option_bottom) = popup_scroll.option_bounds(option.option_index);
+    let viewport_top = current_offset;
+    let viewport_bottom = current_offset + popup_scroll.visible_height();
+
+    if option_top < viewport_top {
+        option_top
+    } else if option_bottom > viewport_bottom {
+        option_bottom - popup_scroll.visible_height()
+    } else {
+        current_offset
+    }
+}
+
+fn focused_child_scroll_offset(
+    focused_node: &ComputedNode,
+    focused_transform: &UiGlobalTransform,
+    area_node: &ComputedNode,
+    area_transform: &UiGlobalTransform,
+    current_offset: f32,
+) -> f32 {
+    let (_, _, area_center) = area_transform.to_scale_angle_translation();
+    let (_, _, focused_center) = focused_transform.to_scale_angle_translation();
+    let area_top = area_center.y - area_node.size().y / 2.0;
+    let area_bottom = area_center.y + area_node.size().y / 2.0;
+    let focused_top = focused_center.y - focused_node.size().y / 2.0;
+    let focused_bottom = focused_center.y + focused_node.size().y / 2.0;
+
+    if focused_top < area_top {
+        current_offset - (area_top - focused_top)
+    } else if focused_bottom > area_bottom {
+        current_offset + (focused_bottom - area_bottom)
+    } else {
+        current_offset
     }
 }
 
@@ -544,6 +653,59 @@ impl KeyScrollDirection {
             Self::Up => -KEY_SCROLL_PIXELS,
             Self::Down => KEY_SCROLL_PIXELS,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn popup_scroll() -> UiPopupScrollArea {
+        UiPopupScrollArea {
+            option_count: 17,
+            max_visible_options: 5,
+            option_height: 48.0,
+            option_gap: 8.0,
+        }
+    }
+
+    #[test]
+    fn popup_option_scroll_offset_scrolls_down_to_reveal_lower_option() {
+        let option = UiMultiSelectOption {
+            option_index: 5,
+            label: "Option".to_string(),
+        };
+
+        assert_eq!(
+            popup_option_scroll_offset(popup_scroll(), &option, 0.0),
+            56.0
+        );
+    }
+
+    #[test]
+    fn popup_option_scroll_offset_scrolls_up_to_reveal_higher_option() {
+        let option = UiMultiSelectOption {
+            option_index: 1,
+            label: "Option".to_string(),
+        };
+
+        assert_eq!(
+            popup_option_scroll_offset(popup_scroll(), &option, 280.0),
+            56.0
+        );
+    }
+
+    #[test]
+    fn popup_option_scroll_offset_keeps_visible_option_stable() {
+        let option = UiMultiSelectOption {
+            option_index: 4,
+            label: "Option".to_string(),
+        };
+
+        assert_eq!(
+            popup_option_scroll_offset(popup_scroll(), &option, 56.0),
+            56.0
+        );
     }
 }
 

@@ -5,6 +5,7 @@ use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
 use crate::ui_elements::styles::UI_BODY_FONT_SIZE;
+use crate::ui_elements::theme::UiThemeTextColor;
 
 pub const INFO_MESSAGE_VISIBLE_SECONDS: f32 = 3.5;
 pub const INFO_MESSAGE_FADE_SECONDS: f32 = 1.0;
@@ -37,6 +38,7 @@ pub fn info_message(
             font_size: px(UI_BODY_FONT_SIZE),
         }
         TextColor({theme.secondary})
+        UiThemeTextColor::Secondary
         InfoMessage {
             elapsed_seconds: 0.0,
             fades: {fades},

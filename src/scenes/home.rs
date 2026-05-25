@@ -97,6 +97,7 @@ fn handle_home_activation(
     focused: Query<Entity, With<FocusedUiElement>>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
 ) {
     if *state.get() != AppState::Home {
         return;
@@ -104,7 +105,7 @@ fn handle_home_activation(
 
     let entity = activated.entity;
     if settings_buttons.get(entity).is_ok() {
-        set_latest_info_message(&mut messages, "Settings screen is not implemented yet.");
+        next_state.set(AppState::Settings);
     } else if rom_data_buttons.get(entity).is_ok() {
         set_latest_info_message(&mut messages, "ROM data screen is not implemented yet.");
     } else if let Ok(option) = popup_options.get(entity) {

@@ -25,6 +25,7 @@ impl Plugin for UiInteractionsPlugin {
         app.init_resource::<focus::LastFocusedUiElement>()
             .add_message::<picking::UiPointerClicked>()
             .add_message::<crate::ui_elements::file_picker::UiFilePickerActivated>()
+            .add_observer(focus::bind_focus_nav_ids)
             .add_systems(
                 Update,
                 (
@@ -34,7 +35,6 @@ impl Plugin for UiInteractionsPlugin {
                         focus::navigate_focus,
                         picking::setup_pointer_tracking,
                         picking::apply_picking_markers,
-                        list_view::update_list_item_pickability,
                         picking::sync_pointer_states,
                         picking::clear_activation_markers,
                         visual_state::update_interaction_colours,
@@ -52,6 +52,7 @@ impl Plugin for UiInteractionsPlugin {
                         list_view::update_list_cell_text,
                         multi_select::update_multi_select_popups,
                         scroll::update_dynamic_scroll_metrics,
+                        list_view::update_list_item_pickability,
                         scroll::update_scroll_thumb_colours,
                         scroll::scroll_focused_scrollbar_by_keys,
                         scroll::scroll_areas,

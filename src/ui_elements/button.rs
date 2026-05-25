@@ -10,6 +10,7 @@ use crate::ui_elements::styles::{
     UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, control_fill, hover_fill, ui_border,
     ui_radius,
 };
+use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 pub fn button(
     font: Handle<Font>,
@@ -30,9 +31,11 @@ pub fn button(
         }
         Button
         BorderColor::all(theme.primary)
+        UiThemeBorderColor::Primary
         BackgroundColor({background})
         UiFocusNav { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
         UiElementKind::Button
+        UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
             (
@@ -42,6 +45,7 @@ pub fn button(
                     font_size: px(UI_CONTROL_FONT_SIZE),
                 }
                 TextColor({theme.primary})
+                UiThemeTextColor::Primary
                 UiElementLabel
                 IgnorePicking
                 TextLayout::new(Justify::Center, LineBreak::NoWrap)

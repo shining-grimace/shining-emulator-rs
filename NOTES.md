@@ -1,6 +1,6 @@
 
-Done: Step 2g
-Next: Step 2h
+Done: Step 2h
+Next: Step 2i
 
 Consider animation:
   - The entire UI tree fading in and out on screen change
@@ -14,6 +14,7 @@ For later:
 - Machine goes brrr: is vsync enabled?
 - Remove all allow-dead-code annotations
 - I should ask the AI if accessibility is important, and if so, what should be done
+- I should ask AI if it's feasible to integrate libretro cores
 
 For background image assets:
 I'll try prompting like:

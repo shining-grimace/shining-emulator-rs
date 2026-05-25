@@ -23,7 +23,6 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::BLACK))
         .init_resource::<AppAssets>()
-        .init_resource::<ActiveTheme>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: WINDOW_TITLE.to_string(),
@@ -34,13 +33,15 @@ fn main() {
             ..default()
         }))
         .init_state::<AppState>()
+        .add_plugins(storage::StoragePlugin)
+        .init_resource::<ActiveTheme>()
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins((
-            storage::StoragePlugin,
             input::InputPlugin,
             background::BackgroundPlugin,
             circuit_board::CircuitBoardPlugin,
             binary_text::BinaryTextPlugin,
+            ui_elements::theme::UiThemePlugin,
             ui_elements::info_message::InfoMessagePlugin,
             ui_elements::interactions::UiInteractionsPlugin,
             ui_elements::choice_popup::ChoicePopupPlugin,
@@ -48,6 +49,7 @@ fn main() {
             scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,
             scenes::loading::LoadingScenePlugin,
+            scenes::settings::SettingsScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))
         .run();

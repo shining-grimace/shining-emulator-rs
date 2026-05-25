@@ -2,7 +2,12 @@
 
 use bevy::prelude::*;
 
+use crate::storage::LocalStorage;
+
 pub const IMAGE_THEME_COUNT: usize = 16;
+pub const RANDOM_THEME_SETTING: u8 = 0;
+pub const MINIMAL_THEME_SETTING: u8 = 1;
+pub const FIRST_IMAGE_THEME_SETTING: u8 = 2;
 
 #[derive(Clone, Copy)]
 pub struct ThemeDefinition {
@@ -22,6 +27,9 @@ pub struct ActiveTheme {
     pub background_asset_path: Option<&'static str>,
 }
 
+#[derive(Event)]
+pub struct ActiveThemeChanged;
+
 impl From<ThemeDefinition> for ActiveTheme {
     fn from(theme: ThemeDefinition) -> Self {
         Self {
@@ -35,8 +43,30 @@ impl From<ThemeDefinition> for ActiveTheme {
 }
 
 impl FromWorld for ActiveTheme {
-    fn from_world(_world: &mut World) -> Self {
-        IMAGE_THEMES[fastrand::usize(0..IMAGE_THEME_COUNT)].into()
+    fn from_world(world: &mut World) -> Self {
+        let theme_setting = world
+            .get_resource::<LocalStorage>()
+            .map(|storage| storage.data.settings.ui_theme)
+            .unwrap_or(RANDOM_THEME_SETTING);
+
+        active_theme_for_setting(theme_setting)
+    }
+}
+
+pub fn active_theme_for_setting(setting: u8) -> ActiveTheme {
+    theme_definition_for_setting(setting).into()
+}
+
+fn theme_definition_for_setting(setting: u8) -> ThemeDefinition {
+    match setting {
+        RANDOM_THEME_SETTING => IMAGE_THEMES[fastrand::usize(0..IMAGE_THEME_COUNT)],
+        MINIMAL_THEME_SETTING => MINIMAL_THEME,
+        setting => {
+            let index = setting
+                .saturating_sub(FIRST_IMAGE_THEME_SETTING)
+                .min((IMAGE_THEME_COUNT - 1) as u8) as usize;
+            IMAGE_THEMES[index]
+        }
     }
 }
 

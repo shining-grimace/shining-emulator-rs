@@ -134,7 +134,7 @@ pub(super) fn update_list_item_pickability(
     child_query: Query<&Children>,
 ) {
     for (area_node, area_transform, children) in &areas {
-        let item_entities = collect_list_items(children, &kinds, &child_query);
+        let item_entities = collect_clipped_focus_items(children, &kinds, &child_query);
         for item in item_entities {
             let Ok((entity, item_node, item_transform, pickable)) = items.get(item) else {
                 continue;
@@ -154,33 +154,35 @@ pub(super) fn update_list_item_pickability(
     }
 }
 
-fn collect_list_items(
+fn collect_clipped_focus_items(
     children: &Children,
     kinds: &Query<&UiElementKind>,
     child_query: &Query<&Children>,
 ) -> Vec<Entity> {
     let mut items = Vec::new();
-    collect_list_items_recursive(children, kinds, child_query, &mut items);
+    collect_clipped_focus_items_recursive(children, kinds, child_query, &mut items);
     items
 }
 
-fn collect_list_items_recursive(
+fn collect_clipped_focus_items_recursive(
     children: &Children,
     kinds: &Query<&UiElementKind>,
     child_query: &Query<&Children>,
     items: &mut Vec<Entity>,
 ) {
     for child in children {
-        if kinds
-            .get(*child)
-            .is_ok_and(|kind| *kind == UiElementKind::ListItem)
-        {
+        if kinds.get(*child).is_ok_and(|kind| {
+            matches!(
+                kind,
+                UiElementKind::ListItem | UiElementKind::MultiSelectOption
+            )
+        }) {
             items.push(*child);
             continue;
         }
 
         if let Ok(grandchildren) = child_query.get(*child) {
-            collect_list_items_recursive(grandchildren, kinds, child_query, items);
+            collect_clipped_focus_items_recursive(grandchildren, kinds, child_query, items);
         }
     }
 }

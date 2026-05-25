@@ -11,6 +11,7 @@ use crate::ui_elements::styles::{
     UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_TEXT_INPUT_WIDTH, control_fill,
     hover_fill, ui_border, ui_radius,
 };
+use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 pub fn text_input(
     font: Handle<Font>,
@@ -32,9 +33,11 @@ pub fn text_input(
         }
         Button
         BorderColor::all(theme.primary)
+        UiThemeBorderColor::Primary
         BackgroundColor({background})
         UiFocusNav { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
         UiElementKind::TextInput
+        UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         UiTextInput { value: {String::new()}, placeholder: {label.to_string()}, cursor: 0 }
         EditableUiElement
@@ -46,6 +49,7 @@ pub fn text_input(
                     font_size: px(UI_CONTROL_FONT_SIZE),
                 }
                 TextColor({theme.tertiary})
+                UiThemeTextColor::Tertiary
                 UiElementLabel
                 IgnorePicking
                 UiTextInputText

@@ -5,6 +5,7 @@ use bevy::text::FontSourceTemplate;
 use crate::app_theme::ActiveTheme;
 use crate::ui_elements::interactions::IgnorePicking;
 use crate::ui_elements::styles::UI_HEADING_FONT_SIZE;
+use crate::ui_elements::theme::UiThemeTextColor;
 
 pub fn heading(font: Handle<Font>, theme: ActiveTheme, label: &'static str) -> impl Scene {
     bsn! {
@@ -14,6 +15,7 @@ pub fn heading(font: Handle<Font>, theme: ActiveTheme, label: &'static str) -> i
             font_size: px(UI_HEADING_FONT_SIZE),
         }
         TextColor({theme.primary})
+        UiThemeTextColor::Primary
         IgnorePicking
         TextLayout::new(Justify::Left, LineBreak::WordBoundary)
     }
