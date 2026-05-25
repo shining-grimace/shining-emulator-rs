@@ -34,6 +34,7 @@ impl Plugin for UiInteractionsPlugin {
                         focus::navigate_focus,
                         picking::setup_pointer_tracking,
                         picking::apply_picking_markers,
+                        list_view::update_list_item_pickability,
                         picking::sync_pointer_states,
                         picking::clear_activation_markers,
                         visual_state::update_interaction_colours,

@@ -37,7 +37,9 @@ pub fn multi_select(
         .options
         .iter()
         .enumerate()
-        .map(|(index, option)| popup_option(font.clone(), index, option, theme, empty_focus_nav()))
+        .map(|(index, option)| {
+            popup_option(font.clone(), index, option, theme, UiFocusNav::default())
+        })
         .collect::<Vec<_>>();
 
     bsn! {
@@ -133,15 +135,6 @@ fn popup_option(
                 TextLayout::new(Justify::Left, LineBreak::NoWrap)
             )
         ]
-    }
-}
-
-fn empty_focus_nav() -> UiFocusNav {
-    UiFocusNav {
-        up: Entity::PLACEHOLDER,
-        right: Entity::PLACEHOLDER,
-        down: Entity::PLACEHOLDER,
-        left: Entity::PLACEHOLDER,
     }
 }
 

@@ -9,8 +9,8 @@ use crate::ui_elements::interactions::{
 };
 use crate::ui_elements::scrollbar::scrollbar;
 use crate::ui_elements::styles::{
-    UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT, UI_LIST_WIDTH, control_fill, hover_fill,
-    transparent, ui_border, ui_padding, ui_radius,
+    UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT, control_fill, hover_fill, transparent,
+    ui_border, ui_padding, ui_radius,
 };
 
 #[derive(Clone, Copy)]
@@ -45,7 +45,7 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
 
     bsn! {
         Node {
-            width: px(UI_LIST_WIDTH),
+            width: percent(100),
             height: px(UI_LIST_HEIGHT),
             min_height: px(0.0),
             flex_grow: 1.0,

@@ -44,7 +44,7 @@ e. Define common reusable UI element styles, and build the interface demo screen
 f. Create a plugin for managing the binary text effects background layer, including code
    to manage all of the animations
 g. Use the UI components to build the Home screen (without the ROM list working
-   yet)
+   yet), making this now the screen shown after the splash screen
 h. Use the UI components to build the Settings screen (without the ROM provider
    list or the ROM list working yet), and make sure the button hints in the
    lower-right corner of menu screens is functional, is based on the inferred

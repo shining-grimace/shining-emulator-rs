@@ -116,7 +116,7 @@ fn interface_demo_scene(
                                     ),
                                     (
                                         #FilePicker
-                                        file_picker(font.clone(), "Choose a file to add...", theme, empty_focus_nav())
+                                        file_picker(font.clone(), "Choose a file to add...", theme, UiFocusNav::default())
                                         UiFocusNav { up: #ListView, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
                                     )
                                 ]
@@ -151,14 +151,14 @@ fn control_column(
                 Children [
                     (
                         #EnabledButton
-                        button(font.clone(), "Enabled Button", theme, empty_focus_nav())
+                        button(font.clone(), "Enabled Button", theme, UiFocusNav::default())
                         InitialFocus { enabled: true }
                         DefaultFocusTarget
                         UiFocusNav { up: {Entity::PLACEHOLDER}, right: {scroll_bar_target}, down: #TextInput, left: {Entity::PLACEHOLDER} }
                     ),
                     (
                         #DisabledButton
-                        button(font.clone(), "Disabled Button", theme, empty_focus_nav())
+                        button(font.clone(), "Disabled Button", theme, UiFocusNav::default())
                         DisabledUiElement
                         UiFocusNav { up: {Entity::PLACEHOLDER}, right: {scroll_bar_target}, down: #TextInput, left: #EnabledButton }
                     )
@@ -167,7 +167,7 @@ fn control_column(
             description(font.clone(), theme, "This text describes the buttons above and may need to wrap around multiple lines on some screens, especially on narrower windows such as mobile in portrait orientation."),
             (
                 #TextInput
-                text_input(font.clone(), "Enter your text here...", theme, empty_focus_nav())
+                text_input(font.clone(), "Enter your text here...", theme, UiFocusNav::default())
                 UiFocusNav { up: #EnabledButton, right: {scroll_bar_target}, down: #MultiSelect, left: {Entity::PLACEHOLDER} }
             ),
             description(font.clone(), theme, "This selection allows you to choose an option which you would like to have selected."),
@@ -184,15 +184,6 @@ fn control_column(
             ),
             description(font, theme, "This text fills vertical space for testing the scrollbar.")
         ]
-    }
-}
-
-fn empty_focus_nav() -> UiFocusNav {
-    UiFocusNav {
-        up: Entity::PLACEHOLDER,
-        right: Entity::PLACEHOLDER,
-        down: Entity::PLACEHOLDER,
-        left: Entity::PLACEHOLDER,
     }
 }
 
@@ -217,14 +208,14 @@ fn demo_multi_select_config() -> MultiSelectConfig {
     MultiSelectConfig {
         selected: 0,
         options: vec!["Anything", "Something else"],
-        nav: empty_focus_nav(),
+        nav: UiFocusNav::default(),
     }
 }
 
 fn demo_list_config() -> ListViewConfig {
     ListViewConfig {
-        nav: empty_focus_nav(),
-        scrollbar_nav: empty_focus_nav(),
+        nav: UiFocusNav::default(),
+        scrollbar_nav: UiFocusNav::default(),
         columns: vec![
             ListColumn {
                 heading: "Item Name",
@@ -242,23 +233,23 @@ fn demo_list_config() -> ListViewConfig {
         rows: vec![
             ListRow {
                 cells: vec!["Item One Has a Rather Long Name", "", "Yes"],
-                nav: empty_focus_nav(),
+                nav: UiFocusNav::default(),
             },
             ListRow {
                 cells: vec!["Item Two", "Alice Bobson", "No"],
-                nav: empty_focus_nav(),
+                nav: UiFocusNav::default(),
             },
             ListRow {
                 cells: vec!["Item Three", "", "No"],
-                nav: empty_focus_nav(),
+                nav: UiFocusNav::default(),
             },
             ListRow {
                 cells: vec!["Item Four", "Cathy Donaldson-Smith", "Yes"],
-                nav: empty_focus_nav(),
+                nav: UiFocusNav::default(),
             },
             ListRow {
                 cells: vec!["Item Five", "", "No"],
-                nav: empty_focus_nav(),
+                nav: UiFocusNav::default(),
             },
         ],
     }

@@ -18,7 +18,7 @@ impl Plugin for SplashScenePlugin {
         app.add_systems(OnEnter(AppState::Splash), spawn_splash_scene)
             .add_systems(
                 Update,
-                transition_to_interface_demo.run_if(in_state(AppState::Splash)),
+                transition_to_home.run_if(in_state(AppState::Splash)),
             );
     }
 }
@@ -34,13 +34,13 @@ fn spawn_splash_scene(mut commands: Commands, assets: Res<AppAssets>) {
 #[derive(Resource)]
 struct SplashScreenTimer(Timer);
 
-fn transition_to_interface_demo(
+fn transition_to_home(
     time: Res<Time>,
     mut timer: ResMut<SplashScreenTimer>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
-        next_state.set(AppState::InterfaceDemo);
+        next_state.set(AppState::Home);
     }
 }
 

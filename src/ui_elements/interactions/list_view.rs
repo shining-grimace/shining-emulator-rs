@@ -1,9 +1,12 @@
+use bevy::picking::Pickable;
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 
 use crate::input::events::MappedInputEvent;
 use crate::storage::input_mappings::InputAction;
 
 use super::focus::FocusedUiElement;
+use super::scroll::UiScrollArea;
 use super::tree::contains_entity;
 use super::visual_state::{DisabledUiElement, UiElementKind};
 
@@ -118,6 +121,86 @@ pub(super) fn update_list_cell_text(
             }
         }
     }
+}
+
+pub(super) fn update_list_item_pickability(
+    mut commands: Commands,
+    areas: Query<(&ComputedNode, &UiGlobalTransform, &Children), With<UiScrollArea>>,
+    items: Query<
+        (Entity, &ComputedNode, &UiGlobalTransform, Option<&Pickable>),
+        With<UiElementKind>,
+    >,
+    kinds: Query<&UiElementKind>,
+    child_query: Query<&Children>,
+) {
+    for (area_node, area_transform, children) in &areas {
+        let item_entities = collect_list_items(children, &kinds, &child_query);
+        for item in item_entities {
+            let Ok((entity, item_node, item_transform, pickable)) = items.get(item) else {
+                continue;
+            };
+            let visible =
+                vertical_bounds_intersect(item_node, item_transform, area_node, area_transform);
+            let desired = if visible {
+                Pickable::default()
+            } else {
+                Pickable::IGNORE
+            };
+
+            if pickable != Some(&desired) {
+                commands.entity(entity).insert(desired);
+            }
+        }
+    }
+}
+
+fn collect_list_items(
+    children: &Children,
+    kinds: &Query<&UiElementKind>,
+    child_query: &Query<&Children>,
+) -> Vec<Entity> {
+    let mut items = Vec::new();
+    collect_list_items_recursive(children, kinds, child_query, &mut items);
+    items
+}
+
+fn collect_list_items_recursive(
+    children: &Children,
+    kinds: &Query<&UiElementKind>,
+    child_query: &Query<&Children>,
+    items: &mut Vec<Entity>,
+) {
+    for child in children {
+        if kinds
+            .get(*child)
+            .is_ok_and(|kind| *kind == UiElementKind::ListItem)
+        {
+            items.push(*child);
+            continue;
+        }
+
+        if let Ok(grandchildren) = child_query.get(*child) {
+            collect_list_items_recursive(grandchildren, kinds, child_query, items);
+        }
+    }
+}
+
+fn vertical_bounds_intersect(
+    item_node: &ComputedNode,
+    item_transform: &UiGlobalTransform,
+    area_node: &ComputedNode,
+    area_transform: &UiGlobalTransform,
+) -> bool {
+    let (_, _, item_center) = item_transform.to_scale_angle_translation();
+    let (_, _, area_center) = area_transform.to_scale_angle_translation();
+    let item_half_height = item_node.size().y * 0.5;
+    let area_half_height = area_node.size().y * 0.5;
+    let item_top = item_center.y - item_half_height;
+    let item_bottom = item_center.y + item_half_height;
+    let area_top = area_center.y - area_half_height;
+    let area_bottom = area_center.y + area_half_height;
+
+    item_bottom > area_top && item_top < area_bottom
 }
 
 fn list_enter_requested(

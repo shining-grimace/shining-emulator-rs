@@ -1,8 +1,10 @@
 pub mod action_hint;
 pub mod button;
+pub mod choice_popup;
 pub mod description;
 pub mod file_picker;
 pub mod heading;
+pub mod info_message;
 pub mod interactions;
 pub mod list_view;
 pub mod loading_indicator;

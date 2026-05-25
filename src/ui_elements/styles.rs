@@ -12,7 +12,6 @@ pub const UI_BUTTON_WIDTH: f32 = 208.0;
 pub const UI_TEXT_INPUT_WIDTH: f32 = 360.0;
 pub const UI_MULTI_SELECT_WIDTH: f32 = 260.0;
 pub const UI_FILE_PICKER_WIDTH: f32 = 480.0;
-pub const UI_LIST_WIDTH: f32 = 520.0;
 pub const UI_LIST_HEIGHT: f32 = 248.0;
 pub const UI_SCROLLBAR_WIDTH: f32 = 10.0;
 pub const UI_INNER_PADDING: f32 = 14.0;
