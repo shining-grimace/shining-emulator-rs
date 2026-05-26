@@ -1,6 +1,7 @@
 mod app_assets;
 mod app_state;
 mod app_theme;
+mod app_ui_scale;
 mod background;
 mod binary_text;
 mod circuit_board;
@@ -34,6 +35,7 @@ fn main() {
         }))
         .init_state::<AppState>()
         .add_plugins(storage::StoragePlugin)
+        .add_plugins(app_ui_scale::AppUiScalePlugin)
         .init_resource::<ActiveTheme>()
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins((

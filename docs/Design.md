@@ -65,7 +65,7 @@ refer to them in other places internally.
 
 The settings will be stored in a JSON file called `settings.json` holding
 an object of key-value pairs where the keys are "forceButtonOverlay",
-"upscalingMode", "emulationModel", "sgbOverlayEnable", "upscalingMode",
+"upscalingMode", "emulationModel", "sgbOverlayEnable", "uiScale",
 "uiTheme", and "audioPreset". All values are integers.
 
 ### ROM Providers
@@ -834,6 +834,7 @@ Under General Settings, these options are available:
 - A drop-down selection for whether the Super GameBoy border is shown
 - A selection for the upscaling mode, choosing between "None", "2x", "3x", and
   "4x", where "None" is the default option
+- A selection for UI scaling, choosing between five percentage-based sizes
 - A selection for the UI theme, choosing between "Random" (the default),
   "Minimal" (an option with no background image or menu music), or any of the
   16 themes (to force a theme to always be used rather than one being chosen at

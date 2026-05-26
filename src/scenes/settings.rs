@@ -1,8 +1,10 @@
 use bevy::prelude::*;
+use bevy::ui::UiScale;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged, active_theme_for_setting};
+use crate::app_ui_scale::{UI_SCALE_LABELS, apply_ui_scale_setting};
 use crate::input::mappings::RuntimeInputMappings;
 use crate::storage::LocalStorage;
 use crate::ui_elements::action_hint::action_hints_with_labels;
@@ -31,27 +33,29 @@ const FIELD_FORCE_BUTTON_OVERLAY: u8 = 0;
 const FIELD_EMULATION_MODEL: u8 = 1;
 const FIELD_SGB_OVERLAY_ENABLE: u8 = 2;
 const FIELD_UPSCALING_MODE: u8 = 3;
-const FIELD_UI_THEME: u8 = 4;
+const FIELD_UI_SCALE: u8 = 4;
+const FIELD_UI_THEME: u8 = 5;
 
 const TARGET_OVERLAY: u16 = 0;
 const TARGET_MODEL: u16 = 1;
 const TARGET_SGB: u16 = 2;
 const TARGET_UPSCALING: u16 = 3;
-const TARGET_THEME: u16 = 4;
-const TARGET_PRIMARY_INPUT: u16 = 5;
-const TARGET_EDIT_MAPPINGS: u16 = 6;
-const TARGET_AUDIO_PRESET: u16 = 7;
-const TARGET_DELETE_MAPPING: u16 = 8;
-const TARGET_EDIT_MAPPING: u16 = 9;
-const TARGET_CREATE_MAPPING: u16 = 10;
-const TARGET_ROM_STORAGE_LIST: u16 = 11;
-const TARGET_STORAGE_DELETE: u16 = 12;
-const TARGET_STORAGE_DETAILS: u16 = 13;
-const TARGET_PROVIDER_LIST: u16 = 14;
-const TARGET_PROVIDER_SYNC: u16 = 15;
-const TARGET_PROVIDER_DELETE: u16 = 16;
-const TARGET_PROVIDER_EDIT: u16 = 17;
-const TARGET_PROVIDER_CREATE: u16 = 18;
+const TARGET_UI_SCALE: u16 = 4;
+const TARGET_THEME: u16 = 5;
+const TARGET_PRIMARY_INPUT: u16 = 6;
+const TARGET_EDIT_MAPPINGS: u16 = 7;
+const TARGET_AUDIO_PRESET: u16 = 8;
+const TARGET_DELETE_MAPPING: u16 = 9;
+const TARGET_EDIT_MAPPING: u16 = 10;
+const TARGET_CREATE_MAPPING: u16 = 11;
+const TARGET_ROM_STORAGE_LIST: u16 = 12;
+const TARGET_STORAGE_DELETE: u16 = 13;
+const TARGET_STORAGE_DETAILS: u16 = 14;
+const TARGET_PROVIDER_LIST: u16 = 15;
+const TARGET_PROVIDER_SYNC: u16 = 16;
+const TARGET_PROVIDER_DELETE: u16 = 17;
+const TARGET_PROVIDER_EDIT: u16 = 18;
+const TARGET_PROVIDER_CREATE: u16 = 19;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 struct SettingsSelect {
@@ -89,6 +93,7 @@ fn save_settings_select_on_activation(
     mut storage: ResMut<LocalStorage>,
     state: Res<State<AppState>>,
     mut active_theme: ResMut<ActiveTheme>,
+    mut ui_scale: ResMut<UiScale>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     if *state.get() != AppState::Settings {
@@ -105,6 +110,7 @@ fn save_settings_select_on_activation(
         FIELD_EMULATION_MODEL => storage.data.settings.emulation_model,
         FIELD_SGB_OVERLAY_ENABLE => storage.data.settings.sgb_overlay_enable,
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode,
+        FIELD_UI_SCALE => storage.data.settings.ui_scale,
         FIELD_UI_THEME => storage.data.settings.ui_theme,
         _ => return,
     };
@@ -117,6 +123,7 @@ fn save_settings_select_on_activation(
         FIELD_EMULATION_MODEL => storage.data.settings.emulation_model = value,
         FIELD_SGB_OVERLAY_ENABLE => storage.data.settings.sgb_overlay_enable = value,
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode = value,
+        FIELD_UI_SCALE => storage.data.settings.ui_scale = value,
         FIELD_UI_THEME => storage.data.settings.ui_theme = value,
         _ => return,
     }
@@ -130,6 +137,9 @@ fn save_settings_select_on_activation(
     if settings_select.field == FIELD_UI_THEME {
         *active_theme = active_theme_for_setting(value);
         commands.trigger(ActiveThemeChanged);
+    }
+    if settings_select.field == FIELD_UI_SCALE {
+        apply_ui_scale_setting(value, &mut ui_scale);
     }
 }
 
@@ -156,11 +166,17 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_UPSCALING => focus_nav_ids(
             TARGET_SGB,
             TARGET_ROM_STORAGE_LIST,
+            TARGET_UI_SCALE,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_UI_SCALE => focus_nav_ids(
+            TARGET_UPSCALING,
+            TARGET_ROM_STORAGE_LIST,
             TARGET_THEME,
             UI_FOCUS_NONE,
         ),
         TARGET_THEME => focus_nav_ids(
-            TARGET_UPSCALING,
+            TARGET_UI_SCALE,
             TARGET_ROM_STORAGE_LIST,
             TARGET_PRIMARY_INPUT,
             UI_FOCUS_NONE,
@@ -527,6 +543,24 @@ fn settings_left_column(
                     column_gap: px(18.0),
                 }
                 Children [
+                    description(font.clone(), theme, "UI Scaling"),
+                    (
+                        #UiScaleSelect
+                        multi_select(font.clone(), theme, ui_scale_config(settings.ui_scale as usize))
+                        SettingsSelect { field: FIELD_UI_SCALE }
+                        UiFocusId { id: TARGET_UI_SCALE }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_UI_SCALE).up}, right: {settings_focus_nav(TARGET_UI_SCALE).right}, down: {settings_focus_nav(TARGET_UI_SCALE).down}, left: {settings_focus_nav(TARGET_UI_SCALE).left} }
+                    ),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(18.0),
+                }
+                Children [
                     description(font.clone(), theme, "UI Theme"),
                     (
                         #ThemeSelect
@@ -633,6 +667,13 @@ fn yes_no_config(selected: usize) -> MultiSelectConfig {
 
 fn upscaling_config(selected: usize) -> MultiSelectConfig {
     select_config(selected.min(3), vec!["None", "2x", "3x", "4x"])
+}
+
+fn ui_scale_config(selected: usize) -> MultiSelectConfig {
+    select_config(
+        selected.min(UI_SCALE_LABELS.len() - 1),
+        UI_SCALE_LABELS.to_vec(),
+    )
 }
 
 fn theme_config(selected: usize) -> MultiSelectConfig {

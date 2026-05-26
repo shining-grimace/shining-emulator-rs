@@ -18,4 +18,4 @@ For later:
 
 For background image assets:
 I'll try prompting like:
-> Draw a <theme>-inspired image with <props>, plus <stylistic effects>, while being fairly minimal yet portraying emotions of <theme emotions>. Draw in a 1990s SNES style, using various colour hues but with a very narrow color palette (such that gradients are not smooth but with noticeable graduations) typical of a GameBoy Color image. Draw in a resolution of 160 pixels wide by 144 pixels high.
+> Draw a <theme>-inspired image with <props>, plus <stylistic effects>, while being fairly minimal yet portraying emotions of <theme emotions>. There should be only a few objects in view, and quite close up. Draw in a 1990s SNES style, using various colour hues but with a very narrow color palette (such that gradients are not smooth but with noticeable graduations) typical of a GameBoy Color image. Draw in a resolution of 160 pixels wide by 144 pixels high.

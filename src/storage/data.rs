@@ -20,6 +20,8 @@ pub struct GeneralSettings {
     pub upscaling_mode: u8,
     pub emulation_model: u8,
     pub sgb_overlay_enable: u8,
+    #[serde(default = "crate::app_ui_scale::default_ui_scale")]
+    pub ui_scale: u8,
     pub ui_theme: u8,
     pub audio_preset: u8,
 }
@@ -31,6 +33,7 @@ impl Default for GeneralSettings {
             upscaling_mode: 0,
             emulation_model: 0,
             sgb_overlay_enable: 0,
+            ui_scale: crate::app_ui_scale::default_ui_scale(),
             ui_theme: 0,
             audio_preset: 0,
         }
