@@ -19,11 +19,34 @@ pub fn text_input(
     theme: ActiveTheme,
     nav: UiFocusNav,
 ) -> impl Scene {
+    text_input_with_value(font, label, String::new(), theme, nav)
+}
+
+pub fn text_input_with_value(
+    font: Handle<Font>,
+    label: &'static str,
+    value: String,
+    theme: ActiveTheme,
+    nav: UiFocusNav,
+) -> impl Scene {
+    text_input_with_value_width(font, label, value, theme, nav, px(UI_TEXT_INPUT_WIDTH))
+}
+
+pub fn text_input_with_value_width(
+    font: Handle<Font>,
+    label: &'static str,
+    value: String,
+    theme: ActiveTheme,
+    nav: UiFocusNav,
+    width: Val,
+) -> impl Scene {
     let background = control_fill(&theme);
     let hover_background = hover_fill(&theme);
+    let cursor = value.len();
     bsn! {
         Node {
-            width: px(UI_TEXT_INPUT_WIDTH),
+            width: {width},
+            flex_shrink: 1.0,
             height: px(UI_ELEMENT_HEIGHT),
             border: ui_border(),
             border_radius: ui_radius(),
@@ -39,7 +62,7 @@ pub fn text_input(
         UiElementKind::TextInput
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
-        UiTextInput { value: {String::new()}, placeholder: {label.to_string()}, cursor: 0 }
+        UiTextInput { value: {value}, placeholder: {label.to_string()}, cursor: {cursor} }
         EditableUiElement
         Children [
             (

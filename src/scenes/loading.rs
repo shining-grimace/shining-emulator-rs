@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::app_assets::{
-    AppAssets, ICONS_PATH, SHINING_EMULATOR_LOGO_PATH, SHINING_GRIMACE_LOGO_PATH,
+    AppAssets, HEROES_PATH, ICONS_PATH, SHINING_EMULATOR_LOGO_PATH, SHINING_GRIMACE_LOGO_PATH,
     UBUNTU_MONO_FONT_PATH,
 };
 use crate::app_state::AppState;
@@ -36,6 +36,7 @@ fn request_assets(
     assets.shining_emulator_logo = asset_server.load(SHINING_EMULATOR_LOGO_PATH);
     assets.ubuntu_mono_font = asset_server.load(UBUNTU_MONO_FONT_PATH);
     assets.icons = asset_server.load(ICONS_PATH);
+    assets.heroes = asset_server.load(HEROES_PATH);
     assets.theme_background = theme
         .background_asset_path
         .map(|path| asset_server.load(path));
@@ -56,6 +57,7 @@ fn required_assets_loaded(asset_server: &AssetServer, assets: &AppAssets) -> boo
         && asset_server.is_loaded(&assets.shining_emulator_logo)
         && asset_server.is_loaded(&assets.ubuntu_mono_font)
         && asset_server.is_loaded(&assets.icons)
+        && asset_server.is_loaded(&assets.heroes)
         && assets
             .theme_background
             .as_ref()

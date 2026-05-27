@@ -23,6 +23,7 @@ pub struct UiInteractionsPlugin;
 impl Plugin for UiInteractionsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<focus::LastFocusedUiElement>()
+            .init_resource::<Clipboard>()
             .add_message::<picking::UiPointerClicked>()
             .add_message::<crate::ui_elements::file_picker::UiFilePickerActivated>()
             .add_observer(focus::bind_focus_nav_ids)

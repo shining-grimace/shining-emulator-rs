@@ -25,7 +25,7 @@ pub struct ChoicePopupOption {
 }
 
 pub struct ChoicePopupConfig {
-    pub title: &'static str,
+    pub title: String,
     pub width: f32,
     pub options: [&'static str; 3],
 }
@@ -137,7 +137,7 @@ fn inside_any_popup(
     })
 }
 
-fn popup_label(font: Handle<Font>, theme: ActiveTheme, text: &'static str) -> impl Scene {
+fn popup_label(font: Handle<Font>, theme: ActiveTheme, text: String) -> impl Scene {
     bsn! {
         Text({text})
         TextFont {

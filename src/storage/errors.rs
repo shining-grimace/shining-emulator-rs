@@ -10,6 +10,7 @@ pub enum StorageError {
         path: PathBuf,
         source: serde_json::Error,
     },
+    Provider(String),
 }
 
 impl fmt::Display for StorageError {
@@ -26,6 +27,7 @@ impl fmt::Display for StorageError {
                     path.display()
                 )
             }
+            Self::Provider(message) => write!(formatter, "{message}"),
         }
     }
 }
@@ -36,6 +38,7 @@ impl std::error::Error for StorageError {
             Self::MissingProjectDirectory => None,
             Self::Io(error) => Some(error),
             Self::Json { source, .. } => Some(source),
+            Self::Provider(_) => None,
         }
     }
 }

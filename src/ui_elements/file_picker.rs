@@ -16,8 +16,13 @@ use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextC
 const FILE_PICKER_VISIBLE_CHARS: usize = 20;
 const FILE_PICKER_GAP: f32 = 12.0;
 
+#[derive(Clone, Component, Debug, Default, FromTemplate)]
+pub struct UiFilePicker {
+    pub value: String,
+}
+
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
-pub struct UiFilePicker;
+pub struct UiDirectoryPicker;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct UiFilePickerValue {
@@ -37,13 +42,25 @@ pub struct UiFilePickerActivated {
 
 pub fn file_picker(
     font: Handle<Font>,
-    value: &'static str,
+    placeholder: &'static str,
+    theme: ActiveTheme,
+    nav: UiFocusNav,
+) -> impl Scene {
+    file_picker_with_value(font, placeholder, String::new(), theme, nav)
+}
+
+pub fn file_picker_with_value(
+    font: Handle<Font>,
+    placeholder: &'static str,
+    value: String,
     theme: ActiveTheme,
     nav: UiFocusNav,
 ) -> impl Scene {
     let value_font = font.clone();
     let background = control_fill(&theme);
     let hover_background = hover_fill(&theme);
+    let display_value = picker_display_value(placeholder, &value);
+
     bsn! {
         #FilePickerRoot
         Node {
@@ -57,7 +74,7 @@ pub fn file_picker(
         UiElementKind::Button
         UiElementTheme::TransparentControl
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: Color::NONE, hover_fill: Color::NONE }
-        UiFilePicker
+        UiFilePicker { value: {value} }
         Children [
             (
                 Node {
@@ -76,7 +93,7 @@ pub fn file_picker(
                 DisabledUiElement
                 Children [
                     (
-                        Text({value})
+                        Text({display_value})
                         TextFont {
                             font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
                             font_size: px(UI_CONTROL_FONT_SIZE),
@@ -123,6 +140,99 @@ pub fn file_picker(
     }
 }
 
+pub fn directory_picker_with_value(
+    font: Handle<Font>,
+    placeholder: &'static str,
+    value: String,
+    theme: ActiveTheme,
+    nav: UiFocusNav,
+) -> impl Scene {
+    let value_font = font.clone();
+    let background = control_fill(&theme);
+    let hover_background = hover_fill(&theme);
+    let display_value = picker_display_value(placeholder, &value);
+
+    bsn! {
+        #FilePickerRoot
+        Node {
+            width: percent(100),
+            height: px(UI_ELEMENT_HEIGHT),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(FILE_PICKER_GAP),
+        }
+        Button
+        UiFocusNav { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
+        UiElementKind::Button
+        UiElementTheme::TransparentControl
+        UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: Color::NONE, hover_fill: Color::NONE }
+        UiFilePicker { value: {value} }
+        UiDirectoryPicker
+        Children [
+            (
+                Node {
+                    width: px(0.0),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    height: px(UI_ELEMENT_HEIGHT),
+                    border: ui_border(),
+                    border_radius: ui_radius(),
+                    padding: UiRect::horizontal(px(UI_INNER_PADDING)),
+                    align_items: AlignItems::Center,
+                    overflow: Overflow::clip(),
+                }
+                BorderColor { top: Color::NONE, right: Color::NONE, bottom: Color::NONE, left: Color::NONE }
+                BackgroundColor({background})
+                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+                DisabledUiElement
+                Children [
+                    (
+                        Text({display_value})
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                            font_size: px(UI_CONTROL_FONT_SIZE),
+                        }
+                        TextColor({theme.tertiary})
+                        UiThemeTextColor::Tertiary
+                        TextLayout::new(Justify::Left, LineBreak::NoWrap)
+                        IgnorePicking
+                        UiFilePickerValue { picker: #FilePickerRoot }
+                    )
+                ]
+            ),
+            (
+                #FilePickerButton
+                Node {
+                    width: px(UI_BUTTON_WIDTH),
+                    height: px(UI_ELEMENT_HEIGHT),
+                    border: ui_border(),
+                    border_radius: ui_radius(),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                }
+                BorderColor::all(theme.primary)
+                UiThemeBorderColor::Primary
+                BackgroundColor({background})
+                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+                IgnorePicking
+                Children [
+                    (
+                        Text("Browse Folder")
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                            font_size: px(UI_CONTROL_FONT_SIZE),
+                        }
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
+                        UiElementLabel
+                        IgnorePicking
+                        TextLayout::new(Justify::Center, LineBreak::NoWrap)
+                    )
+                ]
+            )
+        ]
+    }
+}
+
 pub(crate) fn update_file_picker_hover_colours(
     pickers: Query<(Entity, Has<HoveredUiElement>, &Children), With<UiFilePicker>>,
     mut hover_fills: Query<(Entity, &UiFilePickerHoverFill, &mut BackgroundColor)>,
@@ -139,29 +249,47 @@ pub(crate) fn update_file_picker_hover_colours(
 
 pub(crate) fn drain_file_picker_activations(
     mut activations: MessageReader<UiFilePickerActivated>,
+    mut pickers: Query<(&mut UiFilePicker, Has<UiDirectoryPicker>, Option<&Children>)>,
     mut values: Query<(Entity, &UiFilePickerValue, &mut Text)>,
     child_query: Query<&Children>,
 ) {
     for activation in activations.read() {
-        let Some(path) = rfd::FileDialog::new()
-            .set_title("Choose GameBoy ROM (*.gb, *.gbc)")
-            .add_filter("GameBoy ROM", &["gb", "gbc"])
-            .pick_file()
+        let Ok((mut picker, directory, picker_children)) = pickers.get_mut(activation.picker)
         else {
+            continue;
+        };
+        let dialog = rfd::FileDialog::new();
+        let path = if directory {
+            dialog.set_title("Choose ROM directory").pick_folder()
+        } else {
+            dialog
+                .set_title("Choose GameBoy ROM (*.gb, *.gbc)")
+                .add_filter("GameBoy ROM", &["gb", "gbc"])
+                .pick_file()
+        };
+        let Some(path) = path else {
             continue;
         };
 
         let path = path.canonicalize().unwrap_or(path);
         let path = path.display().to_string();
+        picker.value = path.clone();
         for (entity, value, mut text) in &mut values {
             if value.picker == activation.picker
-                || child_query
-                    .get(activation.picker)
-                    .is_ok_and(|children| contains_entity(children, entity, &child_query))
+                || picker_children
+                    .is_some_and(|children| contains_entity(children, entity, &child_query))
             {
                 text.0 = trailing_text(&path, FILE_PICKER_VISIBLE_CHARS);
             }
         }
+    }
+}
+
+fn picker_display_value(placeholder: &str, value: &str) -> String {
+    if value.trim().is_empty() {
+        placeholder.to_string()
+    } else {
+        trailing_text(value, FILE_PICKER_VISIBLE_CHARS)
     }
 }
 

@@ -1,4 +1,5 @@
 use bevy::asset::HandleTemplate;
+use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
@@ -16,6 +17,8 @@ use crate::ui_elements::theme::{
     UiElementTheme, UiThemeBackgroundColor, UiThemeBorderColor, UiThemeTextColor,
 };
 
+pub const DEFAULT_VIRTUAL_ROW_POOL_SIZE: usize = 64;
+
 #[derive(Clone, Copy)]
 pub struct ListColumn {
     pub heading: &'static str,
@@ -23,7 +26,7 @@ pub struct ListColumn {
 }
 
 pub struct ListRow {
-    pub cells: Vec<&'static str>,
+    pub cells: Vec<String>,
     pub nav: UiFocusNav,
 }
 
@@ -32,6 +35,25 @@ pub struct ListViewConfig {
     pub scrollbar_nav: UiFocusNav,
     pub columns: Vec<ListColumn>,
     pub rows: Vec<ListRow>,
+    pub virtual_total_rows: Option<usize>,
+}
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+pub struct VirtualListScrollArea;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+pub struct VirtualListContent;
+
+#[derive(Clone, Copy, Component, Debug)]
+pub struct VirtualListRow {
+    pub slot: usize,
+    pub item_index: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct VirtualListWindow {
+    pub first_row: usize,
+    pub content_offset: f32,
 }
 
 pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig) -> impl Scene {
@@ -45,6 +67,11 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
         .into_iter()
         .map(|row| list_row(font.clone(), row, columns.clone(), theme, hover_background))
         .collect::<Vec<_>>();
+    let content_rows = config
+        .virtual_total_rows
+        .unwrap_or(rows.len())
+        .max(rows.len());
+    let content_height = content_rows as f32 * UI_LIST_ROW_HEIGHT;
 
     bsn! {
         Node {
@@ -88,6 +115,7 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                     overflow: Overflow::clip(),
                 }
                 UiScrollArea { offset: 0.0, max_offset: 0.0 }
+                VirtualListScrollArea
                 AutoScrollFocusedChild
                 Children [
                     (
@@ -104,9 +132,11 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                                     top: px(0.0),
                                     left: px(0.0),
                                     width: percent(100),
+                                    height: px(content_height),
                                     flex_direction: FlexDirection::Column,
                                 }
                                 UiScrollContent
+                                VirtualListContent
                                 Children [
                                     {rows}
                                 ]
@@ -133,6 +163,157 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                 ]
             ),
         ]
+    }
+}
+
+pub fn virtual_list_rows<T>(
+    items: &[T],
+    order: &[usize],
+    pool_size: usize,
+    column_count: usize,
+    row: impl Fn(&T) -> ListRow,
+) -> Vec<ListRow> {
+    (0..pool_size)
+        .map(|slot| {
+            order
+                .get(slot)
+                .and_then(|index| items.get(*index))
+                .map(&row)
+                .unwrap_or_else(|| blank_list_row(column_count))
+        })
+        .collect()
+}
+
+pub fn blank_list_row(column_count: usize) -> ListRow {
+    ListRow {
+        cells: (0..column_count).map(|_| String::new()).collect(),
+        nav: UiFocusNav::default(),
+    }
+}
+
+pub fn virtual_list_window(area: &UiScrollArea) -> VirtualListWindow {
+    VirtualListWindow {
+        first_row: (area.offset / UI_LIST_ROW_HEIGHT).floor() as usize,
+        content_offset: area.offset % UI_LIST_ROW_HEIGHT,
+    }
+}
+
+pub fn virtual_list_content_rows(total_rows: usize, row_pool_size: usize) -> usize {
+    total_rows.max(row_pool_size)
+}
+
+pub fn virtual_list_content_height(total_rows: usize, row_pool_size: usize) -> f32 {
+    virtual_list_content_rows(total_rows, row_pool_size) as f32 * UI_LIST_ROW_HEIGHT
+}
+
+pub fn collect_list_item_entities(
+    children: &Children,
+    kinds: &Query<&UiElementKind>,
+    child_query: &Query<&Children>,
+) -> Vec<Entity> {
+    let mut items = Vec::new();
+    collect_list_item_entities_recursive(children, kinds, child_query, &mut items);
+    items
+}
+
+fn collect_list_item_entities_recursive(
+    children: &Children,
+    kinds: &Query<&UiElementKind>,
+    child_query: &Query<&Children>,
+    items: &mut Vec<Entity>,
+) {
+    for child in children {
+        if kinds
+            .get(*child)
+            .is_ok_and(|kind| *kind == UiElementKind::ListItem)
+        {
+            items.push(*child);
+            continue;
+        }
+
+        if let Ok(grandchildren) = child_query.get(*child) {
+            collect_list_item_entities_recursive(grandchildren, kinds, child_query, items);
+        }
+    }
+}
+
+pub fn collect_descendants_with<F: QueryFilter>(
+    children: &Children,
+    query: &Query<(), F>,
+    child_query: &Query<&Children>,
+) -> Vec<Entity> {
+    let mut entities = Vec::new();
+    collect_descendants_with_recursive(children, query, child_query, &mut entities);
+    entities
+}
+
+fn collect_descendants_with_recursive<F: QueryFilter>(
+    children: &Children,
+    query: &Query<(), F>,
+    child_query: &Query<&Children>,
+    entities: &mut Vec<Entity>,
+) {
+    for child in children {
+        if query.contains(*child) {
+            entities.push(*child);
+        }
+        if let Ok(grandchildren) = child_query.get(*child) {
+            collect_descendants_with_recursive(grandchildren, query, child_query, entities);
+        }
+    }
+}
+
+pub fn set_list_row_cells(
+    values: &[&str],
+    children: &Children,
+    cells: &mut Query<(&mut UiListCellText, &Children)>,
+    texts: &mut Query<&mut Text>,
+    child_query: &Query<&Children>,
+) {
+    for (cell_index, cell_entity) in collect_list_cell_entities(children, cells, child_query)
+        .into_iter()
+        .enumerate()
+    {
+        let Some(value) = values.get(cell_index) else {
+            continue;
+        };
+        let Ok((mut cell, text_children)) = cells.get_mut(cell_entity) else {
+            continue;
+        };
+        cell.value = (*value).to_string();
+        for child in text_children {
+            if let Ok(mut text) = texts.get_mut(*child) {
+                text.0 = (*value).to_string();
+            }
+        }
+    }
+}
+
+fn collect_list_cell_entities(
+    children: &Children,
+    cells: &Query<(&mut UiListCellText, &Children)>,
+    child_query: &Query<&Children>,
+) -> Vec<Entity> {
+    let mut entities = Vec::new();
+    collect_list_cell_entities_recursive(children, cells, child_query, &mut entities);
+    entities
+}
+
+fn collect_list_cell_entities_recursive(
+    children: &Children,
+    cells: &Query<(&mut UiListCellText, &Children)>,
+    child_query: &Query<&Children>,
+    entities: &mut Vec<Entity>,
+) {
+    for child in children {
+        if cells.contains(*child) {
+            entities.push(*child);
+            continue;
+        }
+
+        if let Ok(grandchildren) = child_query.get(*child) {
+            collect_list_cell_entities_recursive(grandchildren, cells, child_query, entities);
+        }
     }
 }
 
@@ -182,7 +363,7 @@ fn list_header(
         .map(|column| {
             list_cell(
                 font.clone(),
-                column.heading,
+                column.heading.to_string(),
                 theme.primary,
                 column.width_percent,
             )
@@ -205,18 +386,13 @@ fn list_header(
     }
 }
 
-fn list_cell(
-    font: Handle<Font>,
-    label: &'static str,
-    colour: Color,
-    width_percent: f32,
-) -> impl Scene {
+fn list_cell(font: Handle<Font>, label: String, colour: Color, width_percent: f32) -> impl Scene {
     bsn! {
         Node {
             width: percent(width_percent),
             overflow: Overflow::clip(),
         }
-        UiListCellText { value: {label.to_string()}, font_size: UI_BODY_FONT_SIZE }
+        UiListCellText { value: {label.clone()}, font_size: UI_BODY_FONT_SIZE }
         IgnorePicking
         Children [
             (

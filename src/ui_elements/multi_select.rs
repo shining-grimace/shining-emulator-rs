@@ -31,6 +31,15 @@ pub fn multi_select(
     theme: ActiveTheme,
     config: MultiSelectConfig,
 ) -> impl Scene {
+    multi_select_with_width(font, theme, config, px(UI_MULTI_SELECT_WIDTH))
+}
+
+pub fn multi_select_with_width(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    config: MultiSelectConfig,
+    width: Val,
+) -> impl Scene {
     let label_font = font.clone();
     let background = control_fill(&theme);
     let hover_background = hover_fill(&theme);
@@ -60,7 +69,7 @@ pub fn multi_select(
 
     bsn! {
         Node {
-            width: px(UI_MULTI_SELECT_WIDTH),
+            width: {width},
             flex_shrink: 0.0,
             height: px(UI_ELEMENT_HEIGHT),
             border: ui_border(),
@@ -100,7 +109,7 @@ pub fn multi_select(
                     position_type: PositionType::Absolute,
                     top: px(UI_ELEMENT_HEIGHT + 8.0),
                     left: px(0.0),
-                    width: px(UI_MULTI_SELECT_WIDTH),
+                    width: percent(100),
                     border: ui_border(),
                     border_radius: ui_radius(),
                     padding: UiRect::all(px(UI_INNER_PADDING)),

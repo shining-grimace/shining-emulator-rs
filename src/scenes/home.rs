@@ -1,10 +1,14 @@
 use bevy::prelude::*;
+use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
 use bevy::ui::UiGlobalTransform;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::input::mappings::RuntimeInputMappings;
+use crate::storage::LocalStorage;
+use crate::storage::data::RomMetadata;
+use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult, sync_provider};
 use crate::ui_elements::action_hint::action_hints;
 use crate::ui_elements::button::button;
 use crate::ui_elements::choice_popup::{
@@ -12,12 +16,19 @@ use crate::ui_elements::choice_popup::{
 };
 use crate::ui_elements::description::description;
 use crate::ui_elements::heading::heading;
-use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
+use crate::ui_elements::info_message::{
+    InfoMessage, info_message, info_message_text, set_latest_info_message,
+};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, InitialFocus, SelectedUiElement,
-    UiElementKind, UiFocusNav, UiListCellText,
+    UiElementKind, UiFocusNav, UiListCellText, UiScrollArea,
 };
-use crate::ui_elements::list_view::{ListColumn, ListRow, ListViewConfig, list_view};
+use crate::ui_elements::list_view::{
+    DEFAULT_VIRTUAL_ROW_POOL_SIZE, ListColumn, ListRow, ListViewConfig, VirtualListContent,
+    VirtualListRow, VirtualListScrollArea, VirtualListWindow, collect_list_item_entities,
+    list_view, set_list_row_cells, virtual_list_content_height, virtual_list_rows,
+    virtual_list_window,
+};
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 
@@ -30,6 +41,7 @@ const HOME_SORT_LABEL_GAP: f32 = 12.0;
 const HOME_SORT_GROUP_GAP: f32 = 24.0;
 const AUTO_SAVE_POPUP_WIDTH: f32 = 260.0;
 const AUTO_SAVE_POPUP_LEFT: f32 = 760.0;
+const HOME_ROM_COLUMN_COUNT: usize = 5;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SettingsButton;
@@ -46,24 +58,37 @@ struct PrimarySortSelect;
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SecondarySortSelect;
 
-#[derive(Clone, Copy, Component, Debug)]
-struct HomeRomRow {
-    slot: usize,
-    rom_index: usize,
-}
-
 #[derive(Clone, Copy, Component, Debug, Default)]
 struct HomeRomRowsBound;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct HomePopupRoot;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct HomeStatusMessage;
+
+#[derive(Resource)]
+struct HomeProviderSyncState {
+    started: bool,
+    task: Option<Task<ProviderSyncTaskResult>>,
+}
+
 pub struct HomeScenePlugin;
 
 impl Plugin for HomeScenePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(AppState::Home), spawn_home_scene)
-            .add_systems(Update, bind_home_rom_rows.run_if(in_state(AppState::Home)))
+        app.init_resource::<HomeRomListData>()
+            .add_systems(OnEnter(AppState::Home), spawn_home_scene)
+            .add_systems(
+                Update,
+                (
+                    start_home_provider_sync,
+                    finish_home_provider_sync,
+                    bind_home_rom_rows,
+                    refresh_home_status_message,
+                )
+                    .run_if(in_state(AppState::Home)),
+            )
             .add_systems(
                 PostUpdate,
                 (sync_sorted_rom_rows, clear_invisible_home_row_state)
@@ -78,8 +103,94 @@ fn spawn_home_scene(
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
     input_mappings: Res<RuntimeInputMappings>,
+    storage: Res<LocalStorage>,
+    mut rom_list_data: ResMut<HomeRomListData>,
 ) {
-    commands.spawn_scene(home_scene(&assets, *theme, &input_mappings));
+    rom_list_data.roms = home_roms_from_storage(&storage);
+    rom_list_data.refresh_order(SortField::LastPlayed, SortField::ProviderPriority);
+    commands.spawn_scene(home_scene(&assets, *theme, &input_mappings, &rom_list_data));
+    commands.insert_resource(HomeProviderSyncState {
+        started: false,
+        task: None,
+    });
+}
+
+fn start_home_provider_sync(
+    state: Option<ResMut<HomeProviderSyncState>>,
+    storage: Res<LocalStorage>,
+) {
+    let Some(mut state) = state else {
+        return;
+    };
+    if state.started {
+        return;
+    }
+    state.started = true;
+
+    let providers = storage
+        .data
+        .providers
+        .iter()
+        .filter(|provider| provider.enabled)
+        .cloned()
+        .collect::<Vec<_>>();
+    if providers.is_empty() {
+        return;
+    }
+
+    state.task = Some(IoTaskPool::get().spawn(async move {
+        let mut result = ProviderSyncTaskResult::default();
+        for provider in providers {
+            match sync_provider(&provider) {
+                Ok(provider_result) => result.results.push(provider_result),
+                Err(error) => result
+                    .failures
+                    .push(format!("{}: {error}", provider.friendly_name)),
+            }
+        }
+        result
+    }));
+}
+
+fn finish_home_provider_sync(
+    mut commands: Commands,
+    mut storage: ResMut<LocalStorage>,
+    mut sync_messages: ResMut<ProviderSyncMessages>,
+    state: Option<ResMut<HomeProviderSyncState>>,
+    mut rom_list_data: ResMut<HomeRomListData>,
+    mut rows: Query<(
+        Entity,
+        &mut VirtualListRow,
+        &Children,
+        Has<FocusedUiElement>,
+    )>,
+    mut cells: Query<(&mut UiListCellText, &Children)>,
+    mut texts: Query<&mut Text>,
+    child_query: Query<&Children>,
+) {
+    let Some(mut state) = state else {
+        return;
+    };
+    let Some(task) = state.task.as_mut() else {
+        return;
+    };
+    let Some(result) = check_ready(task) else {
+        return;
+    };
+    state.task = None;
+
+    sync_messages.failures = storage.apply_provider_sync_result(result);
+    rom_list_data.roms = home_roms_from_storage(&storage);
+    rom_list_data.refresh_order(SortField::LastPlayed, SortField::ProviderPriority);
+    refresh_home_rom_rows(
+        &mut commands,
+        &rom_list_data,
+        0,
+        &mut rows,
+        &mut cells,
+        &mut texts,
+        &child_query,
+    );
 }
 
 fn handle_home_activation(
@@ -90,11 +201,12 @@ fn handle_home_activation(
     settings_buttons: Query<(), With<SettingsButton>>,
     rom_data_buttons: Query<(), With<RomDataButton>>,
     popup_options: Query<&ChoicePopupOption>,
-    rom_rows: Query<&HomeRomRow>,
+    rom_rows: Query<&VirtualListRow>,
     row_nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     lists: Query<(&ComputedNode, &UiGlobalTransform), With<HomeRomList>>,
     popup_roots: Query<Entity, With<HomePopupRoot>>,
     focused: Query<Entity, With<FocusedUiElement>>,
+    rom_list_data: Res<HomeRomListData>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
@@ -124,7 +236,11 @@ fn handle_home_activation(
             commands.spawn_scene(auto_save_popup_scene(
                 &assets,
                 *theme,
-                ROMS[row.rom_index].name,
+                rom_list_data
+                    .roms
+                    .get(row.item_index)
+                    .map(|rom| rom.name.clone())
+                    .unwrap_or_else(|| "ROM".to_string()),
             ));
         }
     }
@@ -134,8 +250,14 @@ fn home_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
     input_mappings: &RuntimeInputMappings,
+    rom_list_data: &HomeRomListData,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
+    let initial_status = if rom_list_data.roms.is_empty() {
+        "No ROMs found. Sync or add a ROM provider in Settings."
+    } else {
+        ""
+    };
 
     bsn! {
         #HomeScene
@@ -180,14 +302,16 @@ fn home_scene(
                                 Children [
                                     (
                                         #RomList
-                                        list_view(font.clone(), theme, rom_list_config())
+                                        list_view(font.clone(), theme, rom_list_config(&rom_list_data.roms))
                                         HomeRomList
                                         InitialFocus { enabled: true }
                                         DefaultFocusTarget
                                         UiFocusNav { up: {Entity::PLACEHOLDER}, right: #AllSettings, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
                                     ),
-                                    info_message(font.clone(), theme, "Local provider could not be read: /home/thomas/roms", true),
-                                    info_message(font.clone(), theme, "2 other providers could not be read", true),
+                                    (
+                                        info_message_text(font.clone(), theme, initial_status.to_string(), false)
+                                        HomeStatusMessage
+                                    ),
                                     info_message(font.clone(), theme, "", false)
                                 ]
                             ),
@@ -263,7 +387,7 @@ fn sort_select_config(selected: usize) -> MultiSelectConfig {
     }
 }
 
-fn rom_list_config() -> ListViewConfig {
+fn rom_list_config(roms: &[HomeRom]) -> ListViewConfig {
     ListViewConfig {
         nav: UiFocusNav::default(),
         scrollbar_nav: UiFocusNav::default(),
@@ -289,18 +413,30 @@ fn rom_list_config() -> ListViewConfig {
                 width_percent: 18.0,
             },
         ],
-        rows: ROMS.iter().map(|rom| rom_row(rom)).collect(),
+        rows: virtual_rom_rows(roms),
+        virtual_total_rows: Some(roms.len()),
     }
+}
+
+fn virtual_rom_rows(roms: &[HomeRom]) -> Vec<ListRow> {
+    let order = sorted_rom_indices(roms, SortField::LastPlayed, SortField::ProviderPriority);
+    virtual_list_rows(
+        roms,
+        &order,
+        DEFAULT_VIRTUAL_ROW_POOL_SIZE,
+        HOME_ROM_COLUMN_COUNT,
+        rom_row,
+    )
 }
 
 fn rom_row(rom: &HomeRom) -> ListRow {
     ListRow {
         cells: vec![
-            rom.name,
-            rom.origin,
-            rom.author,
-            rom.license,
-            rom.last_played_label,
+            rom.name.clone(),
+            rom.origin.clone(),
+            rom.author.clone(),
+            rom.license.clone(),
+            rom.last_played_label.clone(),
         ],
         nav: UiFocusNav::default(),
     }
@@ -313,11 +449,11 @@ fn bind_home_rom_rows(
     child_query: Query<&Children>,
 ) {
     for (list_entity, children) in &lists {
-        let rows = collect_list_items(children, &kinds, &child_query);
+        let rows = collect_list_item_entities(children, &kinds, &child_query);
         for (slot, row) in rows.into_iter().enumerate() {
-            commands.entity(row).insert(HomeRomRow {
+            commands.entity(row).insert(VirtualListRow {
                 slot,
-                rom_index: slot,
+                item_index: usize::MAX,
             });
         }
         commands.entity(list_entity).insert(HomeRomRowsBound);
@@ -325,12 +461,21 @@ fn bind_home_rom_rows(
 }
 
 fn sync_sorted_rom_rows(
+    mut commands: Commands,
     primary: Query<&crate::ui_elements::interactions::UiMultiSelect, With<PrimarySortSelect>>,
     secondary: Query<&crate::ui_elements::interactions::UiMultiSelect, With<SecondarySortSelect>>,
-    mut rows: Query<(&mut HomeRomRow, &Children)>,
+    scroll_areas: Query<&UiScrollArea, With<VirtualListScrollArea>>,
+    mut virtual_contents: Query<&mut Node, With<VirtualListContent>>,
+    mut rows: Query<(
+        Entity,
+        &mut VirtualListRow,
+        &Children,
+        Has<FocusedUiElement>,
+    )>,
     mut cells: Query<(&mut UiListCellText, &Children)>,
     mut texts: Query<&mut Text>,
     child_query: Query<&Children>,
+    mut rom_list_data: ResMut<HomeRomListData>,
 ) {
     let primary_sort = primary
         .single()
@@ -340,124 +485,143 @@ fn sync_sorted_rom_rows(
         .single()
         .map(|select| SortField::from_index(select.selected))
         .unwrap_or(SortField::ProviderPriority);
-    let order = sorted_rom_indices(primary_sort, secondary_sort);
+    rom_list_data.refresh_order(primary_sort, secondary_sort);
+    let window = scroll_areas
+        .iter()
+        .next()
+        .map(virtual_list_window)
+        .unwrap_or(VirtualListWindow {
+            first_row: 0,
+            content_offset: 0.0,
+        });
+    for mut node in &mut virtual_contents {
+        node.top = px(-window.content_offset);
+        node.height = px(virtual_list_content_height(
+            rom_list_data.roms.len(),
+            DEFAULT_VIRTUAL_ROW_POOL_SIZE,
+        ));
+    }
+    refresh_home_rom_rows(
+        &mut commands,
+        &rom_list_data,
+        window.first_row,
+        &mut rows,
+        &mut cells,
+        &mut texts,
+        &child_query,
+    );
+}
 
-    for (mut row, children) in &mut rows {
-        let Some(rom_index) = order.get(row.slot).copied() else {
+fn refresh_home_rom_rows(
+    commands: &mut Commands,
+    rom_list_data: &HomeRomListData,
+    first_visible: usize,
+    rows: &mut Query<(
+        Entity,
+        &mut VirtualListRow,
+        &Children,
+        Has<FocusedUiElement>,
+    )>,
+    cells: &mut Query<(&mut UiListCellText, &Children)>,
+    texts: &mut Query<&mut Text>,
+    child_query: &Query<&Children>,
+) {
+    let focused_item_index = rows
+        .iter()
+        .find_map(|(_, row, _, focused)| focused.then_some(row.item_index))
+        .filter(|item_index| *item_index != usize::MAX);
+    let mut next_focused_entity = None;
+
+    for (entity, mut row, children, _) in &mut *rows {
+        let Some(rom_index) = rom_list_data.order.get(first_visible + row.slot).copied() else {
+            if row.item_index != usize::MAX {
+                row.item_index = usize::MAX;
+                set_list_row_cells(
+                    &["", "", "", "", ""],
+                    children,
+                    &mut *cells,
+                    &mut *texts,
+                    &child_query,
+                );
+            }
             continue;
         };
-        if row.rom_index == rom_index {
+        if focused_item_index == Some(rom_index) {
+            next_focused_entity = Some(entity);
+        }
+        if row.item_index == rom_index {
             continue;
         }
-        row.rom_index = rom_index;
-        update_row_cells(
-            ROMS[rom_index],
-            children,
-            &mut cells,
-            &mut texts,
-            &child_query,
-        );
+        row.item_index = rom_index;
+        let Some(rom) = rom_list_data.roms.get(rom_index) else {
+            continue;
+        };
+        update_row_cells(rom, children, &mut *cells, &mut *texts, &child_query);
     }
+
+    if focused_item_index.is_none() {
+        return;
+    }
+    let Some(next_focused_entity) = next_focused_entity else {
+        return;
+    };
+    for (entity, _, _, focused) in rows {
+        if focused && entity != next_focused_entity {
+            commands.entity(entity).remove::<FocusedUiElement>();
+        }
+    }
+    commands
+        .entity(next_focused_entity)
+        .insert(FocusedUiElement);
 }
 
 fn update_row_cells(
-    rom: HomeRom,
+    rom: &HomeRom,
     children: &Children,
     cells: &mut Query<(&mut UiListCellText, &Children)>,
     texts: &mut Query<&mut Text>,
     child_query: &Query<&Children>,
 ) {
     let values = [
-        rom.name,
-        rom.origin,
-        rom.author,
-        rom.license,
-        rom.last_played_label,
+        rom.name.as_str(),
+        rom.origin.as_str(),
+        rom.author.as_str(),
+        rom.license.as_str(),
+        rom.last_played_label.as_str(),
     ];
+    set_list_row_cells(&values, children, cells, texts, child_query);
+}
 
-    for (cell_index, cell_entity) in collect_cell_entities(children, cells, child_query)
-        .into_iter()
-        .enumerate()
+fn refresh_home_status_message(
+    rom_list_data: Res<HomeRomListData>,
+    sync_messages: Res<ProviderSyncMessages>,
+    state: Option<Res<HomeProviderSyncState>>,
+    mut messages: Query<&mut Text, With<HomeStatusMessage>>,
+) {
+    let Ok(mut text) = messages.single_mut() else {
+        return;
+    };
+
+    text.0 = if !sync_messages.failures.is_empty() {
+        sync_messages
+            .failures
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else if rom_list_data.roms.is_empty()
+        && state.as_ref().is_some_and(|state| state.task.is_some())
     {
-        let Some(value) = values.get(cell_index) else {
-            continue;
-        };
-        let Ok((mut cell, text_children)) = cells.get_mut(cell_entity) else {
-            continue;
-        };
-        cell.value = (*value).to_string();
-        for child in text_children {
-            if let Ok(mut text) = texts.get_mut(*child) {
-                text.0 = (*value).to_string();
-            }
-        }
-    }
+        "Syncing ROM providers...".to_string()
+    } else if rom_list_data.roms.is_empty() {
+        "No ROMs found. Sync or add a ROM provider in Settings.".to_string()
+    } else {
+        String::new()
+    };
 }
 
-fn collect_list_items(
-    children: &Children,
-    kinds: &Query<&UiElementKind>,
-    child_query: &Query<&Children>,
-) -> Vec<Entity> {
-    let mut items = Vec::new();
-    collect_list_items_recursive(children, kinds, child_query, &mut items);
-    items
-}
-
-fn collect_list_items_recursive(
-    children: &Children,
-    kinds: &Query<&UiElementKind>,
-    child_query: &Query<&Children>,
-    items: &mut Vec<Entity>,
-) {
-    for child in children {
-        if kinds
-            .get(*child)
-            .is_ok_and(|kind| *kind == UiElementKind::ListItem)
-        {
-            items.push(*child);
-            continue;
-        }
-
-        if let Ok(grandchildren) = child_query.get(*child) {
-            collect_list_items_recursive(grandchildren, kinds, child_query, items);
-        }
-    }
-}
-
-fn collect_cell_entities(
-    children: &Children,
-    cells: &Query<(&mut UiListCellText, &Children)>,
-    child_query: &Query<&Children>,
-) -> Vec<Entity> {
-    let mut entities = Vec::new();
-    collect_cell_entities_recursive(children, cells, child_query, &mut entities);
-    entities
-}
-
-fn collect_cell_entities_recursive(
-    children: &Children,
-    cells: &Query<(&mut UiListCellText, &Children)>,
-    child_query: &Query<&Children>,
-    entities: &mut Vec<Entity>,
-) {
-    for child in children {
-        if cells.contains(*child) {
-            entities.push(*child);
-            continue;
-        }
-
-        if let Ok(grandchildren) = child_query.get(*child) {
-            collect_cell_entities_recursive(grandchildren, cells, child_query, entities);
-        }
-    }
-}
-
-fn auto_save_popup_scene(
-    assets: &AppAssets,
-    theme: ActiveTheme,
-    rom_name: &'static str,
-) -> impl Scene {
+fn auto_save_popup_scene(assets: &AppAssets, theme: ActiveTheme, rom_name: String) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
 
     bsn! {
@@ -495,7 +659,7 @@ fn clear_invisible_home_row_state(
             Has<FocusedUiElement>,
             Has<ActivatedUiElement>,
         ),
-        With<HomeRomRow>,
+        With<VirtualListRow>,
     >,
     row_nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     lists: Query<(&ComputedNode, &UiGlobalTransform), With<HomeRomList>>,
@@ -549,6 +713,12 @@ enum SortField {
     Alphabetical,
 }
 
+impl Default for SortField {
+    fn default() -> Self {
+        Self::LastPlayed
+    }
+}
+
 impl SortField {
     fn from_index(index: usize) -> Self {
         match index {
@@ -559,15 +729,15 @@ impl SortField {
     }
 }
 
-fn sorted_rom_indices(primary: SortField, secondary: SortField) -> Vec<usize> {
-    let mut indices = (0..ROMS.len()).collect::<Vec<_>>();
-    indices.sort_by(|left, right| compare_roms(ROMS[*left], ROMS[*right], primary, secondary));
+fn sorted_rom_indices(roms: &[HomeRom], primary: SortField, secondary: SortField) -> Vec<usize> {
+    let mut indices = (0..roms.len()).collect::<Vec<_>>();
+    indices.sort_by(|left, right| compare_roms(&roms[*left], &roms[*right], primary, secondary));
     indices
 }
 
 fn compare_roms(
-    left: HomeRom,
-    right: HomeRom,
+    left: &HomeRom,
+    right: &HomeRom,
     primary: SortField,
     secondary: SortField,
 ) -> std::cmp::Ordering {
@@ -576,117 +746,101 @@ fn compare_roms(
         .then_with(|| compare_field(left, right, SortField::Alphabetical))
 }
 
-fn compare_field(left: HomeRom, right: HomeRom, field: SortField) -> std::cmp::Ordering {
+fn compare_field(left: &HomeRom, right: &HomeRom, field: SortField) -> std::cmp::Ordering {
     match field {
         SortField::LastPlayed => right.last_played_rank.cmp(&left.last_played_rank),
         SortField::ProviderPriority => left
             .provider_priority
             .cmp(&right.provider_priority)
-            .then_with(|| left.origin.cmp(right.origin)),
+            .then_with(|| left.origin.cmp(&right.origin)),
         SortField::Alphabetical => left.name.to_lowercase().cmp(&right.name.to_lowercase()),
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, Default, Resource)]
+struct HomeRomListData {
+    roms: Vec<HomeRom>,
+    order: Vec<usize>,
+    primary_sort: SortField,
+    secondary_sort: SortField,
+}
+
+impl HomeRomListData {
+    fn refresh_order(&mut self, primary_sort: SortField, secondary_sort: SortField) {
+        if self.primary_sort == primary_sort
+            && self.secondary_sort == secondary_sort
+            && self.order.len() == self.roms.len()
+        {
+            return;
+        }
+
+        self.primary_sort = primary_sort;
+        self.secondary_sort = secondary_sort;
+        self.order = sorted_rom_indices(&self.roms, primary_sort, secondary_sort);
+    }
+}
+
+#[derive(Clone, Debug)]
 struct HomeRom {
-    name: &'static str,
-    origin: &'static str,
-    author: &'static str,
-    license: &'static str,
-    last_played_label: &'static str,
+    name: String,
+    origin: String,
+    author: String,
+    license: String,
     last_played_rank: u64,
+    last_played_label: String,
     provider_priority: u8,
 }
 
-const ROMS: [HomeRom; 10] = [
-    HomeRom {
-        name: "ALIEN BARRAGE",
-        origin: "Local Folder",
-        author: "",
-        license: "",
-        last_played_label: "Yesterday 1:32PM",
-        last_played_rank: 202605241332,
-        provider_priority: 1,
-    },
-    HomeRom {
-        name: "Cabbage Dodge",
-        origin: "Homebrew Hub",
-        author: "Alice Bobson",
-        license: "GNU 2.0",
-        last_played_label: "Mar 21, 2026",
-        last_played_rank: 202603210000,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Extremely Frustrating Gauntlet",
-        origin: "Homebrew Hub",
-        author: "Cathy Donaldson-Smith",
-        license: "",
-        last_played_label: "Mar 10, 2025",
-        last_played_rank: 202503100000,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "hope.gb",
-        origin: "Local Folder",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 1,
-    },
-    HomeRom {
-        name: "Igloo Jaunt",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Kangaroo Leapathon",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Marshmallow Nebula",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Orangutan Panic",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Queen Rita",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-    HomeRom {
-        name: "Sorry Thunder",
-        origin: "Homebrew Hub",
-        author: "",
-        license: "",
-        last_played_label: "",
-        last_played_rank: 0,
-        provider_priority: 2,
-    },
-];
+fn home_roms_from_storage(storage: &LocalStorage) -> Vec<HomeRom> {
+    storage
+        .data
+        .roms
+        .iter()
+        .filter_map(|rom| home_rom_from_metadata(rom, storage))
+        .collect()
+}
+
+fn home_rom_from_metadata(rom: &RomMetadata, storage: &LocalStorage) -> Option<HomeRom> {
+    let provider = storage
+        .data
+        .providers
+        .iter()
+        .find(|provider| provider.uuid == rom.provider_id)?;
+    if !provider.enabled {
+        return None;
+    }
+    let last_played_rank = rom
+        .id
+        .as_ref()
+        .and_then(|id| {
+            storage
+                .data
+                .timestamps
+                .last_played
+                .iter()
+                .find(|timestamp| &timestamp.id == id)
+                .map(|timestamp| timestamp.timestamp)
+        })
+        .unwrap_or_default();
+
+    Some(HomeRom {
+        name: rom
+            .friendly_name
+            .clone()
+            .unwrap_or_else(|| rom.file_name.clone()),
+        origin: provider.friendly_name.clone(),
+        author: rom.author.clone().unwrap_or_default(),
+        license: rom.license.clone().unwrap_or_default(),
+        last_played_rank,
+        last_played_label: last_played_label(last_played_rank),
+        provider_priority: provider.priority,
+    })
+}
+
+fn last_played_label(timestamp: u64) -> String {
+    if timestamp == 0 {
+        String::new()
+    } else {
+        format!("Played {timestamp}")
+    }
+}

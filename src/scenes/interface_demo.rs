@@ -232,25 +232,30 @@ fn demo_list_config() -> ListViewConfig {
         ],
         rows: vec![
             ListRow {
-                cells: vec!["Item One Has a Rather Long Name", "", "Yes"],
+                cells: list_cells(vec!["Item One Has a Rather Long Name", "", "Yes"]),
                 nav: UiFocusNav::default(),
             },
             ListRow {
-                cells: vec!["Item Two", "Alice Bobson", "No"],
+                cells: list_cells(vec!["Item Two", "Alice Bobson", "No"]),
                 nav: UiFocusNav::default(),
             },
             ListRow {
-                cells: vec!["Item Three", "", "No"],
+                cells: list_cells(vec!["Item Three", "", "No"]),
                 nav: UiFocusNav::default(),
             },
             ListRow {
-                cells: vec!["Item Four", "Cathy Donaldson-Smith", "Yes"],
+                cells: list_cells(vec!["Item Four", "Cathy Donaldson-Smith", "Yes"]),
                 nav: UiFocusNav::default(),
             },
             ListRow {
-                cells: vec!["Item Five", "", "No"],
+                cells: list_cells(vec!["Item Five", "", "No"]),
                 nav: UiFocusNav::default(),
             },
         ],
+        virtual_total_rows: None,
     }
+}
+
+fn list_cells(cells: Vec<&'static str>) -> Vec<String> {
+    cells.into_iter().map(str::to_string).collect()
 }

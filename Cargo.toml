@@ -8,12 +8,19 @@ bevy = { version = "0.19.0-rc.2", default-features = false, features = [
     "2d",
     "ui",
     "png",
+    "https",
+    "system_clipboard",
 ] }
 directories = "6.0.0"
 fastrand = "2.4.1"
 rfd = { version = "0.15.4", default-features = false, features = ["async-std", "xdg-portal"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+jsonpath_lib = "0.3.0"
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
 sha1 = "0.11.0"
 hex = "0.4.3"
 uuid = { version = "1.23.1", features = ["v4", "serde"] }
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android", target_os = "emscripten"))))'.dependencies]
+arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }

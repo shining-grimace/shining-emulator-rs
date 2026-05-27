@@ -31,6 +31,15 @@ pub fn info_message(
     text: &'static str,
     fades: bool,
 ) -> impl Scene {
+    info_message_text(font, theme, text.to_string(), fades)
+}
+
+pub fn info_message_text(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    text: String,
+    fades: bool,
+) -> impl Scene {
     bsn! {
         Text({text})
         TextFont {

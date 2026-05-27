@@ -125,9 +125,20 @@ a. Add a ROM provider, disabled by default, which loads publicly-available
    ROMs that validate emulation correctness
 b. Add integration tests to run emulation on validation ROMs
 
-# Stage 8 - Embellishments
+# Stage 8 - Polish & Embellishments
 
-Add extra unnecessary things for charm and replayability.
+Polish everything, and add extra unnecessary things for charm and replayability.
+
+NOTE: Move some of these up?
 
 Steps:
+a. Remove remaining jank from the UI
+b. Consider accessibility
+c. Consider multi language support
+c. Consider compatibility with libretro cores
+b. Check is vsync enabled, or any other possible cause of high CPU usage in settings
+c. Make sure all dead-code annotations are removed
+b. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
+   in/out and fading in/out on appear/disappear, row focus highlights in list views
+   translating from one to another, scrolling being ease-out rather than instant
 a. Easter eggs?

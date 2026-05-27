@@ -51,6 +51,7 @@ fn main() {
             scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,
             scenes::loading::LoadingScenePlugin,
+            scenes::rom_provider::RomProviderScenePlugin,
             scenes::settings::SettingsScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))

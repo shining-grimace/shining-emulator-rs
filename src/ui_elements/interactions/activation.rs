@@ -55,10 +55,11 @@ pub(super) fn activate_controls(
     let pointer_released = mouse_buttons.just_released(MouseButton::Left);
 
     if mapped_quit {
-        if *state.get() == AppState::Home {
-            app_exit.write(AppExit::Success);
-        } else {
-            next_state.set(AppState::Home);
+        match back_navigation_target(*state.get()) {
+            Some(target) => next_state.set(target),
+            None => {
+                app_exit.write(AppExit::Success);
+            }
         }
     }
 
@@ -186,5 +187,39 @@ pub(super) fn activate_controls(
             &multi_selects,
             &child_query,
         );
+    }
+}
+
+fn back_navigation_target(state: AppState) -> Option<AppState> {
+    match state {
+        AppState::Home => None,
+        AppState::RomProvider => Some(AppState::Settings),
+        _ => Some(AppState::Home),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn back_navigation_from_rom_provider_returns_to_settings() {
+        assert_eq!(
+            back_navigation_target(AppState::RomProvider),
+            Some(AppState::Settings)
+        );
+    }
+
+    #[test]
+    fn back_navigation_from_settings_returns_to_home() {
+        assert_eq!(
+            back_navigation_target(AppState::Settings),
+            Some(AppState::Home)
+        );
+    }
+
+    #[test]
+    fn back_navigation_from_home_exits_app() {
+        assert_eq!(back_navigation_target(AppState::Home), None);
     }
 }

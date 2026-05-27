@@ -109,6 +109,7 @@ For remote API pagination, the object containing its configuration contains:
   page count
 - queryPage: the name of the query parameter used in requests to indicate page
   number
+- maxPages: optionally the maximum number of pages to fetch
 
 ### ROM Metadata
 
