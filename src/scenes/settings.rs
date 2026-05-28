@@ -5,7 +5,9 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged, active_theme_for_setting};
 use crate::app_ui_scale::{UI_SCALE_LABELS, apply_ui_scale_setting};
-use crate::input::mappings::RuntimeInputMappings;
+use crate::input::selection::{
+    InputMappingEditTarget, PrimaryInputDevice, mapping_label, selected_mapping_index,
+};
 use crate::scenes::rom_provider::RomProviderEditTarget;
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
@@ -108,6 +110,9 @@ struct ProviderEditButton;
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct ProviderCreateButton;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct EditPrimaryMappingButton;
+
 pub struct SettingsScenePlugin;
 
 impl Plugin for SettingsScenePlugin {
@@ -125,7 +130,8 @@ impl Plugin for SettingsScenePlugin {
             )
             .add_systems(OnExit(AppState::Settings), reset_settings_provider_sync)
             .add_observer(save_settings_select_on_activation)
-            .add_observer(handle_provider_button_activation);
+            .add_observer(handle_provider_button_activation)
+            .add_observer(handle_mapping_button_activation);
     }
 }
 
@@ -133,14 +139,14 @@ fn spawn_settings_scene(
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
-    input_mappings: Res<RuntimeInputMappings>,
+    primary_input: Res<PrimaryInputDevice>,
     storage: Res<LocalStorage>,
     sync_state: Res<ProviderSyncTaskState>,
 ) {
     commands.spawn_scene(settings_scene(
         &assets,
         *theme,
-        &input_mappings,
+        &primary_input,
         &storage,
         sync_state.is_running(),
     ));
@@ -154,6 +160,7 @@ fn save_settings_select_on_activation(
     state: Res<State<AppState>>,
     mut active_theme: ResMut<ActiveTheme>,
     mut ui_scale: ResMut<UiScale>,
+    mut primary_input: ResMut<PrimaryInputDevice>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     if *state.get() != AppState::Settings {
@@ -165,6 +172,16 @@ fn save_settings_select_on_activation(
     };
 
     let value = ui_select.selected as u8;
+    if settings_select.field == 255 {
+        primary_input.mapping_index = selected_mapping_index(
+            &PrimaryInputDevice {
+                mapping_index: ui_select.selected,
+            },
+            &storage,
+        );
+        return;
+    }
+
     let previous_value = match settings_select.field {
         FIELD_FORCE_BUTTON_OVERLAY => storage.data.settings.force_button_overlay,
         FIELD_EMULATION_MODEL => storage.data.settings.emulation_model,
@@ -201,6 +218,23 @@ fn save_settings_select_on_activation(
     if settings_select.field == FIELD_UI_SCALE {
         apply_ui_scale_setting(value, &mut ui_scale);
     }
+}
+
+fn handle_mapping_button_activation(
+    activated: On<Add, ActivatedUiElement>,
+    edit_primary_buttons: Query<(), With<EditPrimaryMappingButton>>,
+    mut edit_target: ResMut<InputMappingEditTarget>,
+    primary_input: Res<PrimaryInputDevice>,
+    storage: Res<LocalStorage>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if *state.get() != AppState::Settings || edit_primary_buttons.get(activated.entity).is_err() {
+        return;
+    }
+
+    edit_target.mapping_index = selected_mapping_index(&primary_input, &storage);
+    next_state.set(AppState::InputMapping);
 }
 
 fn handle_provider_button_activation(
@@ -552,13 +586,14 @@ fn focus_nav_ids(up: u16, right: u16, down: u16, left: u16) -> UiFocusNavIds {
 fn settings_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
-    input_mappings: &RuntimeInputMappings,
+    primary_input: &PrimaryInputDevice,
     storage: &LocalStorage,
     sync_running: bool,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
     let left_column_font = font.clone();
     let settings = storage.data.settings;
+    let input_config = primary_input_config(storage, primary_input);
     let providers = storage.data.providers.clone();
     let roms = storage.data.roms.clone();
     let info_text = if sync_running {
@@ -609,7 +644,7 @@ fn settings_scene(
                                         min_height: px(0.0),
                                         thumb_height: 112.0,
                                     },
-                                    move |_| settings_left_column(left_column_font, theme, settings)
+                                    move |_| settings_left_column(left_column_font, theme, settings, input_config)
                                 )
                             ),
                             (
@@ -721,7 +756,7 @@ fn settings_scene(
                         ]
                     ),
                     info_message_text(font.clone(), theme, info_text.to_string(), false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, input_mappings, "Back", "Select"),
+                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
                 ]
             ),
         ]
@@ -732,6 +767,7 @@ fn settings_left_column(
     font: Handle<Font>,
     theme: ActiveTheme,
     settings: crate::storage::data::GeneralSettings,
+    input_config: MultiSelectConfig,
 ) -> impl Scene {
     bsn! {
         Node {
@@ -863,7 +899,7 @@ fn settings_left_column(
                     description(font.clone(), theme, "Primary Input Device"),
                     (
                         #PrimaryInputSelect
-                        multi_select(font.clone(), theme, primary_input_config())
+                        multi_select(font.clone(), theme, input_config)
                         SettingsSelect { field: 255 }
                         UiFocusId { id: TARGET_PRIMARY_INPUT }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_PRIMARY_INPUT).up}, right: {settings_focus_nav(TARGET_PRIMARY_INPUT).right}, down: {settings_focus_nav(TARGET_PRIMARY_INPUT).down}, left: {settings_focus_nav(TARGET_PRIMARY_INPUT).left} }
@@ -871,11 +907,20 @@ fn settings_left_column(
                 ]
             ),
             (
-                #EditMappings
-                button(font.clone(), "Edit Mappings", theme, UiFocusNav::default())
-                UiFocusId { id: TARGET_EDIT_MAPPINGS }
-                UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPINGS).left} }
-            ),
+                Node {
+                    width: percent(100),
+                    justify_content: JustifyContent::FlexEnd,
+                }
+                Children [
+                    (
+                        #EditMappings
+                        button(font.clone(), "Edit Mappings", theme, UiFocusNav::default())
+                        EditPrimaryMappingButton
+                        UiFocusId { id: TARGET_EDIT_MAPPINGS }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPINGS).left} }
+                    )
+                ]
+            )
             (
                 Node {
                     width: percent(100),
@@ -983,8 +1028,26 @@ fn theme_config(selected: usize) -> MultiSelectConfig {
     )
 }
 
-fn primary_input_config() -> MultiSelectConfig {
-    select_config(0, vec!["Keyboard", "XBOX360"])
+fn primary_input_config(
+    storage: &LocalStorage,
+    primary_input: &PrimaryInputDevice,
+) -> MultiSelectConfig {
+    let selected = selected_mapping_index(primary_input, storage);
+    let options = storage
+        .data
+        .input_mappings
+        .iter()
+        .map(mapping_label)
+        .collect::<Vec<_>>();
+    MultiSelectConfig {
+        selected,
+        options: if options.is_empty() {
+            vec!["Keyboard".to_string()]
+        } else {
+            options
+        },
+        nav: UiFocusNav::default(),
+    }
 }
 
 fn audio_preset_config() -> MultiSelectConfig {
@@ -994,7 +1057,7 @@ fn audio_preset_config() -> MultiSelectConfig {
 fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {
     MultiSelectConfig {
         selected,
-        options,
+        options: options.into_iter().map(str::to_string).collect(),
         nav: UiFocusNav::default(),
     }
 }

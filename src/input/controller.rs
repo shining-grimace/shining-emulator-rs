@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 use crate::storage::input_mappings::{
-    InputAction, InputDeviceMapping, InputDeviceType, InputKeyId, InputMapEntry,
+    InputDeviceMapping, InputDeviceType, default_controller_mapping,
 };
 
 #[derive(Resource, Clone, Debug, Default)]
@@ -57,59 +57,6 @@ pub(super) fn ensure_controller_mapping(
     } else {
         mappings.push(default_controller_mapping(model_id));
         true
-    }
-}
-
-fn default_controller_mapping(model_id: &str) -> InputDeviceMapping {
-    InputDeviceMapping {
-        r#type: InputDeviceType::Controller,
-        controller_model_id: Some(model_id.to_string()),
-        map: vec![
-            InputMapEntry {
-                key_id: InputKeyId::DPadLeft,
-                map_to: InputAction::Dleft,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadRight,
-                map_to: InputAction::Dright,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadUp,
-                map_to: InputAction::Dup,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadDown,
-                map_to: InputAction::Ddown,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::South,
-                map_to: InputAction::B,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::East,
-                map_to: InputAction::A,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::Start,
-                map_to: InputAction::Start,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::Select,
-                map_to: InputAction::Select,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::Mode,
-                map_to: InputAction::QuitRom,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::LeftTrigger,
-                map_to: InputAction::LoadState0,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::RightTrigger,
-                map_to: InputAction::SaveState0,
-            },
-        ],
     }
 }
 

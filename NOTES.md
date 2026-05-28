@@ -1,10 +1,16 @@
 
-Done: Step 2j
-Next: Step 2k
+Done: Step 2k
+Next: Step 2l
 
 For later:
+- The mobile responsiveness on all scenes needs to be sorted out so it'll work nice in portrait orientation
 - I should ask the AI to check whether there are duplicated systems or components across the project and try to merge them where it's appropriate and reduces complexity or performance overhead
 - Settings screens need to be back-navigatable somehow (add back button to all?)
+
+For theme:
+- Align background images to the same average brightness and the same brightness range
+- Match all palette colours for all palettes to the same luminosity
+- Pick colours based on split-complementary (with the secondary colour being the high-contrast one)
 
 For background image assets:
 I'll try prompting like:

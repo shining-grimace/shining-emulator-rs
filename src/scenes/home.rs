@@ -5,7 +5,7 @@ use bevy::ui::UiGlobalTransform;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
-use crate::input::mappings::RuntimeInputMappings;
+use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
 use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult, sync_provider};
@@ -102,13 +102,19 @@ fn spawn_home_scene(
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
-    input_mappings: Res<RuntimeInputMappings>,
+    primary_input: Res<PrimaryInputDevice>,
     storage: Res<LocalStorage>,
     mut rom_list_data: ResMut<HomeRomListData>,
 ) {
     rom_list_data.roms = home_roms_from_storage(&storage);
     rom_list_data.refresh_order(SortField::LastPlayed, SortField::ProviderPriority);
-    commands.spawn_scene(home_scene(&assets, *theme, &input_mappings, &rom_list_data));
+    commands.spawn_scene(home_scene(
+        &assets,
+        *theme,
+        &storage,
+        &primary_input,
+        &rom_list_data,
+    ));
     commands.insert_resource(HomeProviderSyncState {
         started: false,
         task: None,
@@ -249,7 +255,8 @@ fn handle_home_activation(
 fn home_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
-    input_mappings: &RuntimeInputMappings,
+    storage: &LocalStorage,
+    primary_input: &PrimaryInputDevice,
     rom_list_data: &HomeRomListData,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
@@ -372,7 +379,7 @@ fn home_scene(
                             ),
                         ]
                     ),
-                    action_hints(font, assets.icons.clone(), theme, input_mappings),
+                    action_hints(font, assets.icons.clone(), theme, storage, primary_input),
                 ]
             ),
         ]
@@ -382,7 +389,11 @@ fn home_scene(
 fn sort_select_config(selected: usize) -> MultiSelectConfig {
     MultiSelectConfig {
         selected,
-        options: vec!["Last played", "Provider priority", "A-Z"],
+        options: vec![
+            "Last played".to_string(),
+            "Provider priority".to_string(),
+            "A-Z".to_string(),
+        ],
         nav: UiFocusNav::default(),
     }
 }

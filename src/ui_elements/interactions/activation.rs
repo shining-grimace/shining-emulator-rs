@@ -47,6 +47,7 @@ pub(super) fn activate_controls(
         match event.action {
             InputAction::A => mapped_select = true,
             InputAction::QuitApp => mapped_quit = true,
+            InputAction::B if *state.get() != AppState::InputMapping => mapped_quit = true,
             _ => {}
         }
     }
@@ -193,7 +194,7 @@ pub(super) fn activate_controls(
 fn back_navigation_target(state: AppState) -> Option<AppState> {
     match state {
         AppState::Home => None,
-        AppState::RomProvider => Some(AppState::Settings),
+        AppState::InputMapping | AppState::RomProvider => Some(AppState::Settings),
         _ => Some(AppState::Home),
     }
 }
@@ -206,6 +207,14 @@ mod tests {
     fn back_navigation_from_rom_provider_returns_to_settings() {
         assert_eq!(
             back_navigation_target(AppState::RomProvider),
+            Some(AppState::Settings)
+        );
+    }
+
+    #[test]
+    fn back_navigation_from_input_mapping_returns_to_settings() {
+        assert_eq!(
+            back_navigation_target(AppState::InputMapping),
             Some(AppState::Settings)
         );
     }

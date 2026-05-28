@@ -7,7 +7,8 @@ use crate::ui_elements::interactions::{IgnorePicking, UiElementLabel};
 use crate::ui_elements::styles::UI_BODY_FONT_SIZE;
 use crate::ui_elements::theme::UiThemeTextColor;
 
-pub fn description(font: Handle<Font>, theme: ActiveTheme, text: &'static str) -> impl Scene {
+pub fn description(font: Handle<Font>, theme: ActiveTheme, text: impl Into<String>) -> impl Scene {
+    let text = text.into();
     bsn! {
         Text({text})
         TextFont {

@@ -5,7 +5,7 @@ use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
-use crate::input::mappings::RuntimeInputMappings;
+use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
 use crate::storage::provider_sync::{
     ProviderSyncTaskState, test_provider as test_provider_connection,
@@ -155,7 +155,7 @@ fn spawn_rom_provider_scene(
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
-    input_mappings: Res<RuntimeInputMappings>,
+    primary_input: Res<PrimaryInputDevice>,
     storage: Res<LocalStorage>,
     target: Res<RomProviderEditTarget>,
 ) {
@@ -167,7 +167,8 @@ fn spawn_rom_provider_scene(
     commands.spawn_scene(rom_provider_scene(
         &assets,
         *theme,
-        &input_mappings,
+        &primary_input,
+        &storage,
         &provider,
     ));
 }
@@ -305,7 +306,8 @@ fn display_for(visible: bool) -> Display {
 fn rom_provider_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
-    input_mappings: &RuntimeInputMappings,
+    primary_input: &PrimaryInputDevice,
+    storage: &LocalStorage,
     provider: &RomProvider,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
@@ -337,7 +339,7 @@ fn rom_provider_scene(
                     heading(font.clone(), theme, "ROM Provider"),
                     provider_form(left_font, right_font, heroes, theme, provider.clone()),
                     info_message(font.clone(), theme, "", false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, input_mappings, "Back", "Select"),
+                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
                 ]
             ),
         ]
@@ -1065,7 +1067,7 @@ fn pagination_config(enabled: bool) -> MultiSelectConfig {
 fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {
     MultiSelectConfig {
         selected,
-        options,
+        options: options.into_iter().map(str::to_string).collect(),
         nav: UiFocusNav::default(),
     }
 }

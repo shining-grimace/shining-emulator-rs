@@ -38,6 +38,7 @@ fn main() {
         .add_plugins(app_ui_scale::AppUiScalePlugin)
         .init_resource::<ActiveTheme>()
         .add_systems(Startup, camera_scene.spawn())
+        .add_plugins(ui_elements::action_hint::ActionHintPlugin)
         .add_plugins((
             input::InputPlugin,
             background::BackgroundPlugin,

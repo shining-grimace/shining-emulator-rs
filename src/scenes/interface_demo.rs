@@ -4,7 +4,8 @@ use bevy::prelude::*;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
-use crate::input::mappings::RuntimeInputMappings;
+use crate::input::selection::PrimaryInputDevice;
+use crate::storage::LocalStorage;
 use crate::ui_elements::action_hint::action_hints;
 use crate::ui_elements::button::button;
 use crate::ui_elements::description::description;
@@ -32,15 +33,22 @@ fn spawn_interface_demo_scene(
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
-    input_mappings: Res<RuntimeInputMappings>,
+    storage: Res<LocalStorage>,
+    primary_input: Res<PrimaryInputDevice>,
 ) {
-    commands.spawn_scene(interface_demo_scene(&assets, *theme, &input_mappings));
+    commands.spawn_scene(interface_demo_scene(
+        &assets,
+        *theme,
+        &storage,
+        &primary_input,
+    ));
 }
 
 fn interface_demo_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
-    input_mappings: &RuntimeInputMappings,
+    storage: &LocalStorage,
+    primary_input: &PrimaryInputDevice,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
     let left_column_font = font.clone();
@@ -123,7 +131,7 @@ fn interface_demo_scene(
                             ),
                         ]
                     ),
-                    action_hints(font.clone(), assets.icons.clone(), theme, input_mappings),
+                    action_hints(font.clone(), assets.icons.clone(), theme, storage, primary_input),
                 ]
             ),
         ]
@@ -207,7 +215,7 @@ fn demo_select_popup_config() -> SelectPopupConfig {
 fn demo_multi_select_config() -> MultiSelectConfig {
     MultiSelectConfig {
         selected: 0,
-        options: vec!["Anything", "Something else"],
+        options: vec!["Anything".to_string(), "Something else".to_string()],
         nav: UiFocusNav::default(),
     }
 }

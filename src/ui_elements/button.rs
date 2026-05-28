@@ -14,10 +14,11 @@ use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextC
 
 pub fn button(
     font: Handle<Font>,
-    label: &'static str,
+    label: impl Into<String>,
     theme: ActiveTheme,
     nav: UiFocusNav,
 ) -> impl Scene {
+    let label = label.into();
     let background = control_fill(&theme);
     let hover_background = hover_fill(&theme);
     bsn! {

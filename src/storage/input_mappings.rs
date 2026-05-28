@@ -28,8 +28,32 @@ pub enum InputKeyId {
     ArrowRight,
     ArrowUp,
     ArrowDown,
+    KeyA,
+    KeyB,
+    KeyC,
+    KeyD,
+    KeyE,
+    KeyF,
+    KeyG,
+    KeyH,
+    KeyI,
+    KeyJ,
+    KeyK,
+    KeyL,
+    KeyM,
+    KeyN,
+    KeyO,
+    KeyP,
+    KeyQ,
+    KeyR,
+    KeyS,
+    KeyT,
+    KeyU,
+    KeyV,
+    KeyW,
     KeyZ,
     KeyX,
+    KeyY,
     Enter,
     ShiftRight,
     ShiftLeft,
@@ -70,9 +94,10 @@ pub enum InputKeyId {
     DPadRight,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum InputAction {
+    #[default]
     QuitApp,
     QuitRom,
     ResetRom,
@@ -93,8 +118,12 @@ pub enum InputAction {
     Select,
 }
 
-pub(super) fn default_input_mappings() -> Vec<InputDeviceMapping> {
-    vec![InputDeviceMapping {
+pub(crate) fn default_input_mappings() -> Vec<InputDeviceMapping> {
+    vec![default_keyboard_mapping()]
+}
+
+pub(crate) fn default_keyboard_mapping() -> InputDeviceMapping {
+    InputDeviceMapping {
         r#type: InputDeviceType::Keyboard,
         controller_model_id: None,
         map: vec![
@@ -139,5 +168,66 @@ pub(super) fn default_input_mappings() -> Vec<InputDeviceMapping> {
                 map_to: InputAction::SaveStateModifier,
             },
         ],
-    }]
+    }
+}
+
+pub(crate) fn default_controller_mapping(model_id: impl Into<String>) -> InputDeviceMapping {
+    InputDeviceMapping {
+        r#type: InputDeviceType::Controller,
+        controller_model_id: Some(model_id.into()),
+        map: vec![
+            InputMapEntry {
+                key_id: InputKeyId::DPadLeft,
+                map_to: InputAction::Dleft,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::DPadRight,
+                map_to: InputAction::Dright,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::DPadUp,
+                map_to: InputAction::Dup,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::DPadDown,
+                map_to: InputAction::Ddown,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::South,
+                map_to: InputAction::B,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::East,
+                map_to: InputAction::A,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::Start,
+                map_to: InputAction::Start,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::Select,
+                map_to: InputAction::Select,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::LeftTrigger,
+                map_to: InputAction::SaveState0,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::RightTrigger,
+                map_to: InputAction::LoadState0,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::RightTrigger2,
+                map_to: InputAction::SpeedUp,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::LeftTrigger2,
+                map_to: InputAction::SpeedDown,
+            },
+            InputMapEntry {
+                key_id: InputKeyId::Mode,
+                map_to: InputAction::PauseAndResume,
+            },
+        ],
+    }
 }

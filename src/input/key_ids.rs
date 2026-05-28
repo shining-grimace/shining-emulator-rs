@@ -3,14 +3,38 @@ use bevy::input::keyboard::KeyCode;
 
 use crate::storage::input_mappings::InputKeyId;
 
-pub(super) fn key_code_from_id(key_id: InputKeyId) -> Option<KeyCode> {
+pub(crate) fn key_code_from_id(key_id: InputKeyId) -> Option<KeyCode> {
     match key_id {
         InputKeyId::ArrowLeft => Some(KeyCode::ArrowLeft),
         InputKeyId::ArrowRight => Some(KeyCode::ArrowRight),
         InputKeyId::ArrowUp => Some(KeyCode::ArrowUp),
         InputKeyId::ArrowDown => Some(KeyCode::ArrowDown),
+        InputKeyId::KeyA => Some(KeyCode::KeyA),
+        InputKeyId::KeyB => Some(KeyCode::KeyB),
+        InputKeyId::KeyC => Some(KeyCode::KeyC),
+        InputKeyId::KeyD => Some(KeyCode::KeyD),
+        InputKeyId::KeyE => Some(KeyCode::KeyE),
+        InputKeyId::KeyF => Some(KeyCode::KeyF),
+        InputKeyId::KeyG => Some(KeyCode::KeyG),
+        InputKeyId::KeyH => Some(KeyCode::KeyH),
+        InputKeyId::KeyI => Some(KeyCode::KeyI),
+        InputKeyId::KeyJ => Some(KeyCode::KeyJ),
+        InputKeyId::KeyK => Some(KeyCode::KeyK),
+        InputKeyId::KeyL => Some(KeyCode::KeyL),
+        InputKeyId::KeyM => Some(KeyCode::KeyM),
+        InputKeyId::KeyN => Some(KeyCode::KeyN),
+        InputKeyId::KeyO => Some(KeyCode::KeyO),
+        InputKeyId::KeyP => Some(KeyCode::KeyP),
+        InputKeyId::KeyQ => Some(KeyCode::KeyQ),
+        InputKeyId::KeyR => Some(KeyCode::KeyR),
+        InputKeyId::KeyS => Some(KeyCode::KeyS),
+        InputKeyId::KeyT => Some(KeyCode::KeyT),
+        InputKeyId::KeyU => Some(KeyCode::KeyU),
+        InputKeyId::KeyV => Some(KeyCode::KeyV),
+        InputKeyId::KeyW => Some(KeyCode::KeyW),
         InputKeyId::KeyZ => Some(KeyCode::KeyZ),
         InputKeyId::KeyX => Some(KeyCode::KeyX),
+        InputKeyId::KeyY => Some(KeyCode::KeyY),
         InputKeyId::Enter => Some(KeyCode::Enter),
         InputKeyId::ShiftRight => Some(KeyCode::ShiftRight),
         InputKeyId::ShiftLeft => Some(KeyCode::ShiftLeft),
@@ -34,14 +58,38 @@ pub(super) fn key_code_from_id(key_id: InputKeyId) -> Option<KeyCode> {
     }
 }
 
-pub(super) fn key_code_id(key_code: KeyCode) -> Option<InputKeyId> {
+pub(crate) fn key_code_id(key_code: KeyCode) -> Option<InputKeyId> {
     match key_code {
         KeyCode::ArrowLeft => Some(InputKeyId::ArrowLeft),
         KeyCode::ArrowRight => Some(InputKeyId::ArrowRight),
         KeyCode::ArrowUp => Some(InputKeyId::ArrowUp),
         KeyCode::ArrowDown => Some(InputKeyId::ArrowDown),
+        KeyCode::KeyA => Some(InputKeyId::KeyA),
+        KeyCode::KeyB => Some(InputKeyId::KeyB),
+        KeyCode::KeyC => Some(InputKeyId::KeyC),
+        KeyCode::KeyD => Some(InputKeyId::KeyD),
+        KeyCode::KeyE => Some(InputKeyId::KeyE),
+        KeyCode::KeyF => Some(InputKeyId::KeyF),
+        KeyCode::KeyG => Some(InputKeyId::KeyG),
+        KeyCode::KeyH => Some(InputKeyId::KeyH),
+        KeyCode::KeyI => Some(InputKeyId::KeyI),
+        KeyCode::KeyJ => Some(InputKeyId::KeyJ),
+        KeyCode::KeyK => Some(InputKeyId::KeyK),
+        KeyCode::KeyL => Some(InputKeyId::KeyL),
+        KeyCode::KeyM => Some(InputKeyId::KeyM),
+        KeyCode::KeyN => Some(InputKeyId::KeyN),
+        KeyCode::KeyO => Some(InputKeyId::KeyO),
+        KeyCode::KeyP => Some(InputKeyId::KeyP),
+        KeyCode::KeyQ => Some(InputKeyId::KeyQ),
+        KeyCode::KeyR => Some(InputKeyId::KeyR),
+        KeyCode::KeyS => Some(InputKeyId::KeyS),
+        KeyCode::KeyT => Some(InputKeyId::KeyT),
+        KeyCode::KeyU => Some(InputKeyId::KeyU),
+        KeyCode::KeyV => Some(InputKeyId::KeyV),
+        KeyCode::KeyW => Some(InputKeyId::KeyW),
         KeyCode::KeyZ => Some(InputKeyId::KeyZ),
         KeyCode::KeyX => Some(InputKeyId::KeyX),
+        KeyCode::KeyY => Some(InputKeyId::KeyY),
         KeyCode::Enter => Some(InputKeyId::Enter),
         KeyCode::ShiftRight => Some(InputKeyId::ShiftRight),
         KeyCode::ShiftLeft => Some(InputKeyId::ShiftLeft),
@@ -65,7 +113,47 @@ pub(super) fn key_code_id(key_code: KeyCode) -> Option<InputKeyId> {
     }
 }
 
-pub(super) fn gamepad_button_from_id(key_id: InputKeyId) -> Option<GamepadButton> {
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_letter_key_codes_have_input_ids() {
+        for key_code in [
+            KeyCode::KeyA,
+            KeyCode::KeyB,
+            KeyCode::KeyC,
+            KeyCode::KeyD,
+            KeyCode::KeyE,
+            KeyCode::KeyF,
+            KeyCode::KeyG,
+            KeyCode::KeyH,
+            KeyCode::KeyI,
+            KeyCode::KeyJ,
+            KeyCode::KeyK,
+            KeyCode::KeyL,
+            KeyCode::KeyM,
+            KeyCode::KeyN,
+            KeyCode::KeyO,
+            KeyCode::KeyP,
+            KeyCode::KeyQ,
+            KeyCode::KeyR,
+            KeyCode::KeyS,
+            KeyCode::KeyT,
+            KeyCode::KeyU,
+            KeyCode::KeyV,
+            KeyCode::KeyW,
+            KeyCode::KeyX,
+            KeyCode::KeyY,
+            KeyCode::KeyZ,
+        ] {
+            let key_id = key_code_id(key_code).expect("letter key code should map to input id");
+            assert_eq!(key_code_from_id(key_id), Some(key_code));
+        }
+    }
+}
+
+pub(crate) fn gamepad_button_from_id(key_id: InputKeyId) -> Option<GamepadButton> {
     match key_id {
         InputKeyId::South => Some(GamepadButton::South),
         InputKeyId::East => Some(GamepadButton::East),
@@ -90,7 +178,7 @@ pub(super) fn gamepad_button_from_id(key_id: InputKeyId) -> Option<GamepadButton
     }
 }
 
-pub(super) fn gamepad_button_id(button: GamepadButton) -> Option<InputKeyId> {
+pub(crate) fn gamepad_button_id(button: GamepadButton) -> Option<InputKeyId> {
     match button {
         GamepadButton::South => Some(InputKeyId::South),
         GamepadButton::East => Some(InputKeyId::East),

@@ -20,9 +20,10 @@ const POPUP_OPTION_GAP: f32 = 8.0;
 const POPUP_SCROLLBAR_GAP: f32 = 10.0;
 const POPUP_SCROLLBAR_THUMB_HEIGHT: f32 = 56.0;
 
+#[derive(Clone)]
 pub struct MultiSelectConfig {
     pub selected: usize,
-    pub options: Vec<&'static str>,
+    pub options: Vec<String>,
     pub nav: UiFocusNav,
 }
 
@@ -55,15 +56,20 @@ pub fn multi_select_with_width(
     let selected_label = config
         .options
         .get(config.selected)
-        .copied()
-        .unwrap_or_default()
-        .to_string();
+        .cloned()
+        .unwrap_or_default();
     let options = config
         .options
         .iter()
         .enumerate()
         .map(|(index, option)| {
-            popup_option(font.clone(), index, option, theme, UiFocusNav::default())
+            popup_option(
+                font.clone(),
+                index,
+                option.clone(),
+                theme,
+                UiFocusNav::default(),
+            )
         })
         .collect::<Vec<_>>();
 
@@ -187,7 +193,7 @@ pub fn multi_select_with_width(
 fn popup_option(
     font: Handle<Font>,
     option_index: usize,
-    label: &'static str,
+    label: String,
     theme: ActiveTheme,
     nav: UiFocusNav,
 ) -> impl Scene {
@@ -207,7 +213,7 @@ fn popup_option(
         UiElementKind::MultiSelectOption
         UiElementTheme::PopupOption
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {popup_background}, hover_fill: {hover_background} }
-        UiMultiSelectOption { option_index: {option_index}, label: {label.to_string()} }
+        UiMultiSelectOption { option_index: {option_index}, label: {label.clone()} }
         Children [
             (
                 Text({label})
