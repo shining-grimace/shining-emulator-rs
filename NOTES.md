@@ -1,6 +1,6 @@
 
-Done: Step 3a-3d
-Next: Step 4a
+Done: Step 4c
+Next: Step 5a
 
 For later:
 - The mobile responsiveness on all scenes needs to be sorted out so it'll work nice in portrait orientation
@@ -8,8 +8,11 @@ For later:
 
 For theme:
 - Align background images to the same average brightness and the same brightness range
+  - Benchmark for this: Luminance mean of 0.026 and standard deviation of 0.022
 - Match all palette colours for all palettes to the same luminosity
+  - Using Value in GIMP; aim for 71
 - Pick colours based on split-complementary (with the secondary colour being the high-contrast one)
+  - Primary and tertiary are 60 degrees apart, secondary is 150 degrees from either of those
 
 For background image assets:
 I'll try prompting like:
