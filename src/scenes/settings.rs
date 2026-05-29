@@ -10,7 +10,6 @@ use crate::input::selection::{
 };
 use crate::scenes::rom_provider::RomProviderEditTarget;
 use crate::storage::LocalStorage;
-use crate::storage::data::RomMetadata;
 use crate::storage::provider_sync::{ProviderSyncTaskResult, ProviderSyncTaskState};
 use crate::storage::providers::RomProvider;
 use crate::ui_elements::action_hint::action_hints_with_labels;
@@ -20,14 +19,10 @@ use crate::ui_elements::heading::heading;
 use crate::ui_elements::info_message::{InfoMessage, info_message_text, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, DisabledUiElement, InitialFocus, SelectedUiElement,
-    UI_FOCUS_NONE, UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiListCellText,
-    UiMultiSelect, UiScrollArea,
+    UI_FOCUS_NONE, UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiMultiSelect,
 };
 use crate::ui_elements::list_view::{
-    DEFAULT_VIRTUAL_ROW_POOL_SIZE, ListColumn, ListRow, ListViewConfig, VirtualListContent,
-    VirtualListRow, VirtualListScrollArea, VirtualListWindow, collect_descendants_with,
-    collect_list_item_entities, list_view, set_list_row_cells, virtual_list_content_height,
-    virtual_list_rows, virtual_list_window,
+    ListColumn, ListRow, ListViewConfig, collect_list_item_entities, list_view,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
@@ -60,32 +55,16 @@ const TARGET_AUDIO_PRESET: u16 = 8;
 const TARGET_DELETE_MAPPING: u16 = 9;
 const TARGET_EDIT_MAPPING: u16 = 10;
 const TARGET_CREATE_MAPPING: u16 = 11;
-const TARGET_ROM_STORAGE_LIST: u16 = 12;
-const TARGET_STORAGE_DELETE: u16 = 13;
-const TARGET_STORAGE_DETAILS: u16 = 14;
 const TARGET_PROVIDER_LIST: u16 = 15;
 const TARGET_PROVIDER_SYNC: u16 = 16;
 const TARGET_PROVIDER_DELETE: u16 = 17;
 const TARGET_PROVIDER_EDIT: u16 = 18;
 const TARGET_PROVIDER_CREATE: u16 = 19;
-const ROM_STORAGE_COLUMN_COUNT: usize = 3;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 struct SettingsSelect {
     field: u8,
 }
-
-#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
-struct RomStorageListView;
-
-#[derive(Clone, Copy, Component, Debug, Default)]
-struct RomStorageRowsBound;
-
-#[derive(Clone, Copy, Component, Debug, Default)]
-struct RomStorageScrollArea;
-
-#[derive(Clone, Copy, Component, Debug, Default)]
-struct RomStorageContent;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct ProviderList;
@@ -120,12 +99,7 @@ impl Plugin for SettingsScenePlugin {
         app.add_systems(OnEnter(AppState::Settings), spawn_settings_scene)
             .add_systems(
                 Update,
-                (
-                    bind_provider_rows,
-                    bind_rom_storage_rows,
-                    sync_rom_storage_rows,
-                    finish_settings_provider_sync,
-                )
+                (bind_provider_rows, finish_settings_provider_sync)
                     .run_if(in_state(AppState::Settings)),
             )
             .add_systems(OnExit(AppState::Settings), reset_settings_provider_sync)
@@ -370,132 +344,59 @@ fn bind_provider_rows(
     }
 }
 
-fn bind_rom_storage_rows(
-    mut commands: Commands,
-    lists: Query<(Entity, &Children), (With<RomStorageListView>, Without<RomStorageRowsBound>)>,
-    kinds: Query<&UiElementKind>,
-    scroll_areas: Query<(), With<VirtualListScrollArea>>,
-    scroll_contents: Query<(), With<VirtualListContent>>,
-    child_query: Query<&Children>,
-) {
-    for (list_entity, children) in &lists {
-        let rows = collect_list_item_entities(children, &kinds, &child_query);
-        for (slot, row) in rows.into_iter().enumerate() {
-            commands.entity(row).insert(VirtualListRow {
-                slot,
-                item_index: usize::MAX,
-            });
-        }
-        for scroll_area in collect_descendants_with(children, &scroll_areas, &child_query) {
-            commands.entity(scroll_area).insert(RomStorageScrollArea);
-        }
-        for scroll_content in collect_descendants_with(children, &scroll_contents, &child_query) {
-            commands.entity(scroll_content).insert(RomStorageContent);
-        }
-        commands.entity(list_entity).insert(RomStorageRowsBound);
-    }
-}
-
-fn sync_rom_storage_rows(
-    storage: Res<LocalStorage>,
-    scroll_areas: Query<&UiScrollArea, With<RomStorageScrollArea>>,
-    mut virtual_contents: Query<&mut Node, With<RomStorageContent>>,
-    mut rows: Query<(&mut VirtualListRow, &Children)>,
-    mut cells: Query<(&mut UiListCellText, &Children)>,
-    mut texts: Query<&mut Text>,
-    child_query: Query<&Children>,
-) {
-    let window = scroll_areas
-        .iter()
-        .next()
-        .map(virtual_list_window)
-        .unwrap_or(VirtualListWindow {
-            first_row: 0,
-            content_offset: 0.0,
-        });
-    for mut node in &mut virtual_contents {
-        node.top = px(-window.content_offset);
-        node.height = px(virtual_list_content_height(
-            storage.data.roms.len(),
-            DEFAULT_VIRTUAL_ROW_POOL_SIZE,
-        ));
-    }
-    for (mut row, children) in &mut rows {
-        let rom_index = window.first_row + row.slot;
-        let Some(rom) = storage.data.roms.get(rom_index) else {
-            if row.item_index != usize::MAX {
-                row.item_index = usize::MAX;
-                set_list_row_cells(
-                    &["", "", ""],
-                    children,
-                    &mut cells,
-                    &mut texts,
-                    &child_query,
-                );
-            }
-            continue;
-        };
-        if row.item_index == rom_index {
-            continue;
-        }
-        row.item_index = rom_index;
-        update_rom_storage_row(rom, children, &mut cells, &mut texts, &child_query);
-    }
-}
-
 fn settings_focus_nav(id: u16) -> UiFocusNavIds {
     match id {
         TARGET_OVERLAY => focus_nav_ids(
             UI_FOCUS_NONE,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_MODEL,
             UI_FOCUS_NONE,
         ),
         TARGET_MODEL => focus_nav_ids(
             TARGET_OVERLAY,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_SGB,
             UI_FOCUS_NONE,
         ),
         TARGET_SGB => focus_nav_ids(
             TARGET_MODEL,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_UPSCALING,
             UI_FOCUS_NONE,
         ),
         TARGET_UPSCALING => focus_nav_ids(
             TARGET_SGB,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_UI_SCALE,
             UI_FOCUS_NONE,
         ),
         TARGET_UI_SCALE => focus_nav_ids(
             TARGET_UPSCALING,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_THEME,
             UI_FOCUS_NONE,
         ),
         TARGET_THEME => focus_nav_ids(
             TARGET_UI_SCALE,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_PRIMARY_INPUT,
             UI_FOCUS_NONE,
         ),
         TARGET_PRIMARY_INPUT => focus_nav_ids(
             TARGET_THEME,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_EDIT_MAPPINGS,
             UI_FOCUS_NONE,
         ),
         TARGET_EDIT_MAPPINGS => focus_nav_ids(
             TARGET_PRIMARY_INPUT,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_AUDIO_PRESET,
             UI_FOCUS_NONE,
         ),
         TARGET_AUDIO_PRESET => focus_nav_ids(
             TARGET_EDIT_MAPPINGS,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             TARGET_DELETE_MAPPING,
             UI_FOCUS_NONE,
         ),
@@ -513,30 +414,12 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         ),
         TARGET_CREATE_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
-            TARGET_ROM_STORAGE_LIST,
+            TARGET_PROVIDER_LIST,
             UI_FOCUS_NONE,
             TARGET_EDIT_MAPPING,
         ),
-        TARGET_ROM_STORAGE_LIST => focus_nav_ids(
-            UI_FOCUS_NONE,
-            UI_FOCUS_NONE,
-            TARGET_STORAGE_DELETE,
-            TARGET_OVERLAY,
-        ),
-        TARGET_STORAGE_DELETE => focus_nav_ids(
-            TARGET_ROM_STORAGE_LIST,
-            TARGET_STORAGE_DETAILS,
-            TARGET_PROVIDER_LIST,
-            TARGET_OVERLAY,
-        ),
-        TARGET_STORAGE_DETAILS => focus_nav_ids(
-            TARGET_ROM_STORAGE_LIST,
-            UI_FOCUS_NONE,
-            TARGET_PROVIDER_LIST,
-            TARGET_STORAGE_DELETE,
-        ),
         TARGET_PROVIDER_LIST => focus_nav_ids(
-            TARGET_STORAGE_DELETE,
+            UI_FOCUS_NONE,
             UI_FOCUS_NONE,
             TARGET_PROVIDER_SYNC,
             TARGET_OVERLAY,
@@ -595,7 +478,6 @@ fn settings_scene(
     let settings = storage.data.settings;
     let input_config = primary_input_config(storage, primary_input);
     let providers = storage.data.providers.clone();
-    let roms = storage.data.roms.clone();
     let info_text = if sync_running {
         "Syncing ROM provider..."
     } else {
@@ -656,50 +538,12 @@ fn settings_scene(
                                 }
                                 Children [
                                     (
-                                        #RomStorageList
-                                        Node {
-                                            width: percent(100),
-                                            min_height: px(0.0),
-                                            flex_direction: FlexDirection::Column,
-                                            row_gap: px(14.0),
-                                        }
-                                        Children [
-                                            description(font.clone(), theme, "ROM Storage"),
-                                            (
-                                                #RomStorageListView
-                                                list_view(font.clone(), theme, rom_storage_list_config(&roms))
-                                                RomStorageListView
-                                                UiFocusId { id: TARGET_ROM_STORAGE_LIST }
-                                                UiFocusNavIds { up: {settings_focus_nav(TARGET_ROM_STORAGE_LIST).up}, right: {settings_focus_nav(TARGET_ROM_STORAGE_LIST).right}, down: {settings_focus_nav(TARGET_ROM_STORAGE_LIST).down}, left: {settings_focus_nav(TARGET_ROM_STORAGE_LIST).left} }
-                                            ),
-                                            (
-                                                Node {
-                                                    width: percent(100),
-                                                    justify_content: JustifyContent::FlexEnd,
-                                                    column_gap: px(SETTINGS_BUTTON_ROW_GAP),
-                                                }
-                                                Children [
-                                                    (
-                                                        #StorageDelete
-                                                        button(font.clone(), "Delete", theme, UiFocusNav::default())
-                                                        UiFocusId { id: TARGET_STORAGE_DELETE }
-                                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_STORAGE_DELETE).up}, right: {settings_focus_nav(TARGET_STORAGE_DELETE).right}, down: {settings_focus_nav(TARGET_STORAGE_DELETE).down}, left: {settings_focus_nav(TARGET_STORAGE_DELETE).left} }
-                                                    ),
-                                                    (
-                                                        #StorageDetails
-                                                        button(font.clone(), "View Details", theme, UiFocusNav::default())
-                                                        UiFocusId { id: TARGET_STORAGE_DETAILS }
-                                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_STORAGE_DETAILS).up}, right: {settings_focus_nav(TARGET_STORAGE_DETAILS).right}, down: {settings_focus_nav(TARGET_STORAGE_DETAILS).down}, left: {settings_focus_nav(TARGET_STORAGE_DETAILS).left} }
-                                                    ),
-                                                ]
-                                            ),
-                                        ]
-                                    ),
-                                    (
                                         #ProviderList
                                         Node {
                                             width: percent(100),
                                             min_height: px(0.0),
+                                            flex_grow: 1.0,
+                                            flex_shrink: 1.0,
                                             flex_direction: FlexDirection::Column,
                                             row_gap: px(14.0),
                                         }
@@ -1060,78 +904,6 @@ fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConf
         options: options.into_iter().map(str::to_string).collect(),
         nav: UiFocusNav::default(),
     }
-}
-
-fn rom_storage_list_config(roms: &[RomMetadata]) -> ListViewConfig {
-    ListViewConfig {
-        nav: UiFocusNav::default(),
-        scrollbar_nav: UiFocusNav::default(),
-        columns: vec![
-            ListColumn {
-                heading: "Name",
-                width_percent: 42.0,
-            },
-            ListColumn {
-                heading: "Last played",
-                width_percent: 34.0,
-            },
-            ListColumn {
-                heading: "Storage Used",
-                width_percent: 24.0,
-            },
-        ],
-        rows: virtual_rom_storage_rows(roms),
-        virtual_total_rows: Some(roms.len()),
-    }
-}
-
-fn virtual_rom_storage_rows(roms: &[RomMetadata]) -> Vec<ListRow> {
-    let order = (0..roms.len()).collect::<Vec<_>>();
-    virtual_list_rows(
-        roms,
-        &order,
-        DEFAULT_VIRTUAL_ROW_POOL_SIZE,
-        ROM_STORAGE_COLUMN_COUNT,
-        rom_storage_row,
-    )
-}
-
-fn rom_storage_row(rom: &RomMetadata) -> ListRow {
-    ListRow {
-        cells: rom_storage_cells(rom),
-        nav: UiFocusNav::default(),
-    }
-}
-
-fn update_rom_storage_row(
-    rom: &RomMetadata,
-    children: &Children,
-    cells: &mut Query<(&mut UiListCellText, &Children)>,
-    texts: &mut Query<&mut Text>,
-    child_query: &Query<&Children>,
-) {
-    let values = rom_storage_cells(rom);
-    set_list_row_cells(
-        &values.iter().map(String::as_str).collect::<Vec<_>>(),
-        children,
-        cells,
-        texts,
-        child_query,
-    );
-}
-
-fn rom_storage_cells(rom: &RomMetadata) -> Vec<String> {
-    vec![
-        rom.friendly_name
-            .clone()
-            .unwrap_or_else(|| rom.file_name.clone()),
-        String::new(),
-        if rom.id.is_some() {
-            "Known".to_string()
-        } else {
-            "Remote".to_string()
-        },
-    ]
 }
 
 fn provider_list_config(providers: &[RomProvider]) -> ListViewConfig {

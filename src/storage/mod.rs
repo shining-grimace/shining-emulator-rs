@@ -6,6 +6,7 @@ pub mod input_mappings;
 pub mod paths;
 pub mod provider_sync;
 pub mod providers;
+pub mod rom_data;
 pub mod rom_identifier;
 
 use std::fs;

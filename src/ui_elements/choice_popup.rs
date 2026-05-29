@@ -27,7 +27,7 @@ pub struct ChoicePopupOption {
 pub struct ChoicePopupConfig {
     pub title: String,
     pub width: f32,
-    pub options: [&'static str; 3],
+    pub options: [&'static str; 4],
 }
 
 pub struct ChoicePopupPlugin;
@@ -74,9 +74,15 @@ pub fn choice_popup(
             ),
             (
                 #Option2
-                button(font, config.options[2], theme, UiFocusNav::default())
+                button(font.clone(), config.options[2], theme, UiFocusNav::default())
                 ChoicePopupOption { option_index: 2 }
-                UiFocusNav { up: #Option1, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
+                UiFocusNav { up: #Option1, right: {Entity::PLACEHOLDER}, down: #Option3, left: {Entity::PLACEHOLDER} }
+            ),
+            (
+                #Option3
+                button(font, config.options[3], theme, UiFocusNav::default())
+                ChoicePopupOption { option_index: 3 }
+                UiFocusNav { up: #Option2, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
             ),
         ]
     }

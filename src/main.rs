@@ -56,6 +56,7 @@ fn main() {
             scenes::settings::SettingsScenePlugin,
             scenes::splash::SplashScenePlugin,
         ))
+        .add_plugins(scenes::rom_data::RomDataScenePlugin)
         .run();
 }
 

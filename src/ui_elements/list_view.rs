@@ -1,5 +1,4 @@
 use bevy::asset::HandleTemplate;
-use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
@@ -233,32 +232,6 @@ fn collect_list_item_entities_recursive(
 
         if let Ok(grandchildren) = child_query.get(*child) {
             collect_list_item_entities_recursive(grandchildren, kinds, child_query, items);
-        }
-    }
-}
-
-pub fn collect_descendants_with<F: QueryFilter>(
-    children: &Children,
-    query: &Query<(), F>,
-    child_query: &Query<&Children>,
-) -> Vec<Entity> {
-    let mut entities = Vec::new();
-    collect_descendants_with_recursive(children, query, child_query, &mut entities);
-    entities
-}
-
-fn collect_descendants_with_recursive<F: QueryFilter>(
-    children: &Children,
-    query: &Query<(), F>,
-    child_query: &Query<&Children>,
-    entities: &mut Vec<Entity>,
-) {
-    for child in children {
-        if query.contains(*child) {
-            entities.push(*child);
-        }
-        if let Ok(grandchildren) = child_query.get(*child) {
-            collect_descendants_with_recursive(grandchildren, query, child_query, entities);
         }
     }
 }

@@ -220,6 +220,14 @@ mod tests {
     }
 
     #[test]
+    fn back_navigation_from_rom_data_returns_to_home() {
+        assert_eq!(
+            back_navigation_target(AppState::RomData),
+            Some(AppState::Home)
+        );
+    }
+
+    #[test]
     fn back_navigation_from_settings_returns_to_home() {
         assert_eq!(
             back_navigation_target(AppState::Settings),

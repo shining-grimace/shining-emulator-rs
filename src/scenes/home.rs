@@ -6,6 +6,7 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::input::selection::PrimaryInputDevice;
+use crate::scenes::rom_data::RomDataEditTarget;
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
 use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult, sync_provider};
@@ -47,9 +48,6 @@ const HOME_ROM_COLUMN_COUNT: usize = 5;
 struct SettingsButton;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
-struct RomDataButton;
-
-#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct HomeRomList;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -61,8 +59,10 @@ struct SecondarySortSelect;
 #[derive(Clone, Copy, Component, Debug, Default)]
 struct HomeRomRowsBound;
 
-#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
-struct HomePopupRoot;
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+struct HomePopupRoot {
+    rom_index: usize,
+}
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct HomeStatusMessage;
@@ -205,14 +205,15 @@ fn handle_home_activation(
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
     settings_buttons: Query<(), With<SettingsButton>>,
-    rom_data_buttons: Query<(), With<RomDataButton>>,
     popup_options: Query<&ChoicePopupOption>,
     rom_rows: Query<&VirtualListRow>,
     row_nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     lists: Query<(&ComputedNode, &UiGlobalTransform), With<HomeRomList>>,
-    popup_roots: Query<Entity, With<HomePopupRoot>>,
+    popup_roots: Query<(Entity, &HomePopupRoot, &Children)>,
+    child_query: Query<&Children>,
     focused: Query<Entity, With<FocusedUiElement>>,
     rom_list_data: Res<HomeRomListData>,
+    mut rom_data_target: ResMut<RomDataEditTarget>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
@@ -224,13 +225,20 @@ fn handle_home_activation(
     let entity = activated.entity;
     if settings_buttons.get(entity).is_ok() {
         next_state.set(AppState::Settings);
-    } else if rom_data_buttons.get(entity).is_ok() {
-        set_latest_info_message(&mut messages, "ROM data screen is not implemented yet.");
     } else if let Ok(option) = popup_options.get(entity) {
+        let popup_rom_index = popup_rom_index(entity, &popup_roots, &child_query);
         despawn_home_popups(&mut commands, &popup_roots);
         match option.option_index {
             0 => set_latest_info_message(&mut messages, "Resume Auto-save selected."),
             1 => set_latest_info_message(&mut messages, "Cold Boot selected."),
+            2 => {
+                if let Some(rom_index) = popup_rom_index {
+                    rom_data_target.rom_index = Some(rom_index);
+                    next_state.set(AppState::RomData);
+                } else {
+                    set_latest_info_message(&mut messages, "ROM data could not be opened.");
+                }
+            }
             _ => set_latest_info_message(&mut messages, "Launch cancelled."),
         }
     } else if let Ok(row) = rom_rows.get(entity) {
@@ -242,11 +250,7 @@ fn handle_home_activation(
             commands.spawn_scene(auto_save_popup_scene(
                 &assets,
                 *theme,
-                rom_list_data
-                    .roms
-                    .get(row.item_index)
-                    .map(|rom| rom.name.clone())
-                    .unwrap_or_else(|| "ROM".to_string()),
+                rom_list_data.roms.get(row.item_index).cloned(),
             ));
         }
     }
@@ -341,13 +345,7 @@ fn home_scene(
                                                 #AllSettings
                                                 button(font.clone(), "All Settings", theme, UiFocusNav::default())
                                                 SettingsButton
-                                                UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #RomData, left: #RomList }
-                                            ),
-                                            (
-                                                #RomData
-                                                button(font.clone(), "ROM Data", theme, UiFocusNav::default())
-                                                RomDataButton
-                                                UiFocusNav { up: #AllSettings, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
+                                                UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
                                             ),
                                         ]
                                     ),
@@ -364,7 +362,7 @@ fn home_scene(
                                                 #PrimarySort
                                                 multi_select(font.clone(), theme, sort_select_config(0))
                                                 PrimarySortSelect
-                                                UiFocusNav { up: #RomData, right: {Entity::PLACEHOLDER}, down: #SecondarySort, left: #RomList }
+                                                UiFocusNav { up: #AllSettings, right: {Entity::PLACEHOLDER}, down: #SecondarySort, left: #RomList }
                                             ),
                                             description(font.clone(), theme, "Then by:"),
                                             (
@@ -632,8 +630,17 @@ fn refresh_home_status_message(
     };
 }
 
-fn auto_save_popup_scene(assets: &AppAssets, theme: ActiveTheme, rom_name: String) -> impl Scene {
+fn auto_save_popup_scene(
+    assets: &AppAssets,
+    theme: ActiveTheme,
+    rom: Option<HomeRom>,
+) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
+    let rom_name = rom
+        .as_ref()
+        .map(|rom| rom.name.clone())
+        .unwrap_or_else(|| "ROM".to_string());
+    let rom_index = rom.map(|rom| rom.rom_index).unwrap_or(usize::MAX);
 
     bsn! {
         #AutoSavePopup
@@ -643,22 +650,50 @@ fn auto_save_popup_scene(assets: &AppAssets, theme: ActiveTheme, rom_name: Strin
             left: px(AUTO_SAVE_POPUP_LEFT),
             bottom: px(126.0),
         }
-        HomePopupRoot
+        HomePopupRoot { rom_index: {rom_index} }
         DismissChoicePopupOnOutsideClick
         Children [
             choice_popup(font, theme, ChoicePopupConfig {
                 title: rom_name,
                 width: AUTO_SAVE_POPUP_WIDTH,
-                options: ["Resume Auto-save", "Cold Boot", "Cancel"],
+                options: ["Resume Auto-save", "Cold Boot", "ROM Data", "Cancel"],
             })
         ]
     }
 }
 
-fn despawn_home_popups(commands: &mut Commands, popup_roots: &Query<Entity, With<HomePopupRoot>>) {
-    for popup in popup_roots {
+fn despawn_home_popups(
+    commands: &mut Commands,
+    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
+) {
+    for (popup, _, _) in popup_roots {
         commands.entity(popup).despawn();
     }
+}
+
+fn popup_rom_index(
+    option_entity: Entity,
+    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
+    child_query: &Query<&Children>,
+) -> Option<usize> {
+    popup_roots
+        .iter()
+        .find(|(_, _, children)| contains_entity_recursive(children, option_entity, child_query))
+        .map(|(_, popup, _)| popup.rom_index)
+        .filter(|index| *index != usize::MAX)
+}
+
+fn contains_entity_recursive(
+    children: &Children,
+    target: Entity,
+    child_query: &Query<&Children>,
+) -> bool {
+    children.iter().any(|child| {
+        child == target
+            || child_query
+                .get(child)
+                .is_ok_and(|children| contains_entity_recursive(children, target, child_query))
+    })
 }
 
 fn clear_invisible_home_row_state(
@@ -793,6 +828,7 @@ impl HomeRomListData {
 
 #[derive(Clone, Debug)]
 struct HomeRom {
+    rom_index: usize,
     name: String,
     origin: String,
     author: String,
@@ -807,11 +843,16 @@ fn home_roms_from_storage(storage: &LocalStorage) -> Vec<HomeRom> {
         .data
         .roms
         .iter()
-        .filter_map(|rom| home_rom_from_metadata(rom, storage))
+        .enumerate()
+        .filter_map(|(index, rom)| home_rom_from_metadata(index, rom, storage))
         .collect()
 }
 
-fn home_rom_from_metadata(rom: &RomMetadata, storage: &LocalStorage) -> Option<HomeRom> {
+fn home_rom_from_metadata(
+    rom_index: usize,
+    rom: &RomMetadata,
+    storage: &LocalStorage,
+) -> Option<HomeRom> {
     let provider = storage
         .data
         .providers
@@ -835,6 +876,7 @@ fn home_rom_from_metadata(rom: &RomMetadata, storage: &LocalStorage) -> Option<H
         .unwrap_or_default();
 
     Some(HomeRom {
+        rom_index,
         name: rom
             .friendly_name
             .clone()
