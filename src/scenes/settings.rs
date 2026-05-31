@@ -42,6 +42,8 @@ const FIELD_SGB_OVERLAY_ENABLE: u8 = 2;
 const FIELD_UPSCALING_MODE: u8 = 3;
 const FIELD_UI_SCALE: u8 = 4;
 const FIELD_UI_THEME: u8 = 5;
+const FIELD_AUDIO_PRESET: u8 = 6;
+const FIELD_PRIMARY_INPUT: u8 = 255;
 
 const TARGET_OVERLAY: u16 = 0;
 const TARGET_MODEL: u16 = 1;
@@ -92,6 +94,9 @@ struct ProviderCreateButton;
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct EditPrimaryMappingButton;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct EditAudioPresetButton;
+
 pub struct SettingsScenePlugin;
 
 impl Plugin for SettingsScenePlugin {
@@ -105,7 +110,8 @@ impl Plugin for SettingsScenePlugin {
             .add_systems(OnExit(AppState::Settings), reset_settings_provider_sync)
             .add_observer(save_settings_select_on_activation)
             .add_observer(handle_provider_button_activation)
-            .add_observer(handle_mapping_button_activation);
+            .add_observer(handle_mapping_button_activation)
+            .add_observer(handle_audio_preset_button_activation);
     }
 }
 
@@ -146,7 +152,7 @@ fn save_settings_select_on_activation(
     };
 
     let value = ui_select.selected as u8;
-    if settings_select.field == 255 {
+    if settings_select.field == FIELD_PRIMARY_INPUT {
         primary_input.mapping_index = selected_mapping_index(
             &PrimaryInputDevice {
                 mapping_index: ui_select.selected,
@@ -163,6 +169,7 @@ fn save_settings_select_on_activation(
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode,
         FIELD_UI_SCALE => storage.data.settings.ui_scale,
         FIELD_UI_THEME => storage.data.settings.ui_theme,
+        FIELD_AUDIO_PRESET => storage.data.settings.audio_preset,
         _ => return,
     };
     if previous_value == value {
@@ -176,6 +183,7 @@ fn save_settings_select_on_activation(
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode = value,
         FIELD_UI_SCALE => storage.data.settings.ui_scale = value,
         FIELD_UI_THEME => storage.data.settings.ui_theme = value,
+        FIELD_AUDIO_PRESET => storage.data.settings.audio_preset = value.min(9),
         _ => return,
     }
 
@@ -209,6 +217,19 @@ fn handle_mapping_button_activation(
 
     edit_target.mapping_index = selected_mapping_index(&primary_input, &storage);
     next_state.set(AppState::InputMapping);
+}
+
+fn handle_audio_preset_button_activation(
+    activated: On<Add, ActivatedUiElement>,
+    edit_buttons: Query<(), With<EditAudioPresetButton>>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if *state.get() != AppState::Settings || edit_buttons.get(activated.entity).is_err() {
+        return;
+    }
+
+    next_state.set(AppState::AudioSettings);
 }
 
 fn handle_provider_button_activation(
@@ -744,7 +765,7 @@ fn settings_left_column(
                     (
                         #PrimaryInputSelect
                         multi_select(font.clone(), theme, input_config)
-                        SettingsSelect { field: 255 }
+                        SettingsSelect { field: FIELD_PRIMARY_INPUT }
                         UiFocusId { id: TARGET_PRIMARY_INPUT }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_PRIMARY_INPUT).up}, right: {settings_focus_nav(TARGET_PRIMARY_INPUT).right}, down: {settings_focus_nav(TARGET_PRIMARY_INPUT).down}, left: {settings_focus_nav(TARGET_PRIMARY_INPUT).left} }
                     ),
@@ -776,8 +797,8 @@ fn settings_left_column(
                     description(font.clone(), theme, "Audio Preset"),
                     (
                         #AudioPreset
-                        multi_select(font.clone(), theme, audio_preset_config())
-                        SettingsSelect { field: 255 }
+                        multi_select(font.clone(), theme, audio_preset_config(settings.audio_preset as usize))
+                        SettingsSelect { field: FIELD_AUDIO_PRESET }
                         UiFocusId { id: TARGET_AUDIO_PRESET }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_AUDIO_PRESET).up}, right: {settings_focus_nav(TARGET_AUDIO_PRESET).right}, down: {settings_focus_nav(TARGET_AUDIO_PRESET).down}, left: {settings_focus_nav(TARGET_AUDIO_PRESET).left} }
                     ),
@@ -800,6 +821,7 @@ fn settings_left_column(
                     (
                         #EditMapping
                         button(font.clone(), "Edit", theme, UiFocusNav::default())
+                        EditAudioPresetButton
                         UiFocusId { id: TARGET_EDIT_MAPPING }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPING).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPING).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPING).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPING).left} }
                     ),
@@ -894,8 +916,8 @@ fn primary_input_config(
     }
 }
 
-fn audio_preset_config() -> MultiSelectConfig {
-    select_config(0, vec!["Preset 0"])
+fn audio_preset_config(selected: usize) -> MultiSelectConfig {
+    select_config(selected.min(0), vec!["Preset 0"])
 }
 
 fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {

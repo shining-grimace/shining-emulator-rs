@@ -194,7 +194,9 @@ pub(super) fn activate_controls(
 fn back_navigation_target(state: AppState) -> Option<AppState> {
     match state {
         AppState::Home => None,
-        AppState::InputMapping | AppState::RomProvider => Some(AppState::Settings),
+        AppState::AudioSettings | AppState::InputMapping | AppState::RomProvider => {
+            Some(AppState::Settings)
+        }
         _ => Some(AppState::Home),
     }
 }
@@ -215,6 +217,14 @@ mod tests {
     fn back_navigation_from_input_mapping_returns_to_settings() {
         assert_eq!(
             back_navigation_target(AppState::InputMapping),
+            Some(AppState::Settings)
+        );
+    }
+
+    #[test]
+    fn back_navigation_from_audio_settings_returns_to_settings() {
+        assert_eq!(
+            back_navigation_target(AppState::AudioSettings),
             Some(AppState::Settings)
         );
     }

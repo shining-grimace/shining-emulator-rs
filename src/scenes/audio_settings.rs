@@ -1,0 +1,939 @@
+use std::fs;
+
+use bevy::asset::HandleTemplate;
+use bevy::prelude::*;
+use bevy::text::FontSourceTemplate;
+use serde::{Deserialize, Serialize};
+
+use crate::app_assets::AppAssets;
+use crate::app_state::AppState;
+use crate::app_theme::ActiveTheme;
+use crate::input::selection::PrimaryInputDevice;
+use crate::storage::LocalStorage;
+use crate::ui_elements::action_hint::action_hints_with_labels;
+use crate::ui_elements::button::button;
+use crate::ui_elements::description::description;
+use crate::ui_elements::file_picker::{
+    UiAudioFilePicker, UiFilePicker, UiFilePickerValue, file_picker_with_value,
+};
+use crate::ui_elements::heading::heading;
+use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
+use crate::ui_elements::interactions::{
+    ActivatedUiElement, IgnorePicking, InitialFocus, UI_FOCUS_NONE, UiFocusId, UiFocusNav,
+    UiFocusNavIds, UiMultiSelect, UiMultiSelectLabel,
+};
+use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
+use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
+use crate::ui_elements::styles::{
+    UI_BODY_FONT_SIZE, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING,
+};
+use crate::ui_elements::theme::UiThemeTextColor;
+
+const CONTENT_GAP: f32 = 24.0;
+const CONTROL_GAP: f32 = 20.0;
+const CHANNEL_GAP: f32 = 14.0;
+const BUTTON_GAP: f32 = 28.0;
+const SCROLL_CONTENT_BOTTOM_PADDING: f32 = 320.0;
+const LEFT_WIDTH_PERCENT: f32 = 70.0;
+const RIGHT_WIDTH_PERCENT: f32 = 30.0;
+
+const OSCILLATOR_SQUARE: usize = 0;
+const OSCILLATOR_BUILT_IN_SAMPLER: usize = 4;
+const OSCILLATOR_CUSTOM_SAMPLER: usize = 5;
+
+const FIELD_OSCILLATOR: u8 = 0;
+const FIELD_BUILT_IN_SAMPLE: u8 = 1;
+const FIELD_MODULATION_A: u8 = 2;
+const FIELD_MODULATION_B: u8 = 3;
+
+const SECTION_BUILT_IN_SAMPLE: u8 = 0;
+const SECTION_CUSTOM_SAMPLE: u8 = 1;
+
+const TARGET_CH1_OSCILLATOR: u16 = 1;
+const TARGET_CH1_BUILT_IN_SAMPLE: u16 = 2;
+const TARGET_CH1_CUSTOM_SAMPLE: u16 = 3;
+const TARGET_CH1_MOD_A: u16 = 4;
+const TARGET_CH1_MOD_B: u16 = 5;
+const TARGET_CH2_OSCILLATOR: u16 = 6;
+const TARGET_CH2_BUILT_IN_SAMPLE: u16 = 7;
+const TARGET_CH2_CUSTOM_SAMPLE: u16 = 8;
+const TARGET_CH2_MOD_A: u16 = 9;
+const TARGET_CH3_SAMPLE: u16 = 10;
+const TARGET_CH4_OSCILLATOR: u16 = 11;
+const TARGET_CH4_BUILT_IN_SAMPLE: u16 = 12;
+const TARGET_CH4_CUSTOM_SAMPLE: u16 = 13;
+const TARGET_SAVE: u16 = 20;
+const TARGET_DELETE: u16 = 21;
+const TARGET_RESTORE: u16 = 22;
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+struct AudioSelect {
+    channel: u8,
+    field: u8,
+}
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+struct AudioSamplePicker {
+    channel: u8,
+}
+
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+struct AudioConditionalSection {
+    channel: u8,
+    section: u8,
+}
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct AudioSaveButton;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct AudioDeleteButton;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct AudioRestoreButton;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AudioPreset {
+    channels: Vec<AudioChannelPreset>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AudioChannelPreset {
+    oscillator: String,
+    built_in_sample: String,
+    custom_sample_path: String,
+    modulation_a: String,
+    modulation_b: Option<String>,
+}
+
+pub struct AudioSettingsScenePlugin;
+
+impl Plugin for AudioSettingsScenePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(OnEnter(AppState::AudioSettings), spawn_audio_settings_scene)
+            .add_systems(
+                Update,
+                sync_audio_conditional_sections.run_if(in_state(AppState::AudioSettings)),
+            )
+            .add_observer(handle_audio_settings_activation);
+    }
+}
+
+fn spawn_audio_settings_scene(
+    mut commands: Commands,
+    assets: Res<AppAssets>,
+    theme: Res<ActiveTheme>,
+    primary_input: Res<PrimaryInputDevice>,
+    storage: Res<LocalStorage>,
+) {
+    commands.spawn_scene(audio_settings_scene(
+        &assets,
+        *theme,
+        &primary_input,
+        &storage,
+    ));
+}
+
+fn handle_audio_settings_activation(
+    activated: On<Add, ActivatedUiElement>,
+    save_buttons: Query<(), With<AudioSaveButton>>,
+    delete_buttons: Query<(), With<AudioDeleteButton>>,
+    restore_buttons: Query<(), With<AudioRestoreButton>>,
+    mut selects: ParamSet<(
+        Query<(&AudioSelect, &UiMultiSelect)>,
+        Query<(&AudioSelect, &mut UiMultiSelect, Option<&Children>)>,
+    )>,
+    mut pickers: ParamSet<(
+        Query<(&AudioSamplePicker, &UiFilePicker)>,
+        Query<(&AudioSamplePicker, &mut UiFilePicker, Option<&Children>)>,
+    )>,
+    mut sections: Query<(&AudioConditionalSection, &mut Node)>,
+    mut text_queries: ParamSet<(
+        Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+        Query<&mut Text, With<UiMultiSelectLabel>>,
+        Query<(Entity, &UiFilePickerValue, &mut Text)>,
+    )>,
+    child_query: Query<&Children>,
+    storage: Res<LocalStorage>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if *state.get() != AppState::AudioSettings {
+        return;
+    }
+
+    let entity = activated.entity;
+    if save_buttons.get(entity).is_ok() {
+        let preset = audio_preset_from_form(&selects.p0(), &pickers.p0());
+        match serde_json::to_string_pretty(&preset)
+            .map(|json| fs::write(current_preset_path(&storage), format!("{json}\n")))
+        {
+            Ok(Ok(())) => next_state.set(AppState::Settings),
+            Ok(Err(error)) => {
+                eprintln!("failed to save audio preset: {error}");
+                set_latest_info_message(&mut text_queries.p0(), "Audio preset could not be saved.");
+            }
+            Err(error) => {
+                eprintln!("failed to serialise audio preset: {error}");
+                set_latest_info_message(&mut text_queries.p0(), "Audio preset could not be saved.");
+            }
+        }
+    } else if delete_buttons.get(entity).is_ok() {
+        if storage.data.settings.audio_preset == 0 {
+            set_latest_info_message(
+                &mut text_queries.p0(),
+                "The default audio preset cannot be deleted.",
+            );
+            return;
+        }
+        match fs::remove_file(current_preset_path(&storage)) {
+            Ok(()) => set_latest_info_message(&mut text_queries.p0(), "Audio preset deleted."),
+            Err(error) => {
+                eprintln!("failed to delete audio preset: {error}");
+                set_latest_info_message(
+                    &mut text_queries.p0(),
+                    "Audio preset could not be deleted.",
+                );
+            }
+        }
+    } else if restore_buttons.get(entity).is_ok() {
+        let preset = default_audio_preset();
+        match serde_json::to_string_pretty(&preset)
+            .map(|json| fs::write(current_preset_path(&storage), format!("{json}\n")))
+        {
+            Ok(Ok(())) => {
+                apply_audio_preset_to_selects(
+                    &preset,
+                    &mut selects.p1(),
+                    &mut text_queries.p1(),
+                    &child_query,
+                );
+                apply_audio_preset_to_pickers(
+                    &preset,
+                    &mut pickers.p1(),
+                    &mut text_queries.p2(),
+                    &child_query,
+                );
+                apply_audio_conditional_sections(&selects.p0(), &mut sections);
+                set_latest_info_message(&mut text_queries.p0(), "Audio preset restored.");
+            }
+            Ok(Err(error)) => {
+                eprintln!("failed to restore audio preset: {error}");
+                set_latest_info_message(
+                    &mut text_queries.p0(),
+                    "Audio preset could not be restored.",
+                );
+            }
+            Err(error) => {
+                eprintln!("failed to serialise audio preset: {error}");
+                set_latest_info_message(
+                    &mut text_queries.p0(),
+                    "Audio preset could not be restored.",
+                );
+            }
+        }
+    } else if selects.p0().get(entity).is_ok() {
+        apply_audio_conditional_sections(&selects.p0(), &mut sections);
+    }
+}
+
+fn sync_audio_conditional_sections(
+    selects: Query<(&AudioSelect, &UiMultiSelect), Changed<UiMultiSelect>>,
+    all_selects: Query<(&AudioSelect, &UiMultiSelect)>,
+    mut sections: Query<(&AudioConditionalSection, &mut Node)>,
+) {
+    if selects
+        .iter()
+        .any(|(select, _)| select.field == FIELD_OSCILLATOR)
+    {
+        apply_audio_conditional_sections(&all_selects, &mut sections);
+    }
+}
+
+fn apply_audio_conditional_sections(
+    selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    sections: &mut Query<(&AudioConditionalSection, &mut Node)>,
+) {
+    for (section, mut node) in sections {
+        let oscillator = selects
+            .iter()
+            .find(|(select, _)| {
+                select.channel == section.channel && select.field == FIELD_OSCILLATOR
+            })
+            .map(|(_, select)| select.selected)
+            .unwrap_or(OSCILLATOR_SQUARE);
+        let visible = matches!(
+            (section.section, oscillator),
+            (SECTION_BUILT_IN_SAMPLE, OSCILLATOR_BUILT_IN_SAMPLER)
+                | (SECTION_CUSTOM_SAMPLE, OSCILLATOR_CUSTOM_SAMPLER)
+        );
+        node.display = display_for(visible);
+    }
+}
+
+fn display_for(visible: bool) -> Display {
+    if visible {
+        Display::Flex
+    } else {
+        Display::None
+    }
+}
+
+fn audio_settings_scene(
+    assets: &AppAssets,
+    theme: ActiveTheme,
+    primary_input: &PrimaryInputDevice,
+    storage: &LocalStorage,
+) -> impl Scene {
+    let font = assets.ubuntu_mono_font.clone();
+    let left_font = font.clone();
+    let preset = load_current_audio_preset(storage);
+
+    bsn! {
+        DespawnOnExit::<AppState>(AppState::AudioSettings)
+        Node {
+            width: percent(100),
+            height: percent(100),
+            padding: UiRect::all(px(UI_SCREEN_PADDING)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        Children [
+            (
+                Node {
+                    width: percent(100),
+                    max_width: px(UI_MAX_CONTENT_WIDTH),
+                    height: percent(100),
+                    min_height: px(0.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(CONTENT_GAP),
+                }
+                Children [
+                    heading(font.clone(), theme, "Audio Preset Settings"),
+                    (
+                        Node {
+                            width: percent(100),
+                            min_height: px(0.0),
+                            flex_grow: 1.0,
+                            flex_shrink: 1.0,
+                            flex_direction: FlexDirection::Row,
+                            column_gap: px(UI_PANEL_GAP),
+                        }
+                        Children [
+                            (
+                                #AudioScrollBar
+                                scroll_view(
+                                    theme,
+                                    #AudioScrollBar,
+                                    ScrollViewConfig {
+                                        width: percent(LEFT_WIDTH_PERCENT),
+                                        min_height: px(0.0),
+                                        thumb_height: 132.0,
+                                    },
+                                    move |_| audio_controls(left_font, theme, preset)
+                                )
+                            ),
+                            audio_buttons(font.clone(), theme),
+                        ]
+                    ),
+                    info_message(font.clone(), theme, "", false),
+                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
+                ]
+            )
+        ]
+    }
+}
+
+fn audio_controls(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+    let ch1 = preset_channel(&preset, 0);
+    let ch2 = preset_channel(&preset, 1);
+    let ch3 = preset_channel(&preset, 2);
+    let ch4 = preset_channel(&preset, 3);
+    let ch1_oscillator = selected_oscillator(&ch1.oscillator);
+    let ch2_oscillator = selected_oscillator(&ch2.oscillator);
+    let ch4_oscillator = selected_oscillator(&ch4.oscillator);
+
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(CONTROL_GAP),
+            padding: UiRect {
+                left: px(0.0),
+                right: px(18.0),
+                top: px(0.0),
+                bottom: px(SCROLL_CONTENT_BOTTOM_PADDING),
+            },
+        }
+        Children [
+            preset_label_row(font.clone(), theme, "Preset 0"),
+            channel_one_controls(font.clone(), theme, ch1, ch1_oscillator),
+            channel_two_controls(font.clone(), theme, ch2, ch2_oscillator),
+            channel_three_controls(font.clone(), theme, ch3),
+            channel_four_controls(font, theme, ch4, ch4_oscillator),
+        ]
+    }
+}
+
+fn channel_one_controls(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioChannelPreset,
+    oscillator: usize,
+) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(CHANNEL_GAP),
+        }
+        Children [
+            description(font.clone(), theme, "Channel 1"),
+            audio_select_row(font.clone(), theme, "Oscillator", 1, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH1_OSCILLATOR, UI_FOCUS_NONE, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, true),
+            built_in_sample_row(font.clone(), theme, 1, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
+            custom_sample_row(font.clone(), theme, 1, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            audio_select_row(font.clone(), theme, "Modulation 1", 1, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH1_MOD_A, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_MOD_B, TARGET_SAVE, UI_FOCUS_NONE, false),
+            audio_select_row(font, theme, "Modulation 2", 1, FIELD_MODULATION_B, modulation_config(selected_modulation(preset.modulation_b.as_deref().unwrap_or("Pitch Envelope"))), TARGET_CH1_MOD_B, TARGET_CH1_MOD_A, TARGET_CH2_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false),
+        ]
+    }
+}
+
+fn channel_two_controls(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioChannelPreset,
+    oscillator: usize,
+) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(CHANNEL_GAP),
+        }
+        Children [
+            description(font.clone(), theme, "Channel 2"),
+            audio_select_row(font.clone(), theme, "Oscillator", 2, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH2_OSCILLATOR, TARGET_CH1_MOD_B, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
+            built_in_sample_row(font.clone(), theme, 2, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
+            custom_sample_row(font.clone(), theme, 2, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            audio_select_row(font, theme, "Modulation", 2, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH2_MOD_A, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH3_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
+        ]
+    }
+}
+
+fn channel_three_controls(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioChannelPreset,
+) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(CHANNEL_GAP),
+        }
+        Children [
+            description(font.clone(), theme, "Channel 3"),
+            audio_select_row(font, theme, "Wave Sample", 3, FIELD_BUILT_IN_SAMPLE, sample_config(selected_sample(&preset.built_in_sample)), TARGET_CH3_SAMPLE, TARGET_CH2_MOD_A, TARGET_CH4_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false),
+        ]
+    }
+}
+
+fn channel_four_controls(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioChannelPreset,
+    oscillator: usize,
+) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(CHANNEL_GAP),
+        }
+        Children [
+            description(font.clone(), theme, "Channel 4"),
+            audio_select_row(font.clone(), theme, "Oscillator", 4, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH4_OSCILLATOR, TARGET_CH3_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
+            built_in_sample_row(font.clone(), theme, 4, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_CH4_OSCILLATOR, TARGET_CH4_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
+            custom_sample_row(font, theme, 4, preset.custom_sample_path, oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH4_CUSTOM_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, UI_FOCUS_NONE, TARGET_SAVE, UI_FOCUS_NONE),
+        ]
+    }
+}
+
+fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(RIGHT_WIDTH_PERCENT),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(BUTTON_GAP),
+            padding: UiRect::top(px(58.0)),
+        }
+        Children [
+            (
+                button(font.clone(), "Save", theme, UiFocusNav::default())
+                AudioSaveButton
+                UiFocusId { id: TARGET_SAVE }
+                UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE, left: TARGET_CH1_OSCILLATOR }
+            ),
+            (
+                button(font.clone(), "Delete", theme, UiFocusNav::default())
+                AudioDeleteButton
+                UiFocusId { id: TARGET_DELETE }
+                UiFocusNavIds { up: TARGET_SAVE, right: UI_FOCUS_NONE, down: TARGET_RESTORE, left: TARGET_CH1_MOD_B }
+            ),
+            (
+                button(font, "Restore Defaults", theme, UiFocusNav::default())
+                AudioRestoreButton
+                UiFocusId { id: TARGET_RESTORE }
+                UiFocusNavIds { up: TARGET_DELETE, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_CH2_MOD_A }
+            ),
+        ]
+    }
+}
+
+fn preset_label_row(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset_name: &'static str,
+) -> impl Scene {
+    let value_font = font.clone();
+
+    bsn! {
+        Node {
+            width: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            column_gap: px(18.0),
+        }
+        Children [
+            description(font, theme, "Preset:"),
+            (
+                Text(preset_name)
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                    font_size: px(UI_BODY_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                IgnorePicking
+                TextLayout::new(Justify::Right, LineBreak::NoWrap)
+            )
+        ]
+    }
+}
+
+fn audio_select_row(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    label: &'static str,
+    channel: u8,
+    field: u8,
+    config: MultiSelectConfig,
+    id: u16,
+    up: u16,
+    down: u16,
+    right: u16,
+    left: u16,
+    initial_focus: bool,
+) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            column_gap: px(18.0),
+        }
+        Children [
+            description(font.clone(), theme, label),
+            (
+                multi_select(font, theme, config)
+                AudioSelect { channel: {channel}, field: {field} }
+                UiFocusId { id: {id} }
+                UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+                InitialFocus { enabled: {initial_focus} }
+            ),
+        ]
+    }
+}
+
+fn built_in_sample_row(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    channel: u8,
+    sample: String,
+    visible: bool,
+    id: u16,
+    up: u16,
+    down: u16,
+    right: u16,
+    left: u16,
+) -> impl Scene {
+    bsn! {
+        (
+            Node {
+                width: percent(100),
+                display: {display_for(visible)},
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            DespawnOnExit::<AppState>(AppState::AudioSettings)
+            AudioConditionalSection { channel: {channel}, section: SECTION_BUILT_IN_SAMPLE }
+            Children [
+                description(font.clone(), theme, "Built-in Sample"),
+                (
+                    multi_select(font, theme, sample_config(selected_sample(&sample)))
+                    AudioSelect { channel: {channel}, field: FIELD_BUILT_IN_SAMPLE }
+                    UiFocusId { id: {id} }
+                    UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+                ),
+            ]
+        )
+    }
+}
+
+fn custom_sample_row(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    channel: u8,
+    value: String,
+    visible: bool,
+    id: u16,
+    up: u16,
+    down: u16,
+    right: u16,
+    left: u16,
+) -> impl Scene {
+    bsn! {
+        (
+            Node {
+                width: percent(100),
+                display: {display_for(visible)},
+                justify_content: JustifyContent::FlexEnd,
+            }
+            DespawnOnExit::<AppState>(AppState::AudioSettings)
+            AudioConditionalSection { channel: {channel}, section: SECTION_CUSTOM_SAMPLE }
+            Children [
+                (
+                    file_picker_with_value(font, "Choose a WAV sample...", value, theme, UiFocusNav::default())
+                    DespawnOnExit::<AppState>(AppState::AudioSettings)
+                    UiAudioFilePicker
+                    AudioSamplePicker { channel: {channel} }
+                    UiFocusId { id: {id} }
+                    UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+                )
+            ]
+        )
+    }
+}
+
+fn oscillator_config(selected: usize) -> MultiSelectConfig {
+    select_config(
+        selected.min(5),
+        vec![
+            "Square Wave",
+            "Triangle Wave",
+            "Sawtooth Wave",
+            "LFSR Noise",
+            "Built-in Sampler",
+            "Custom Sampler",
+        ],
+    )
+}
+
+fn modulation_config(selected: usize) -> MultiSelectConfig {
+    select_config(
+        selected.min(4),
+        vec![
+            "Duty Cycle",
+            "Low-pass Cutoff",
+            "High-pass Cutoff",
+            "Notch Filter Frequency",
+            "Vibrato",
+        ],
+    )
+}
+
+fn sample_config(selected: usize) -> MultiSelectConfig {
+    select_config(selected.min(3), vec!["Piano", "Guitar", "Bass", "Bell"])
+}
+
+fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {
+    MultiSelectConfig {
+        selected,
+        options: options.into_iter().map(str::to_string).collect(),
+        nav: UiFocusNav::default(),
+    }
+}
+
+fn current_preset_path(storage: &LocalStorage) -> std::path::PathBuf {
+    storage
+        .paths
+        .audio_preset_file(storage.data.settings.audio_preset.min(9))
+}
+
+fn load_current_audio_preset(storage: &LocalStorage) -> AudioPreset {
+    fs::read(current_preset_path(storage))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_else(default_audio_preset)
+}
+
+fn default_audio_preset() -> AudioPreset {
+    AudioPreset {
+        channels: vec![
+            AudioChannelPreset {
+                oscillator: "Square Wave".to_string(),
+                built_in_sample: "Piano".to_string(),
+                custom_sample_path: String::new(),
+                modulation_a: "Duty Cycle".to_string(),
+                modulation_b: Some("Pitch Envelope".to_string()),
+            },
+            AudioChannelPreset {
+                oscillator: "Square Wave".to_string(),
+                built_in_sample: "Piano".to_string(),
+                custom_sample_path: String::new(),
+                modulation_a: "Duty Cycle".to_string(),
+                modulation_b: None,
+            },
+            AudioChannelPreset {
+                oscillator: "Wave Table".to_string(),
+                built_in_sample: "Piano".to_string(),
+                custom_sample_path: String::new(),
+                modulation_a: "None".to_string(),
+                modulation_b: None,
+            },
+            AudioChannelPreset {
+                oscillator: "LFSR Noise".to_string(),
+                built_in_sample: "Piano".to_string(),
+                custom_sample_path: String::new(),
+                modulation_a: "None".to_string(),
+                modulation_b: None,
+            },
+        ],
+    }
+}
+
+fn audio_preset_from_form(
+    selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    pickers: &Query<(&AudioSamplePicker, &UiFilePicker)>,
+) -> AudioPreset {
+    let default = default_audio_preset();
+    let channels = (1..=4)
+        .map(|channel| {
+            let mut channel_preset = preset_channel(&default, (channel - 1) as usize).clone();
+            channel_preset.oscillator =
+                oscillator_label(select_value(selects, channel, FIELD_OSCILLATOR, 0)).to_string();
+            channel_preset.built_in_sample =
+                sample_label(select_value(selects, channel, FIELD_BUILT_IN_SAMPLE, 0)).to_string();
+            channel_preset.custom_sample_path = pickers
+                .iter()
+                .find(|(picker, _)| picker.channel == channel)
+                .map(|(_, picker)| picker.value.clone())
+                .unwrap_or_default();
+            channel_preset.modulation_a =
+                modulation_label(select_value(selects, channel, FIELD_MODULATION_A, 0)).to_string();
+            if channel == 1 {
+                channel_preset.modulation_b = Some(
+                    modulation_label(select_value(selects, channel, FIELD_MODULATION_B, 1))
+                        .to_string(),
+                );
+            }
+            channel_preset
+        })
+        .collect();
+    AudioPreset { channels }
+}
+
+fn apply_audio_preset_to_selects(
+    preset: &AudioPreset,
+    selects: &mut Query<(&AudioSelect, &mut UiMultiSelect, Option<&Children>)>,
+    select_labels: &mut Query<&mut Text, With<UiMultiSelectLabel>>,
+    child_query: &Query<&Children>,
+) {
+    for (select, mut ui_select, children) in selects {
+        let channel = preset_channel(preset, select.channel.saturating_sub(1) as usize);
+        let selected = match select.field {
+            FIELD_OSCILLATOR => selected_oscillator(&channel.oscillator),
+            FIELD_BUILT_IN_SAMPLE => selected_sample(&channel.built_in_sample),
+            FIELD_MODULATION_A => selected_modulation(&channel.modulation_a),
+            FIELD_MODULATION_B => {
+                selected_modulation(channel.modulation_b.as_deref().unwrap_or("Duty Cycle"))
+            }
+            _ => ui_select.selected,
+        };
+
+        ui_select.selected = selected;
+        if let Some(children) = children {
+            update_multi_select_label(
+                children,
+                select_label(select.field, selected),
+                select_labels,
+                child_query,
+            );
+        }
+    }
+}
+
+fn apply_audio_preset_to_pickers(
+    preset: &AudioPreset,
+    pickers: &mut Query<(&AudioSamplePicker, &mut UiFilePicker, Option<&Children>)>,
+    picker_labels: &mut Query<(Entity, &UiFilePickerValue, &mut Text)>,
+    child_query: &Query<&Children>,
+) {
+    for (picker, mut ui_picker, children) in pickers {
+        let channel = preset_channel(preset, picker.channel.saturating_sub(1) as usize);
+        ui_picker.value = channel.custom_sample_path;
+        if let Some(children) = children {
+            update_file_picker_label(
+                children,
+                "Choose a WAV sample...",
+                picker_labels,
+                child_query,
+            );
+        }
+    }
+}
+
+fn update_multi_select_label(
+    children: &Children,
+    label: &'static str,
+    labels: &mut Query<&mut Text, With<UiMultiSelectLabel>>,
+    child_query: &Query<&Children>,
+) {
+    for child in children {
+        if let Ok(mut text) = labels.get_mut(*child) {
+            text.0 = label.to_string();
+        }
+        if let Ok(grandchildren) = child_query.get(*child) {
+            update_multi_select_label(grandchildren, label, labels, child_query);
+        }
+    }
+}
+
+fn update_file_picker_label(
+    children: &Children,
+    label: &'static str,
+    labels: &mut Query<(Entity, &UiFilePickerValue, &mut Text)>,
+    child_query: &Query<&Children>,
+) {
+    for (entity, _, mut text) in labels {
+        if contains_descendant(children, entity, child_query) {
+            text.0 = label.to_string();
+        }
+    }
+}
+
+fn contains_descendant(
+    children: &Children,
+    target: Entity,
+    child_query: &Query<&Children>,
+) -> bool {
+    for child in children {
+        if *child == target {
+            return true;
+        }
+        if child_query
+            .get(*child)
+            .is_ok_and(|grandchildren| contains_descendant(grandchildren, target, child_query))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn select_label(field: u8, selected: usize) -> &'static str {
+    match field {
+        FIELD_OSCILLATOR => oscillator_label(selected),
+        FIELD_BUILT_IN_SAMPLE => sample_label(selected),
+        FIELD_MODULATION_A | FIELD_MODULATION_B => modulation_label(selected),
+        _ => "",
+    }
+}
+
+fn select_value(
+    selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    channel: u8,
+    field: u8,
+    default: usize,
+) -> usize {
+    selects
+        .iter()
+        .find(|(select, _)| select.channel == channel && select.field == field)
+        .map(|(_, select)| select.selected)
+        .unwrap_or(default)
+}
+
+fn preset_channel(preset: &AudioPreset, index: usize) -> AudioChannelPreset {
+    preset
+        .channels
+        .get(index)
+        .cloned()
+        .unwrap_or_else(|| default_audio_preset().channels[index].clone())
+}
+
+fn selected_oscillator(value: &str) -> usize {
+    oscillator_options()
+        .iter()
+        .position(|option| *option == value)
+        .unwrap_or(OSCILLATOR_SQUARE)
+}
+
+fn selected_modulation(value: &str) -> usize {
+    modulation_options()
+        .iter()
+        .position(|option| *option == value)
+        .unwrap_or(0)
+}
+
+fn selected_sample(value: &str) -> usize {
+    sample_options()
+        .iter()
+        .position(|option| *option == value)
+        .unwrap_or(0)
+}
+
+fn oscillator_label(index: usize) -> &'static str {
+    oscillator_options()
+        .get(index)
+        .copied()
+        .unwrap_or("Square Wave")
+}
+
+fn modulation_label(index: usize) -> &'static str {
+    modulation_options()
+        .get(index)
+        .copied()
+        .unwrap_or("Duty Cycle")
+}
+
+fn sample_label(index: usize) -> &'static str {
+    sample_options().get(index).copied().unwrap_or("Piano")
+}
+
+fn oscillator_options() -> [&'static str; 6] {
+    [
+        "Square Wave",
+        "Triangle Wave",
+        "Sawtooth Wave",
+        "LFSR Noise",
+        "Built-in Sampler",
+        "Custom Sampler",
+    ]
+}
+
+fn modulation_options() -> [&'static str; 5] {
+    [
+        "Duty Cycle",
+        "Low-pass Cutoff",
+        "High-pass Cutoff",
+        "Notch Filter Frequency",
+        "Vibrato",
+    ]
+}
+
+fn sample_options() -> [&'static str; 4] {
+    ["Piano", "Guitar", "Bass", "Bell"]
+}

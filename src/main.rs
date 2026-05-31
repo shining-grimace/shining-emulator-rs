@@ -39,6 +39,7 @@ fn main() {
         .init_resource::<ActiveTheme>()
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins(ui_elements::action_hint::ActionHintPlugin)
+        .add_plugins(scenes::audio_settings::AudioSettingsScenePlugin)
         .add_plugins((
             input::InputPlugin,
             background::BackgroundPlugin,

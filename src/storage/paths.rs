@@ -60,6 +60,10 @@ impl StoragePaths {
     pub fn default_audio_preset_file(&self) -> PathBuf {
         self.audio_dir.join(DEFAULT_AUDIO_PRESET_FILE_NAME)
     }
+
+    pub fn audio_preset_file(&self, index: u8) -> PathBuf {
+        self.audio_dir.join(format!("preset{index}.json"))
+    }
 }
 
 impl Default for StoragePaths {

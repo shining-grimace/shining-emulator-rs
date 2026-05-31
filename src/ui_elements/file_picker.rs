@@ -24,6 +24,9 @@ pub struct UiFilePicker {
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct UiDirectoryPicker;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+pub struct UiAudioFilePicker;
+
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct UiFilePickerValue {
     pub picker: Entity,
@@ -62,7 +65,6 @@ pub fn file_picker_with_value(
     let display_value = picker_display_value(placeholder, &value);
 
     bsn! {
-        #FilePickerRoot
         Node {
             width: px(UI_FILE_PICKER_WIDTH),
             height: px(UI_ELEMENT_HEIGHT),
@@ -102,12 +104,11 @@ pub fn file_picker_with_value(
                         UiThemeTextColor::Tertiary
                         TextLayout::new(Justify::Left, LineBreak::NoWrap)
                         IgnorePicking
-                        UiFilePickerValue { picker: #FilePickerRoot }
+                        UiFilePickerValue { picker: Entity::PLACEHOLDER }
                     )
                 ]
             ),
             (
-                #FilePickerButton
                 Node {
                     width: px(UI_BUTTON_WIDTH),
                     height: px(UI_ELEMENT_HEIGHT),
@@ -153,7 +154,6 @@ pub fn directory_picker_with_value(
     let display_value = picker_display_value(placeholder, &value);
 
     bsn! {
-        #FilePickerRoot
         Node {
             width: percent(100),
             height: px(UI_ELEMENT_HEIGHT),
@@ -195,12 +195,11 @@ pub fn directory_picker_with_value(
                         UiThemeTextColor::Tertiary
                         TextLayout::new(Justify::Left, LineBreak::NoWrap)
                         IgnorePicking
-                        UiFilePickerValue { picker: #FilePickerRoot }
+                        UiFilePickerValue { picker: Entity::PLACEHOLDER }
                     )
                 ]
             ),
             (
-                #FilePickerButton
                 Node {
                     width: px(UI_BUTTON_WIDTH),
                     height: px(UI_ELEMENT_HEIGHT),
@@ -249,18 +248,29 @@ pub(crate) fn update_file_picker_hover_colours(
 
 pub(crate) fn drain_file_picker_activations(
     mut activations: MessageReader<UiFilePickerActivated>,
-    mut pickers: Query<(&mut UiFilePicker, Has<UiDirectoryPicker>, Option<&Children>)>,
+    mut pickers: Query<(
+        &mut UiFilePicker,
+        Has<UiDirectoryPicker>,
+        Has<UiAudioFilePicker>,
+        Option<&Children>,
+    )>,
     mut values: Query<(Entity, &UiFilePickerValue, &mut Text)>,
     child_query: Query<&Children>,
 ) {
     for activation in activations.read() {
-        let Ok((mut picker, directory, picker_children)) = pickers.get_mut(activation.picker)
+        let Ok((mut picker, directory, audio_file, picker_children)) =
+            pickers.get_mut(activation.picker)
         else {
             continue;
         };
         let dialog = rfd::FileDialog::new();
         let path = if directory {
             dialog.set_title("Choose ROM directory").pick_folder()
+        } else if audio_file {
+            dialog
+                .set_title("Choose WAV sample (*.wav)")
+                .add_filter("WAV audio", &["wav"])
+                .pick_file()
         } else {
             dialog
                 .set_title("Choose GameBoy ROM (*.gb, *.gbc)")

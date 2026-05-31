@@ -35,7 +35,11 @@ impl UiPopupScrollArea {
         self.option_count > self.max_visible_options
     }
 
-    fn visible_height(self) -> f32 {
+    pub fn max_offset(self) -> f32 {
+        (self.content_height() - self.visible_height()).max(0.0)
+    }
+
+    pub fn visible_height(self) -> f32 {
         let visible_options = self.option_count.min(self.max_visible_options).max(1);
         visible_options as f32 * self.option_height
             + visible_options.saturating_sub(1) as f32 * self.option_gap
@@ -352,10 +356,10 @@ pub(super) fn keep_focused_list_item_visible(
     else {
         return;
     };
-    let focused_option = focused_options.get(focused_entity).ok();
-    if focused_option.is_none() && added_focus.get(focused_entity).is_err() {
+    if added_focus.get(focused_entity).is_err() {
         return;
     }
+    let focused_option = focused_options.get(focused_entity).ok();
 
     for (_, area_node, area_transform, mut area, popup_scroll, children) in &mut areas {
         if !contains_entity(children, focused_entity, &child_query) {
