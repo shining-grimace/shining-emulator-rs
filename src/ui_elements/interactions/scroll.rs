@@ -1,6 +1,8 @@
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
+use crate::ui_elements::list_view::VirtualListContent;
+
 use super::focus::FocusedUiElement;
 use super::multi_select::UiMultiSelectOption;
 use super::picking::{DraggableUiElement, HoveredUiElement, PressedUiElement};
@@ -15,6 +17,9 @@ const SCROLLBAR_VERTICAL_PADDING: f32 = 12.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct AutoScrollFocusedChild;
+
+#[derive(Clone, Copy, Component, Debug, Default)]
+pub struct SuppressFocusAutoScroll;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct UiScrollArea {
@@ -81,6 +86,12 @@ pub(super) struct KeyScrollRepeatState {
     repeat_for_seconds: f32,
 }
 
+#[derive(Default, Resource)]
+pub(super) struct ScrollThumbDragState {
+    active: bool,
+    released_this_frame: bool,
+}
+
 pub(super) fn update_dynamic_scroll_metrics(
     mut areas: Query<(
         Entity,
@@ -89,8 +100,9 @@ pub(super) fn update_dynamic_scroll_metrics(
         Option<&UiPopupScrollArea>,
         &Children,
     )>,
+    scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
-        Query<(&ComputedNode, &mut Node), With<UiScrollContent>>,
+        Query<(&ComputedNode, &mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&mut UiScrollThumb, &mut Node, &ComputedNode)>,
         Query<&mut Node, With<UiScrollbar>>,
         Query<&ComputedNode, With<UiScrollbar>>,
@@ -111,11 +123,16 @@ pub(super) fn update_dynamic_scroll_metrics(
             .map(UiPopupScrollArea::visible_height)
             .unwrap_or_else(|| logical_height(area_node));
         let max_offset = (content_height - viewport_height).max(0.0);
-        area.max_offset = max_offset;
-        area.offset = area.offset.clamp(0.0, area.max_offset);
+        if area.max_offset != max_offset {
+            area.max_offset = max_offset;
+        }
+        let offset = area.offset.clamp(0.0, area.max_offset);
+        if area.offset != offset {
+            area.offset = offset;
+        }
 
         let scrollbar_heights =
-            collect_scrollbar_heights(children, &scroll_nodes.p3(), &child_query);
+            collect_scrollbar_heights(children, &scroll_contents, &scroll_nodes.p3(), &child_query);
 
         update_scroll_content_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
         update_scrollbar_visibility(
@@ -124,6 +141,7 @@ pub(super) fn update_dynamic_scroll_metrics(
                 .copied()
                 .map(UiPopupScrollArea::has_overflow)
                 .unwrap_or(area.max_offset > 0.0),
+            &scroll_contents,
             &mut scroll_nodes.p2(),
             &child_query,
         );
@@ -134,6 +152,7 @@ pub(super) fn update_dynamic_scroll_metrics(
             area.max_offset,
             &mut scroll_nodes.p1(),
             &scrollbar_heights,
+            &scroll_contents,
             &child_query,
         );
     }
@@ -156,20 +175,48 @@ pub(super) fn update_scroll_thumb_colours(
 fn update_scrollbar_visibility(
     children: &Children,
     visible: bool,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     scrollbar_nodes: &mut Query<&mut Node, With<UiScrollbar>>,
     child_query: &Query<&Children>,
 ) {
     for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+
         if let Ok(mut node) = scrollbar_nodes.get_mut(*child) {
-            node.display = if visible {
+            let display = if visible {
                 Display::Flex
             } else {
                 Display::None
             };
+            if node.display != display {
+                node.display = display;
+            }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
-            update_scrollbar_visibility(grandchildren, visible, scrollbar_nodes, child_query);
+            update_scrollbar_visibility(
+                grandchildren,
+                visible,
+                scroll_contents,
+                scrollbar_nodes,
+                child_query,
+            );
         }
+    }
+}
+
+pub(super) fn track_scroll_thumb_drag(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    pressed_thumbs: Query<(), (With<UiScrollThumb>, With<PressedUiElement>)>,
+    mut state: ResMut<ScrollThumbDragState>,
+) {
+    state.released_this_frame = state.active && mouse_buttons.just_released(MouseButton::Left);
+
+    if !pressed_thumbs.is_empty() {
+        state.active = true;
+    } else if !mouse_buttons.pressed(MouseButton::Left) {
+        state.active = false;
     }
 }
 
@@ -178,8 +225,9 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
     keys: Res<ButtonInput<KeyCode>>,
     focused: Query<(Entity, &UiElementKind), With<FocusedUiElement>>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
+    scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
-        Query<&mut Node, With<UiScrollContent>>,
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     child_query: Query<&Children>,
@@ -201,7 +249,12 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
         let mut target_area = None;
         for (area_entity, _, children) in &areas {
             if area_entity == focused_entity
-                || contains_entity(children, focused_entity, &child_query)
+                || contains_owned_scroll_entity(
+                    children,
+                    focused_entity,
+                    &scroll_contents,
+                    &child_query,
+                )
             {
                 target_area = Some(area_entity);
                 break;
@@ -218,14 +271,21 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
     };
 
     area.offset = (area.offset + delta).clamp(0.0, area.max_offset);
-    apply_scroll_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
-    apply_scroll_thumb_offset(
-        children,
-        area.offset,
-        area.max_offset,
-        &mut scroll_nodes.p1(),
-        &child_query,
-    );
+    {
+        let mut content_nodes = scroll_nodes.p0();
+        apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+    }
+    {
+        let mut thumb_nodes = scroll_nodes.p1();
+        apply_scroll_thumb_offset(
+            children,
+            area.offset,
+            area.max_offset,
+            &scroll_contents,
+            &mut thumb_nodes,
+            &child_query,
+        );
+    }
 }
 
 pub(super) fn scroll_areas(
@@ -237,8 +297,9 @@ pub(super) fn scroll_areas(
         Has<UiPopupScrollArea>,
         &Children,
     )>,
+    scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
-        Query<&mut Node, With<UiScrollContent>>,
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     pointer_states: Query<(), With<HoveredUiElement>>,
@@ -284,21 +345,29 @@ pub(super) fn scroll_areas(
     };
 
     area.offset = (area.offset - wheel_delta * WHEEL_SCROLL_PIXELS).clamp(0.0, area.max_offset);
-    apply_scroll_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
-    apply_scroll_thumb_offset(
-        children,
-        area.offset,
-        area.max_offset,
-        &mut scroll_nodes.p1(),
-        &child_query,
-    );
+    {
+        let mut content_nodes = scroll_nodes.p0();
+        apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+    }
+    {
+        let mut thumb_nodes = scroll_nodes.p1();
+        apply_scroll_thumb_offset(
+            children,
+            area.offset,
+            area.max_offset,
+            &scroll_contents,
+            &mut thumb_nodes,
+            &child_query,
+        );
+    }
 }
 
 pub(super) fn drag_scroll_thumbs(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
+    scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
-        Query<&mut Node, With<UiScrollContent>>,
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     thumbs: Query<(&UiScrollThumb, Has<PressedUiElement>), With<DraggableUiElement>>,
@@ -310,7 +379,8 @@ pub(super) fn drag_scroll_thumbs(
     }
 
     for (_, mut area, children) in &mut areas {
-        let Some(thumb) = pressed_scroll_thumb(children, &thumbs, &child_query) else {
+        let Some(thumb) = pressed_scroll_thumb(children, &thumbs, &scroll_contents, &child_query)
+        else {
             continue;
         };
         if thumb.travel <= 0.0 || area.max_offset <= 0.0 {
@@ -319,21 +389,31 @@ pub(super) fn drag_scroll_thumbs(
 
         area.offset =
             (area.offset + motion_y / thumb.travel * area.max_offset).clamp(0.0, area.max_offset);
-        apply_scroll_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
-        apply_scroll_thumb_offset(
-            children,
-            area.offset,
-            area.max_offset,
-            &mut scroll_nodes.p1(),
-            &child_query,
-        );
+        {
+            let mut content_nodes = scroll_nodes.p0();
+            apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+        }
+        {
+            let mut thumb_nodes = scroll_nodes.p1();
+            apply_scroll_thumb_offset(
+                children,
+                area.offset,
+                area.max_offset,
+                &scroll_contents,
+                &mut thumb_nodes,
+                &child_query,
+            );
+        }
         return;
     }
 }
 
 pub(super) fn keep_focused_list_item_visible(
+    mut commands: Commands,
+    drag_state: Res<ScrollThumbDragState>,
     focused_items: Query<(Entity, &ComputedNode, &UiGlobalTransform), With<FocusedUiElement>>,
     added_focus: Query<(), Added<FocusedUiElement>>,
+    suppressed_focus: Query<(), With<SuppressFocusAutoScroll>>,
     focused_options: Query<&UiMultiSelectOption, With<FocusedUiElement>>,
     mut areas: Query<
         (
@@ -346,17 +426,28 @@ pub(super) fn keep_focused_list_item_visible(
         ),
         With<AutoScrollFocusedChild>,
     >,
+    scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
-        Query<&mut Node, With<UiScrollContent>>,
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     child_query: Query<&Children>,
 ) {
+    if drag_state.active || drag_state.released_this_frame {
+        return;
+    }
+
     let Some((focused_entity, focused_node, focused_transform)) = focused_items.iter().next()
     else {
         return;
     };
     if added_focus.get(focused_entity).is_err() {
+        return;
+    }
+    if suppressed_focus.get(focused_entity).is_ok() {
+        commands
+            .entity(focused_entity)
+            .remove::<SuppressFocusAutoScroll>();
         return;
     }
     let focused_option = focused_options.get(focused_entity).ok();
@@ -390,15 +481,31 @@ pub(super) fn keep_focused_list_item_visible(
         }
 
         area.offset = next_offset;
-        apply_scroll_offset(children, area.offset, &mut scroll_nodes.p0(), &child_query);
-        apply_scroll_thumb_offset(
-            children,
-            area.offset,
-            area.max_offset,
-            &mut scroll_nodes.p1(),
-            &child_query,
-        );
+        {
+            let mut content_nodes = scroll_nodes.p0();
+            apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+        }
+        {
+            let mut thumb_nodes = scroll_nodes.p1();
+            apply_scroll_thumb_offset(
+                children,
+                area.offset,
+                area.max_offset,
+                &scroll_contents,
+                &mut thumb_nodes,
+                &child_query,
+            );
+        }
         return;
+    }
+}
+
+pub(super) fn clear_focus_auto_scroll_suppression(
+    mut commands: Commands,
+    suppressed: Query<Entity, With<SuppressFocusAutoScroll>>,
+) {
+    for entity in &suppressed {
+        commands.entity(entity).remove::<SuppressFocusAutoScroll>();
     }
 }
 
@@ -445,11 +552,14 @@ fn focused_child_scroll_offset(
 
 fn scroll_content_height(
     children: &Children,
-    content_nodes: &Query<(&ComputedNode, &mut Node), With<UiScrollContent>>,
+    content_nodes: &Query<
+        (&ComputedNode, &mut Node, Has<VirtualListContent>),
+        With<UiScrollContent>,
+    >,
     child_query: &Query<&Children>,
 ) -> Option<f32> {
     for child in children {
-        if let Ok((computed, _)) = content_nodes.get(*child) {
+        if let Ok((computed, _, _)) = content_nodes.get(*child) {
             return Some(logical_height(computed));
         }
         if let Ok(grandchildren) = child_query.get(*child) {
@@ -468,12 +578,23 @@ fn logical_height(node: &ComputedNode) -> f32 {
 fn update_scroll_content_offset(
     children: &Children,
     offset: f32,
-    content_nodes: &mut Query<(&ComputedNode, &mut Node), With<UiScrollContent>>,
+    content_nodes: &mut Query<
+        (&ComputedNode, &mut Node, Has<VirtualListContent>),
+        With<UiScrollContent>,
+    >,
     child_query: &Query<&Children>,
 ) {
     for child in children {
-        if let Ok((_, mut node)) = content_nodes.get_mut(*child) {
-            node.top = px(-offset);
+        if let Ok((_, mut node, virtual_content)) = content_nodes.get_mut(*child) {
+            if virtual_content {
+                continue;
+            }
+
+            let top = px(-offset);
+            if node.top != top {
+                node.top = top;
+            }
+            continue;
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             update_scroll_content_offset(grandchildren, offset, content_nodes, child_query);
@@ -488,6 +609,7 @@ fn update_dynamic_scroll_thumb(
     max_offset: f32,
     thumb_nodes: &mut Query<(&mut UiScrollThumb, &mut Node, &ComputedNode)>,
     scrollbar_heights: &[(Entity, f32)],
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     child_query: &Query<&Children>,
 ) {
     let ratio = if max_offset <= 0.0 {
@@ -497,6 +619,10 @@ fn update_dynamic_scroll_thumb(
     };
 
     for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+
         let viewport_height = scrollbar_heights
             .iter()
             .find_map(|(entity, height)| (*entity == *child).then_some(*height))
@@ -505,9 +631,18 @@ fn update_dynamic_scroll_thumb(
         if let Ok((mut thumb, mut node, _)) = thumb_nodes.get_mut(*child) {
             let max_thumb_height = (viewport_height - SCROLLBAR_VERTICAL_PADDING).max(0.0);
             let thumb_height = thumb.height.min(max_thumb_height);
-            node.height = px(thumb_height);
-            thumb.travel = (viewport_height - thumb_height - SCROLLBAR_VERTICAL_PADDING).max(0.0);
-            node.top = px(6.0 + thumb.travel * ratio);
+            let travel = (viewport_height - thumb_height - SCROLLBAR_VERTICAL_PADDING).max(0.0);
+            let height = px(thumb_height);
+            let top = px(6.0 + travel * ratio);
+            if node.height != height {
+                node.height = height;
+            }
+            if thumb.travel != travel {
+                thumb.travel = travel;
+            }
+            if node.top != top {
+                node.top = top;
+            }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             update_dynamic_scroll_thumb(
@@ -517,6 +652,7 @@ fn update_dynamic_scroll_thumb(
                 max_offset,
                 thumb_nodes,
                 scrollbar_heights,
+                scroll_contents,
                 child_query,
             );
         }
@@ -525,27 +661,40 @@ fn update_dynamic_scroll_thumb(
 
 fn collect_scrollbar_heights(
     children: &Children,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     scrollbar_nodes: &Query<&ComputedNode, With<UiScrollbar>>,
     child_query: &Query<&Children>,
 ) -> Vec<(Entity, f32)> {
     let mut heights = Vec::new();
-    collect_scrollbar_heights_recursive(children, scrollbar_nodes, child_query, &mut heights);
+    collect_scrollbar_heights_recursive(
+        children,
+        scroll_contents,
+        scrollbar_nodes,
+        child_query,
+        &mut heights,
+    );
     heights
 }
 
 fn collect_scrollbar_heights_recursive(
     children: &Children,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     scrollbar_nodes: &Query<&ComputedNode, With<UiScrollbar>>,
     child_query: &Query<&Children>,
     heights: &mut Vec<(Entity, f32)>,
 ) {
     for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+
         if let Ok(node) = scrollbar_nodes.get(*child) {
             heights.push((*child, logical_height(node)));
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             collect_scrollbar_heights_recursive(
                 grandchildren,
+                scroll_contents,
                 scrollbar_nodes,
                 child_query,
                 heights,
@@ -618,19 +767,48 @@ fn has_focused_scrollbar_ancestor(
     }
 }
 
+fn contains_owned_scroll_entity(
+    children: &Children,
+    target: Entity,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
+    child_query: &Query<&Children>,
+) -> bool {
+    for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+        if *child == target {
+            return true;
+        }
+        if child_query.get(*child).is_ok_and(|grandchildren| {
+            contains_owned_scroll_entity(grandchildren, target, scroll_contents, child_query)
+        }) {
+            return true;
+        }
+    }
+    false
+}
+
 fn pressed_scroll_thumb<'a>(
     children: &Children,
     thumbs: &'a Query<(&UiScrollThumb, Has<PressedUiElement>), With<DraggableUiElement>>,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     child_query: &Query<&Children>,
 ) -> Option<&'a UiScrollThumb> {
     for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+
         if let Ok((thumb, pressed)) = thumbs.get(*child) {
             if pressed {
                 return Some(thumb);
             }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
-            if let Some(thumb) = pressed_scroll_thumb(grandchildren, thumbs, child_query) {
+            if let Some(thumb) =
+                pressed_scroll_thumb(grandchildren, thumbs, scroll_contents, child_query)
+            {
                 return Some(thumb);
             }
         }
@@ -734,12 +912,20 @@ fn has_hovered_descendant(
 fn apply_scroll_offset(
     children: &Children,
     offset: f32,
-    content_nodes: &mut Query<&mut Node, With<UiScrollContent>>,
+    content_nodes: &mut Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
     child_query: &Query<&Children>,
 ) {
     for child in children {
-        if let Ok(mut node) = content_nodes.get_mut(*child) {
-            node.top = px(-offset);
+        if let Ok((mut node, virtual_content)) = content_nodes.get_mut(*child) {
+            if virtual_content {
+                continue;
+            }
+
+            let top = px(-offset);
+            if node.top != top {
+                node.top = top;
+            }
+            continue;
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             apply_scroll_offset(grandchildren, offset, content_nodes, child_query);
@@ -751,6 +937,7 @@ fn apply_scroll_thumb_offset(
     children: &Children,
     offset: f32,
     max_offset: f32,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
     thumb_nodes: &mut Query<(&UiScrollThumb, &mut Node)>,
     child_query: &Query<&Children>,
 ) {
@@ -761,11 +948,25 @@ fn apply_scroll_thumb_offset(
     };
 
     for child in children {
+        if scroll_contents.contains(*child) {
+            continue;
+        }
+
         if let Ok((thumb, mut node)) = thumb_nodes.get_mut(*child) {
-            node.top = px(6.0 + thumb.travel * ratio);
+            let top = px(6.0 + thumb.travel * ratio);
+            if node.top != top {
+                node.top = top;
+            }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
-            apply_scroll_thumb_offset(grandchildren, offset, max_offset, thumb_nodes, child_query);
+            apply_scroll_thumb_offset(
+                grandchildren,
+                offset,
+                max_offset,
+                scroll_contents,
+                thumb_nodes,
+                child_query,
+            );
         }
     }
 }

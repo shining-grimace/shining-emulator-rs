@@ -4,7 +4,6 @@ Next: Step 3a
 
 For later:
 - The mobile responsiveness on all scenes needs to be sorted out so it'll work nice in portrait orientation
-- I should ask the AI to check whether there are duplicated systems or components across the project and try to merge them where it's appropriate and reduces complexity or performance overhead
 - Settings screens need to be back-navigatable somehow (add back button to all?)
 
 For theme:

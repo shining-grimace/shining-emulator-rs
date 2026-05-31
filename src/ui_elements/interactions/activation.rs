@@ -1,27 +1,26 @@
-use bevy::input::{ButtonInput, ButtonState};
+use bevy::input::ButtonInput;
 use bevy::prelude::*;
 
 use crate::app_state::AppState;
-use crate::input::events::MappedInputEvent;
-use crate::storage::input_mappings::InputAction;
 use crate::ui_elements::file_picker::{UiFilePicker, UiFilePickerActivated};
 
 use super::focus::FocusedUiElement;
 use super::multi_select::{
     MultiSelectQuery, UiMultiSelectLabel, UiMultiSelectOption, choose_multi_select_option,
-    dismiss_open_elements_for_outside_click, focus_selected_option, set_open,
+    dismiss_open_elements_for_outside_click, entities_are_inside_open_element,
+    focus_selected_option, set_open,
 };
-use super::picking::UiPointerClicked;
+use super::picking::{HoveredUiElement, UiPointerClicked};
 use super::tree::contains_entity;
+use super::ui_input::UiInputState;
 use super::visual_state::{
     ActivatedUiElement, DisabledUiElement, SelectedUiElement, UiElementKind,
 };
 
 pub(super) fn activate_controls(
     mut commands: Commands,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut clicked: MessageReader<UiPointerClicked>,
-    mut mapped_events: MessageReader<MappedInputEvent>,
+    input: Res<UiInputState>,
     mut multi_selects: MultiSelectQuery,
     options: Query<(Entity, &UiMultiSelectOption)>,
     kinds: Query<&UiElementKind>,
@@ -38,24 +37,10 @@ pub(super) fn activate_controls(
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    let mut mapped_select = false;
-    let mut mapped_quit = false;
-    for event in mapped_events.read() {
-        if event.state != ButtonState::Pressed {
-            continue;
-        }
-        match event.action {
-            InputAction::A => mapped_select = true,
-            InputAction::QuitApp => mapped_quit = true,
-            InputAction::B if *state.get() != AppState::InputMapping => mapped_quit = true,
-            _ => {}
-        }
-    }
-    let keyboard_activation = mapped_select;
+    let keyboard_activation = input.select;
     let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
-    let pointer_released = mouse_buttons.just_released(MouseButton::Left);
 
-    if mapped_quit {
+    if input.quit_app || (input.back && *state.get() != AppState::InputMapping) {
         match back_navigation_target(*state.get()) {
             Some(target) => next_state.set(target),
             None => {
@@ -180,15 +165,39 @@ pub(super) fn activate_controls(
             file_picker_activated.write(UiFilePickerActivated { picker: entity });
         }
     }
+}
 
-    if pointer_released {
-        dismiss_open_elements_for_outside_click(
-            &mut commands,
-            &clicked_entities,
-            &multi_selects,
-            &child_query,
-        );
+pub(super) fn dismiss_multi_selects_on_pointer_release(
+    mut commands: Commands,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut clicked: MessageReader<UiPointerClicked>,
+    hovered: Query<Entity, With<HoveredUiElement>>,
+    multi_selects: MultiSelectQuery,
+    child_query: Query<&Children>,
+    mut press_started_inside_open_element: Local<bool>,
+) {
+    let hovered_entities = hovered.iter().collect::<Vec<_>>();
+    if mouse_buttons.just_pressed(MouseButton::Left) {
+        *press_started_inside_open_element =
+            entities_are_inside_open_element(&hovered_entities, &multi_selects, &child_query);
     }
+
+    let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
+    if !mouse_buttons.just_released(MouseButton::Left) {
+        return;
+    }
+
+    if *press_started_inside_open_element {
+        *press_started_inside_open_element = false;
+        return;
+    }
+
+    dismiss_open_elements_for_outside_click(
+        &mut commands,
+        &clicked_entities,
+        &multi_selects,
+        &child_query,
+    );
 }
 
 fn back_navigation_target(state: AppState) -> Option<AppState> {

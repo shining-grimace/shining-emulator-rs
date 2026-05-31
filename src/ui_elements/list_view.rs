@@ -16,8 +16,6 @@ use crate::ui_elements::theme::{
     UiElementTheme, UiThemeBackgroundColor, UiThemeBorderColor, UiThemeTextColor,
 };
 
-pub const DEFAULT_VIRTUAL_ROW_POOL_SIZE: usize = 64;
-
 #[derive(Clone, Copy)]
 pub struct ListColumn {
     pub heading: &'static str,

@@ -21,6 +21,12 @@ use crate::input::systems::{
     update_game_boy_input_state,
 };
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, SystemSet)]
+pub enum InputSet {
+    Collect,
+    UpdateGameBoyState,
+}
+
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
@@ -37,9 +43,15 @@ impl Plugin for InputPlugin {
                     register_connected_controllers,
                     collect_keyboard_input,
                     collect_controller_input,
-                    update_game_boy_input_state,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(InputSet::Collect),
+            )
+            .add_systems(
+                Update,
+                update_game_boy_input_state
+                    .in_set(InputSet::UpdateGameBoyState)
+                    .after(InputSet::Collect),
             );
     }
 }

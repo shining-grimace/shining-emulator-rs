@@ -2,12 +2,10 @@ use bevy::picking::Pickable;
 use bevy::prelude::*;
 use bevy::ui::UiGlobalTransform;
 
-use crate::input::events::MappedInputEvent;
-use crate::storage::input_mappings::InputAction;
-
 use super::focus::FocusedUiElement;
 use super::scroll::UiScrollArea;
 use super::tree::contains_entity;
+use super::ui_input::UiInputState;
 use super::visual_state::{DisabledUiElement, UiElementKind};
 
 const MONOSPACE_CHARACTER_WIDTH_RATIO: f32 = 0.62;
@@ -78,13 +76,12 @@ pub(super) fn focus_list_item_on_list_focus(
 
 pub(super) fn enter_focused_list_item(
     mut commands: Commands,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut mapped_events: MessageReader<MappedInputEvent>,
+    input: Res<UiInputState>,
     focused_lists: Query<(Entity, &UiListViewFocus, &Children), With<FocusedUiElement>>,
     focusable: Query<(&UiElementKind, Has<DisabledUiElement>)>,
     child_query: Query<&Children>,
 ) {
-    if !list_enter_requested(&keys, &mut mapped_events) {
+    if !input.select {
         return;
     }
 
@@ -102,7 +99,10 @@ pub(super) fn enter_focused_list_item(
 }
 
 pub(super) fn update_list_cell_text(
-    cells: Query<(&ComputedNode, &UiListCellText, &Children)>,
+    cells: Query<
+        (&ComputedNode, &UiListCellText, &Children),
+        Or<(Changed<ComputedNode>, Changed<UiListCellText>)>,
+    >,
     mut texts: Query<&mut Text>,
 ) {
     for (node, cell, children) in &cells {
@@ -203,17 +203,6 @@ fn vertical_bounds_intersect(
     let area_bottom = area_center.y + area_half_height;
 
     item_bottom > area_top && item_top < area_bottom
-}
-
-fn list_enter_requested(
-    keys: &ButtonInput<KeyCode>,
-    mapped_events: &mut MessageReader<MappedInputEvent>,
-) -> bool {
-    keys.just_pressed(KeyCode::ArrowRight)
-        || mapped_events.read().any(|event| {
-            event.state == bevy::input::ButtonState::Pressed
-                && matches!(event.action, InputAction::A | InputAction::Dright)
-        })
 }
 
 fn remembered_or_first_list_item(

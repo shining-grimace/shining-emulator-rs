@@ -69,18 +69,24 @@ pub(super) fn update_interaction_colours(
         };
 
         if let Some(mut border) = border {
-            *border = if disabled {
+            let next_border = if disabled {
                 BorderColor::all(Color::NONE)
             } else {
                 BorderColor::all(active_colour)
             };
+            if *border != next_border {
+                *border = next_border;
+            }
         }
 
-        background.0 = if (hovered || active) && !disabled {
+        let next_background = if (hovered || active) && !disabled {
             colours.hover_fill
         } else {
             colours.fill
         };
+        if background.0 != next_background {
+            background.0 = next_background;
+        }
 
         if let Some(children) = children.filter(|_| *kind != UiElementKind::List) {
             update_label_colours(
@@ -109,7 +115,9 @@ fn update_label_colours(
 ) {
     for child in children {
         if let Ok(mut text_colour) = labels.get_mut(*child) {
-            text_colour.0 = colour;
+            if text_colour.0 != colour {
+                text_colour.0 = colour;
+            }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             update_label_colours(grandchildren, colour, labels, child_query);
@@ -125,7 +133,9 @@ fn update_accent_colours(
 ) {
     for child in children {
         if let Ok(mut background) = accents.get_mut(*child) {
-            background.0 = colour;
+            if background.0 != colour {
+                background.0 = colour;
+            }
         }
         if let Ok(grandchildren) = child_query.get(*child) {
             update_accent_colours(grandchildren, colour, accents, child_query);

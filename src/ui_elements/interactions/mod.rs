@@ -6,6 +6,7 @@ mod picking;
 mod scroll;
 mod text_input;
 pub(crate) mod tree;
+mod ui_input;
 mod visual_state;
 
 use bevy::prelude::*;
@@ -24,12 +25,15 @@ impl Plugin for UiInteractionsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<focus::LastFocusedUiElement>()
             .init_resource::<Clipboard>()
+            .init_resource::<ui_input::UiInputState>()
+            .init_resource::<scroll::ScrollThumbDragState>()
             .add_message::<picking::UiPointerClicked>()
             .add_message::<crate::ui_elements::file_picker::UiFilePickerActivated>()
             .add_observer(focus::bind_focus_nav_ids)
             .add_systems(
                 Update,
                 (
+                    ui_input::collect_ui_input_state.after(crate::input::InputSet::Collect),
                     (
                         focus::ensure_initial_focus,
                         focus::focus_pressed_element,
@@ -42,6 +46,7 @@ impl Plugin for UiInteractionsPlugin {
                         crate::ui_elements::file_picker::update_file_picker_hover_colours,
                         text_input::edit_text_inputs,
                         activation::activate_controls,
+                        activation::dismiss_multi_selects_on_pointer_release,
                         focus::restore_focus_from_input,
                     )
                         .chain(),
@@ -57,8 +62,10 @@ impl Plugin for UiInteractionsPlugin {
                         scroll::update_scroll_thumb_colours,
                         scroll::scroll_focused_scrollbar_by_keys,
                         scroll::scroll_areas,
+                        scroll::track_scroll_thumb_drag,
                         scroll::drag_scroll_thumbs,
                         scroll::keep_focused_list_item_visible,
+                        scroll::clear_focus_auto_scroll_suppression,
                         text_input::update_text_input_text,
                         focus::remember_focused_element,
                     )

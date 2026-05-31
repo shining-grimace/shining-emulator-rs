@@ -1,11 +1,9 @@
 use bevy::prelude::*;
 
-use crate::input::events::MappedInputEvent;
-use crate::storage::input_mappings::InputAction;
-
 use super::list_view::SuppressListItemFocusRedirect;
-use super::picking::UiPointerClicked;
+use super::picking::{HoveredUiElement, UiPointerClicked};
 use super::scroll::UiScrollArea;
+use super::ui_input::{UiInputDirection, UiInputState};
 use super::visual_state::{DisabledUiElement, UiElementKind};
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
@@ -116,9 +114,16 @@ pub(super) fn ensure_initial_focus(
 
 pub(super) fn restore_focus_from_input(
     mut commands: Commands,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut mapped_events: MessageReader<MappedInputEvent>,
+    input: Res<UiInputState>,
     focused: Query<(), With<FocusedUiElement>>,
+    added_initial_focus: Query<
+        (Entity, &InitialFocus),
+        (
+            Added<InitialFocus>,
+            With<UiFocusNav>,
+            Without<DisabledUiElement>,
+        ),
+    >,
     candidates: Query<
         (
             Entity,
@@ -133,13 +138,19 @@ pub(super) fn restore_focus_from_input(
     >,
     mut last_focused: ResMut<LastFocusedUiElement>,
 ) {
-    if !focused.is_empty() || !focus_recovery_requested(&keys, &mut mapped_events) {
+    if !focused.is_empty() || !input.focus_recovery_requested() {
         return;
     }
 
-    let target = last_focused
-        .entity
+    let target = added_initial_focus
+        .iter()
+        .find_map(|(entity, initial)| initial.enabled.then_some(entity))
         .and_then(|entity| focusable_entity(entity, &candidates))
+        .or_else(|| {
+            last_focused
+                .entity
+                .and_then(|entity| focusable_entity(entity, &candidates))
+        })
         .or_else(|| default_focus_target(&candidates))
         .or_else(|| initial_focus_target(&candidates));
 
@@ -163,7 +174,7 @@ pub(super) fn remember_focused_element(
 
 pub(super) fn navigate_focus(
     mut commands: Commands,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: Res<UiInputState>,
     focused: Query<(Entity, &UiFocusNav, &UiElementKind), With<FocusedUiElement>>,
     candidates: Query<(
         &UiFocusNav,
@@ -175,7 +186,7 @@ pub(super) fn navigate_focus(
     child_query: Query<&Children>,
     parents: Query<&ChildOf>,
 ) {
-    let Some(request) = requested_target(&keys, &focused) else {
+    let Some(request) = requested_target(&input, &focused) else {
         return;
     };
 
@@ -233,6 +244,7 @@ pub(super) fn focus_pressed_element(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut clicked: MessageReader<UiPointerClicked>,
     focusable: Query<&UiElementKind, (With<UiFocusNav>, Without<DisabledUiElement>)>,
+    hovered: Query<Entity, With<HoveredUiElement>>,
     focused: Query<Entity, With<FocusedUiElement>>,
 ) {
     let clicked = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
@@ -240,6 +252,10 @@ pub(super) fn focus_pressed_element(
     if mouse_buttons.just_pressed(MouseButton::Left)
         && !clicked.iter().any(|entity| focusable.get(*entity).is_ok())
     {
+        if hovered.iter().next().is_some() {
+            return;
+        }
+
         for entity in &focused {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
@@ -260,32 +276,6 @@ pub(super) fn focus_pressed_element(
         commands.entity(entity).insert(FocusedUiElement);
         return;
     }
-}
-
-fn focus_recovery_requested(
-    keys: &ButtonInput<KeyCode>,
-    mapped_events: &mut MessageReader<MappedInputEvent>,
-) -> bool {
-    if keys.any_just_pressed([
-        KeyCode::ArrowUp,
-        KeyCode::ArrowRight,
-        KeyCode::ArrowDown,
-        KeyCode::ArrowLeft,
-    ]) {
-        return true;
-    }
-
-    mapped_events.read().any(|event| {
-        event.state == bevy::input::ButtonState::Pressed
-            && matches!(
-                event.action,
-                InputAction::Dup
-                    | InputAction::Dright
-                    | InputAction::Ddown
-                    | InputAction::Dleft
-                    | InputAction::A
-            )
-    })
 }
 
 fn focusable_entity(
@@ -357,22 +347,19 @@ fn initial_focus_target(
 }
 
 fn requested_target(
-    keys: &ButtonInput<KeyCode>,
+    input: &UiInputState,
     focused: &Query<(Entity, &UiFocusNav, &UiElementKind), With<FocusedUiElement>>,
 ) -> Option<FocusRequest> {
     let (entity, nav, kind) = focused.iter().next()?;
 
-    let (direction, target) = if keys.just_pressed(KeyCode::ArrowUp) {
-        focus_target(FocusDirection::Up, nav.up)
-    } else if *kind != UiElementKind::TextInput && keys.just_pressed(KeyCode::ArrowRight) {
-        focus_target(FocusDirection::Right, nav.right)
-    } else if keys.just_pressed(KeyCode::ArrowDown) {
-        focus_target(FocusDirection::Down, nav.down)
-    } else if *kind != UiElementKind::TextInput && keys.just_pressed(KeyCode::ArrowLeft) {
-        focus_target(FocusDirection::Left, nav.left)
-    } else {
-        None
-    }?;
+    let direction = match input.direction()? {
+        UiInputDirection::Up => FocusDirection::Up,
+        UiInputDirection::Right if *kind != UiElementKind::TextInput => FocusDirection::Right,
+        UiInputDirection::Down => FocusDirection::Down,
+        UiInputDirection::Left if *kind != UiElementKind::TextInput => FocusDirection::Left,
+        _ => return None,
+    };
+    let target = direction.target(nav);
 
     Some(FocusRequest {
         focused_entity: entity,
@@ -380,10 +367,6 @@ fn requested_target(
         direction,
         target,
     })
-}
-
-fn focus_target(direction: FocusDirection, target: Entity) -> Option<(FocusDirection, Entity)> {
-    Some((direction, target))
 }
 
 struct FocusRequest {

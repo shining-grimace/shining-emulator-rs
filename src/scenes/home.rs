@@ -22,13 +22,12 @@ use crate::ui_elements::info_message::{
 };
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, InitialFocus, SelectedUiElement,
-    UiElementKind, UiFocusNav, UiListCellText, UiScrollArea,
+    SuppressFocusAutoScroll, UiElementKind, UiFocusNav, UiListCellText, UiScrollArea,
 };
 use crate::ui_elements::list_view::{
-    DEFAULT_VIRTUAL_ROW_POOL_SIZE, ListColumn, ListRow, ListViewConfig, VirtualListContent,
-    VirtualListRow, VirtualListScrollArea, VirtualListWindow, collect_list_item_entities,
-    list_view, set_list_row_cells, virtual_list_content_height, virtual_list_rows,
-    virtual_list_window,
+    ListColumn, ListRow, ListViewConfig, VirtualListContent, VirtualListRow, VirtualListScrollArea,
+    VirtualListWindow, collect_list_item_entities, list_view, set_list_row_cells,
+    virtual_list_content_height, virtual_list_rows, virtual_list_window,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
@@ -43,6 +42,7 @@ const HOME_SORT_GROUP_GAP: f32 = 24.0;
 const AUTO_SAVE_POPUP_WIDTH: f32 = 260.0;
 const AUTO_SAVE_POPUP_LEFT: f32 = 760.0;
 const HOME_ROM_COLUMN_COUNT: usize = 5;
+const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SettingsButton;
@@ -78,6 +78,7 @@ pub struct HomeScenePlugin;
 impl Plugin for HomeScenePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HomeRomListData>()
+            .init_resource::<HomeVirtualListSyncState>()
             .add_systems(OnEnter(AppState::Home), spawn_home_scene)
             .add_systems(
                 Update,
@@ -105,9 +106,11 @@ fn spawn_home_scene(
     primary_input: Res<PrimaryInputDevice>,
     storage: Res<LocalStorage>,
     mut rom_list_data: ResMut<HomeRomListData>,
+    mut virtual_list_sync: ResMut<HomeVirtualListSyncState>,
 ) {
     rom_list_data.roms = home_roms_from_storage(&storage);
     rom_list_data.refresh_order(SortField::LastPlayed, SortField::ProviderPriority);
+    *virtual_list_sync = HomeVirtualListSyncState::default();
     commands.spawn_scene(home_scene(
         &assets,
         *theme,
@@ -164,11 +167,13 @@ fn finish_home_provider_sync(
     mut sync_messages: ResMut<ProviderSyncMessages>,
     state: Option<ResMut<HomeProviderSyncState>>,
     mut rom_list_data: ResMut<HomeRomListData>,
+    mut virtual_list_sync: ResMut<HomeVirtualListSyncState>,
     mut rows: Query<(
         Entity,
         &mut VirtualListRow,
         &Children,
         Has<FocusedUiElement>,
+        Has<SelectedUiElement>,
     )>,
     mut cells: Query<(&mut UiListCellText, &Children)>,
     mut texts: Query<&mut Text>,
@@ -197,6 +202,7 @@ fn finish_home_provider_sync(
         &mut texts,
         &child_query,
     );
+    *virtual_list_sync = HomeVirtualListSyncState::default();
 }
 
 fn handle_home_activation(
@@ -206,7 +212,7 @@ fn handle_home_activation(
     theme: Res<ActiveTheme>,
     settings_buttons: Query<(), With<SettingsButton>>,
     popup_options: Query<&ChoicePopupOption>,
-    rom_rows: Query<&VirtualListRow>,
+    rom_rows: Query<(Entity, &VirtualListRow)>,
     row_nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
     lists: Query<(&ComputedNode, &UiGlobalTransform), With<HomeRomList>>,
     popup_roots: Query<(Entity, &HomePopupRoot, &Children)>,
@@ -229,8 +235,14 @@ fn handle_home_activation(
         let popup_rom_index = popup_rom_index(entity, &popup_roots, &child_query);
         despawn_home_popups(&mut commands, &popup_roots);
         match option.option_index {
-            0 => set_latest_info_message(&mut messages, "Resume Auto-save selected."),
-            1 => set_latest_info_message(&mut messages, "Cold Boot selected."),
+            0 => {
+                set_latest_info_message(&mut messages, "Resume Auto-save selected.");
+                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+            }
+            1 => {
+                set_latest_info_message(&mut messages, "Cold Boot selected.");
+                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+            }
             2 => {
                 if let Some(rom_index) = popup_rom_index {
                     rom_data_target.rom_index = Some(rom_index);
@@ -239,9 +251,12 @@ fn handle_home_activation(
                     set_latest_info_message(&mut messages, "ROM data could not be opened.");
                 }
             }
-            _ => set_latest_info_message(&mut messages, "Launch cancelled."),
+            _ => {
+                set_latest_info_message(&mut messages, "Launch cancelled.");
+                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+            }
         }
-    } else if let Ok(row) = rom_rows.get(entity) {
+    } else if let Ok((_, row)) = rom_rows.get(entity) {
         if home_row_visible(entity, &row_nodes, &lists) {
             despawn_home_popups(&mut commands, &popup_roots);
             for entity in &focused {
@@ -254,6 +269,30 @@ fn handle_home_activation(
             ));
         }
     }
+}
+
+fn focus_home_rom_row(
+    commands: &mut Commands,
+    rom_index: Option<usize>,
+    rom_rows: &Query<(Entity, &VirtualListRow)>,
+    focused: &Query<Entity, With<FocusedUiElement>>,
+) {
+    let Some(rom_index) = rom_index else {
+        return;
+    };
+    let Some(row_entity) = rom_rows
+        .iter()
+        .find_map(|(entity, row)| (row.item_index == rom_index).then_some(entity))
+    else {
+        return;
+    };
+
+    for entity in focused {
+        if entity != row_entity {
+            commands.entity(entity).remove::<FocusedUiElement>();
+        }
+    }
+    commands.entity(row_entity).insert(FocusedUiElement);
 }
 
 fn home_scene(
@@ -432,7 +471,7 @@ fn virtual_rom_rows(roms: &[HomeRom]) -> Vec<ListRow> {
     virtual_list_rows(
         roms,
         &order,
-        DEFAULT_VIRTUAL_ROW_POOL_SIZE,
+        HOME_VIRTUAL_ROW_POOL_SIZE,
         HOME_ROM_COLUMN_COUNT,
         rom_row,
     )
@@ -480,11 +519,13 @@ fn sync_sorted_rom_rows(
         &mut VirtualListRow,
         &Children,
         Has<FocusedUiElement>,
+        Has<SelectedUiElement>,
     )>,
     mut cells: Query<(&mut UiListCellText, &Children)>,
     mut texts: Query<&mut Text>,
     child_query: Query<&Children>,
     mut rom_list_data: ResMut<HomeRomListData>,
+    mut sync_state: ResMut<HomeVirtualListSyncState>,
 ) {
     let primary_sort = primary
         .single()
@@ -494,7 +535,7 @@ fn sync_sorted_rom_rows(
         .single()
         .map(|select| SortField::from_index(select.selected))
         .unwrap_or(SortField::ProviderPriority);
-    rom_list_data.refresh_order(primary_sort, secondary_sort);
+    let order_changed = rom_list_data.refresh_order(primary_sort, secondary_sort);
     let window = scroll_areas
         .iter()
         .next()
@@ -503,22 +544,44 @@ fn sync_sorted_rom_rows(
             first_row: 0,
             content_offset: 0.0,
         });
-    for mut node in &mut virtual_contents {
-        node.top = px(-window.content_offset);
-        node.height = px(virtual_list_content_height(
-            rom_list_data.roms.len(),
-            DEFAULT_VIRTUAL_ROW_POOL_SIZE,
-        ));
+    let content_height =
+        virtual_list_content_height(rom_list_data.roms.len(), HOME_VIRTUAL_ROW_POOL_SIZE);
+    let content_moved = (sync_state.content_offset - window.content_offset).abs() > f32::EPSILON;
+    let visible_window_changed = sync_state.first_row != window.first_row || order_changed;
+    let content_height_changed = (sync_state.content_height - content_height).abs() > f32::EPSILON;
+
+    if !content_moved && !visible_window_changed && !content_height_changed {
+        return;
     }
-    refresh_home_rom_rows(
-        &mut commands,
-        &rom_list_data,
-        window.first_row,
-        &mut rows,
-        &mut cells,
-        &mut texts,
-        &child_query,
-    );
+
+    for mut node in &mut virtual_contents {
+        let top = px(-window.content_offset);
+        if node.top != top {
+            node.top = top;
+        }
+        let height = px(content_height);
+        if node.height != height {
+            node.height = height;
+        }
+    }
+
+    if visible_window_changed || content_height_changed {
+        refresh_home_rom_rows(
+            &mut commands,
+            &rom_list_data,
+            window.first_row,
+            &mut rows,
+            &mut cells,
+            &mut texts,
+            &child_query,
+        );
+    }
+
+    *sync_state = HomeVirtualListSyncState {
+        first_row: window.first_row,
+        content_offset: window.content_offset,
+        content_height,
+    };
 }
 
 fn refresh_home_rom_rows(
@@ -530,6 +593,7 @@ fn refresh_home_rom_rows(
         &mut VirtualListRow,
         &Children,
         Has<FocusedUiElement>,
+        Has<SelectedUiElement>,
     )>,
     cells: &mut Query<(&mut UiListCellText, &Children)>,
     texts: &mut Query<&mut Text>,
@@ -537,11 +601,19 @@ fn refresh_home_rom_rows(
 ) {
     let focused_item_index = rows
         .iter()
-        .find_map(|(_, row, _, focused)| focused.then_some(row.item_index))
+        .find_map(|(_, row, _, focused, _)| focused.then_some(row.item_index))
+        .filter(|item_index| *item_index != usize::MAX);
+    let current_focused_entity = rows
+        .iter()
+        .find_map(|(entity, _, _, focused, _)| focused.then_some(entity));
+    let selected_item_index = rows
+        .iter()
+        .find_map(|(_, row, _, _, selected)| selected.then_some(row.item_index))
         .filter(|item_index| *item_index != usize::MAX);
     let mut next_focused_entity = None;
+    let mut next_selected_entity = None;
 
-    for (entity, mut row, children, _) in &mut *rows {
+    for (entity, mut row, children, _, _) in &mut *rows {
         let Some(rom_index) = rom_list_data.order.get(first_visible + row.slot).copied() else {
             if row.item_index != usize::MAX {
                 row.item_index = usize::MAX;
@@ -558,6 +630,9 @@ fn refresh_home_rom_rows(
         if focused_item_index == Some(rom_index) {
             next_focused_entity = Some(entity);
         }
+        if selected_item_index == Some(rom_index) {
+            next_selected_entity = Some(entity);
+        }
         if row.item_index == rom_index {
             continue;
         }
@@ -568,20 +643,26 @@ fn refresh_home_rom_rows(
         update_row_cells(rom, children, &mut *cells, &mut *texts, &child_query);
     }
 
-    if focused_item_index.is_none() {
-        return;
-    }
-    let Some(next_focused_entity) = next_focused_entity else {
-        return;
-    };
-    for (entity, _, _, focused) in rows {
-        if focused && entity != next_focused_entity {
+    for (entity, _, _, focused, selected) in rows {
+        if focused && Some(entity) != next_focused_entity {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
+        if selected && Some(entity) != next_selected_entity {
+            commands.entity(entity).remove::<SelectedUiElement>();
+        }
     }
-    commands
-        .entity(next_focused_entity)
-        .insert(FocusedUiElement);
+    if let Some(next_focused_entity) = next_focused_entity {
+        let mut entity_commands = commands.entity(next_focused_entity);
+        entity_commands.insert(FocusedUiElement);
+        if Some(next_focused_entity) != current_focused_entity {
+            entity_commands.insert(SuppressFocusAutoScroll);
+        }
+    }
+    if let Some(next_selected_entity) = next_selected_entity {
+        commands
+            .entity(next_selected_entity)
+            .insert(SelectedUiElement);
+    }
 }
 
 fn update_row_cells(
@@ -611,7 +692,7 @@ fn refresh_home_status_message(
         return;
     };
 
-    text.0 = if !sync_messages.failures.is_empty() {
+    let next_text = if !sync_messages.failures.is_empty() {
         sync_messages
             .failures
             .iter()
@@ -628,6 +709,9 @@ fn refresh_home_status_message(
     } else {
         String::new()
     };
+    if text.0 != next_text {
+        text.0 = next_text;
+    }
 }
 
 fn auto_save_popup_scene(
@@ -812,18 +896,26 @@ struct HomeRomListData {
 }
 
 impl HomeRomListData {
-    fn refresh_order(&mut self, primary_sort: SortField, secondary_sort: SortField) {
+    fn refresh_order(&mut self, primary_sort: SortField, secondary_sort: SortField) -> bool {
         if self.primary_sort == primary_sort
             && self.secondary_sort == secondary_sort
             && self.order.len() == self.roms.len()
         {
-            return;
+            return false;
         }
 
         self.primary_sort = primary_sort;
         self.secondary_sort = secondary_sort;
         self.order = sorted_rom_indices(&self.roms, primary_sort, secondary_sort);
+        true
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Resource)]
+struct HomeVirtualListSyncState {
+    first_row: usize,
+    content_offset: f32,
+    content_height: f32,
 }
 
 #[derive(Clone, Debug)]
