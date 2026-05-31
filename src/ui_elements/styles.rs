@@ -9,7 +9,6 @@ pub const UI_BORDER_WIDTH: f32 = 2.0;
 pub const UI_ELEMENT_HEIGHT: f32 = 48.0;
 pub const UI_LIST_ROW_HEIGHT: f32 = UI_ELEMENT_HEIGHT;
 pub const UI_BUTTON_WIDTH: f32 = 208.0;
-pub const UI_TEXT_INPUT_WIDTH: f32 = 360.0;
 pub const UI_MULTI_SELECT_WIDTH: f32 = 260.0;
 pub const UI_FILE_PICKER_WIDTH: f32 = 480.0;
 pub const UI_LIST_HEIGHT: f32 = 248.0;

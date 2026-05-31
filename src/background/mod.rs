@@ -24,7 +24,6 @@ impl Plugin for BackgroundPlugin {
         app.init_resource::<BackgroundDisplay>()
             .add_systems(OnEnter(AppState::Loading), fade_background_out)
             .add_systems(OnEnter(AppState::Splash), fade_background_out)
-            .add_systems(OnEnter(AppState::InterfaceDemo), fade_background_in)
             .add_systems(OnEnter(AppState::Home), fade_background_in)
             .add_systems(OnEnter(AppState::Settings), fade_background_in)
             .add_systems(OnEnter(AppState::InputMapping), fade_background_in)

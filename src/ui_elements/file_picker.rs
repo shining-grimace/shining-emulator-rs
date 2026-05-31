@@ -43,15 +43,6 @@ pub struct UiFilePickerActivated {
     pub picker: Entity,
 }
 
-pub fn file_picker(
-    font: Handle<Font>,
-    placeholder: &'static str,
-    theme: ActiveTheme,
-    nav: UiFocusNav,
-) -> impl Scene {
-    file_picker_with_value(font, placeholder, String::new(), theme, nav)
-}
-
 pub fn file_picker_with_value(
     font: Handle<Font>,
     placeholder: &'static str,

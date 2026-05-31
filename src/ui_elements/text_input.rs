@@ -8,29 +8,10 @@ use crate::ui_elements::interactions::{
     UiTextInput, UiTextInputText,
 };
 use crate::ui_elements::styles::{
-    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_TEXT_INPUT_WIDTH, control_fill,
-    hover_fill, ui_border, ui_radius,
+    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, control_fill, hover_fill, ui_border,
+    ui_radius,
 };
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
-
-pub fn text_input(
-    font: Handle<Font>,
-    label: &'static str,
-    theme: ActiveTheme,
-    nav: UiFocusNav,
-) -> impl Scene {
-    text_input_with_value(font, label, String::new(), theme, nav)
-}
-
-pub fn text_input_with_value(
-    font: Handle<Font>,
-    label: &'static str,
-    value: String,
-    theme: ActiveTheme,
-    nav: UiFocusNav,
-) -> impl Scene {
-    text_input_with_value_width(font, label, value, theme, nav, px(UI_TEXT_INPUT_WIDTH))
-}
 
 pub fn text_input_with_value_width(
     font: Handle<Font>,

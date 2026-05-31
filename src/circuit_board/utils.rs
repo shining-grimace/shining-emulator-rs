@@ -24,7 +24,7 @@ pub(super) enum SegmentRole {
 }
 
 pub(super) const CIRCUIT_SCREEN_NODES: [AppState; 7] = [
-    AppState::InterfaceDemo,
+    AppState::Home,
     AppState::Settings,
     AppState::InputMapping,
     AppState::RomProvider,
@@ -36,8 +36,7 @@ pub(super) const CIRCUIT_SCREEN_NODES: [AppState; 7] = [
 pub(crate) fn screen_has_circuit_board(screen: AppState) -> bool {
     matches!(
         screen,
-        AppState::InterfaceDemo
-            | AppState::Home
+        AppState::Home
             | AppState::Settings
             | AppState::InputMapping
             | AppState::RomProvider
@@ -47,10 +46,7 @@ pub(crate) fn screen_has_circuit_board(screen: AppState) -> bool {
 }
 
 pub(super) fn display_node_for_screen(screen: AppState) -> AppState {
-    match screen {
-        AppState::Home => AppState::InterfaceDemo,
-        screen => screen,
-    }
+    screen
 }
 
 pub(super) fn move_toward(current: f32, target: f32, max_delta: f32) -> f32 {
@@ -212,7 +208,7 @@ pub(super) fn schematic_segments(
     node_rects: &[(AppState, Rect)],
     window_size: Vec2,
 ) -> Vec<LineSegment> {
-    let input_rect = node_rect(node_rects, AppState::InterfaceDemo, window_size);
+    let input_rect = node_rect(node_rects, AppState::Home, window_size);
     let settings_rect = node_rect(node_rects, AppState::Settings, window_size);
     let mapping_rect = node_rect(node_rects, AppState::InputMapping, window_size);
     let provider_rect = node_rect(node_rects, AppState::RomProvider, window_size);
@@ -421,7 +417,7 @@ fn push_multiplexer(segments: &mut Vec<LineSegment>, center: Vec2, width: f32, h
 
 fn base_position(screen: AppState) -> Vec2 {
     match screen {
-        AppState::InterfaceDemo | AppState::Home => Vec2::new(-410.0, 0.0),
+        AppState::Home => Vec2::new(-410.0, 0.0),
         AppState::Settings => Vec2::new(-150.0, 0.0),
         AppState::InputMapping => Vec2::new(90.0, 176.0),
         AppState::RomProvider => Vec2::new(90.0, 72.0),
@@ -539,12 +535,9 @@ mod tests {
     }
 
     #[test]
-    fn home_and_interface_demo_share_the_left_screen_node() {
+    fn home_is_the_left_screen_node() {
         let window_size = Vec2::new(1280.0, 720.0);
-        assert_eq!(
-            base_rect(AppState::Home, window_size),
-            base_rect(AppState::InterfaceDemo, window_size)
-        );
+        assert!(base_rect(AppState::Home, window_size).center().x < 0.0);
     }
 
     #[test]

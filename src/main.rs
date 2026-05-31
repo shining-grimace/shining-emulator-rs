@@ -50,7 +50,6 @@ fn main() {
             ui_elements::interactions::UiInteractionsPlugin,
             ui_elements::choice_popup::ChoicePopupPlugin,
             scenes::home::HomeScenePlugin,
-            scenes::interface_demo::InterfaceDemoScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,
             scenes::loading::LoadingScenePlugin,
             scenes::rom_provider::RomProviderScenePlugin,

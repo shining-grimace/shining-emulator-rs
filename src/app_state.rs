@@ -7,7 +7,6 @@ pub enum AppState {
     #[default]
     Loading,
     Splash,
-    InterfaceDemo,
     Home,
     Settings,
     InputMapping,

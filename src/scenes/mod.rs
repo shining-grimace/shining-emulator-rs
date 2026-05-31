@@ -1,7 +1,6 @@
 pub mod audio_settings;
 pub mod home;
 pub mod input_mapping;
-pub mod interface_demo;
 pub mod loading;
 pub mod rom_data;
 pub mod rom_provider;
