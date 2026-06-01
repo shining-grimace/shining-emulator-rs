@@ -1,0 +1,9 @@
+[package]
+name = "desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { workspace = true, features = ["system_clipboard"] }
+app = { path = "../app" }
+rfd = { version = "0.15.4", default-features = false, features = ["async-std", "xdg-portal"] }

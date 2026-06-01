@@ -43,6 +43,12 @@ pub struct UiFilePickerActivated {
     pub picker: Entity,
 }
 
+#[derive(Clone, Debug, Message)]
+pub struct UiFilePickerResult {
+    pub picker: Entity,
+    pub value: String,
+}
+
 pub fn file_picker_with_value(
     font: Handle<Font>,
     placeholder: &'static str,
@@ -237,8 +243,8 @@ pub(crate) fn update_file_picker_hover_colours(
     }
 }
 
-pub(crate) fn drain_file_picker_activations(
-    mut activations: MessageReader<UiFilePickerActivated>,
+pub(crate) fn apply_file_picker_results(
+    mut results: MessageReader<UiFilePickerResult>,
     mut pickers: Query<(
         &mut UiFilePicker,
         Has<UiDirectoryPicker>,
@@ -248,40 +254,36 @@ pub(crate) fn drain_file_picker_activations(
     mut values: Query<(Entity, &UiFilePickerValue, &mut Text)>,
     child_query: Query<&Children>,
 ) {
-    for activation in activations.read() {
-        let Ok((mut picker, directory, audio_file, picker_children)) =
-            pickers.get_mut(activation.picker)
-        else {
+    for result in results.read() {
+        let Ok((mut picker, _, _, picker_children)) = pickers.get_mut(result.picker) else {
             continue;
         };
-        let dialog = rfd::FileDialog::new();
-        let path = if directory {
-            dialog.set_title("Choose ROM directory").pick_folder()
-        } else if audio_file {
-            dialog
-                .set_title("Choose WAV sample (*.wav)")
-                .add_filter("WAV audio", &["wav"])
-                .pick_file()
-        } else {
-            dialog
-                .set_title("Choose GameBoy ROM (*.gb, *.gbc)")
-                .add_filter("GameBoy ROM", &["gb", "gbc"])
-                .pick_file()
-        };
-        let Some(path) = path else {
-            continue;
-        };
+        apply_file_picker_value(
+            result.picker,
+            &mut picker,
+            picker_children,
+            &result.value,
+            &mut values,
+            &child_query,
+        );
+    }
+}
 
-        let path = path.canonicalize().unwrap_or(path);
-        let path = path.display().to_string();
-        picker.value = path.clone();
-        for (entity, value, mut text) in &mut values {
-            if value.picker == activation.picker
-                || picker_children
-                    .is_some_and(|children| contains_entity(children, entity, &child_query))
-            {
-                text.0 = trailing_text(&path, FILE_PICKER_VISIBLE_CHARS);
-            }
+fn apply_file_picker_value(
+    picker_entity: Entity,
+    picker: &mut UiFilePicker,
+    picker_children: Option<&Children>,
+    value: &str,
+    values: &mut Query<(Entity, &UiFilePickerValue, &mut Text)>,
+    child_query: &Query<&Children>,
+) {
+    picker.value = value.to_string();
+    for (entity, picker_value, mut text) in values {
+        if picker_value.picker == picker_entity
+            || picker_children
+                .is_some_and(|children| contains_entity(children, entity, child_query))
+        {
+            text.0 = trailing_text(value, FILE_PICKER_VISIBLE_CHARS);
         }
     }
 }

@@ -29,6 +29,7 @@ impl Plugin for UiInteractionsPlugin {
             .init_resource::<scroll::ScrollThumbDragState>()
             .add_message::<picking::UiPointerClicked>()
             .add_message::<crate::ui_elements::file_picker::UiFilePickerActivated>()
+            .add_message::<crate::ui_elements::file_picker::UiFilePickerResult>()
             .add_observer(focus::bind_focus_nav_ids)
             .add_systems(
                 Update,
@@ -39,6 +40,7 @@ impl Plugin for UiInteractionsPlugin {
                         focus::focus_pressed_element,
                         focus::navigate_focus,
                         picking::setup_pointer_tracking,
+                        scroll::setup_scroll_drag_tracking,
                         picking::apply_picking_markers,
                         picking::sync_pointer_states,
                         picking::clear_activation_markers,
@@ -51,7 +53,7 @@ impl Plugin for UiInteractionsPlugin {
                     )
                         .chain(),
                     (
-                        crate::ui_elements::file_picker::drain_file_picker_activations,
+                        crate::ui_elements::file_picker::apply_file_picker_results,
                         list_view::focus_list_item_on_list_focus,
                         list_view::enter_focused_list_item,
                         list_view::remember_focused_list_item,
@@ -62,9 +64,8 @@ impl Plugin for UiInteractionsPlugin {
                         scroll::update_scroll_thumb_colours,
                         scroll::scroll_focused_scrollbar_by_keys,
                         scroll::scroll_areas,
-                        scroll::track_scroll_thumb_drag,
-                        scroll::drag_scroll_thumbs,
                         scroll::keep_focused_list_item_visible,
+                        scroll::clear_scroll_thumb_drag_release,
                         scroll::clear_focus_auto_scroll_suppression,
                         text_input::update_text_input_text,
                         focus::remember_focused_element,

@@ -1,11 +1,11 @@
-use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use crate::ui_elements::list_view::{VirtualListContent, VirtualListRow};
 
 use super::focus::FocusedUiElement;
 use super::multi_select::UiMultiSelectOption;
-use super::picking::{DraggableUiElement, HoveredUiElement, PressedUiElement};
+use super::picking::{DraggableUiElement, HoveredUiElement};
 use super::tree::contains_entity;
 use super::visual_state::UiElementKind;
 
@@ -206,17 +206,21 @@ fn update_scrollbar_visibility(
     }
 }
 
-pub(super) fn track_scroll_thumb_drag(
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    pressed_thumbs: Query<(), (With<UiScrollThumb>, With<PressedUiElement>)>,
-    mut state: ResMut<ScrollThumbDragState>,
+pub(super) fn setup_scroll_drag_tracking(
+    mut commands: Commands,
+    scroll_areas: Query<Entity, Added<UiScrollArea>>,
+    thumbs: Query<Entity, (Added<UiScrollThumb>, With<DraggableUiElement>)>,
 ) {
-    state.released_this_frame = state.active && mouse_buttons.just_released(MouseButton::Left);
+    for entity in &scroll_areas {
+        commands.entity(entity).observe(drag_scroll_area);
+    }
 
-    if !pressed_thumbs.is_empty() {
-        state.active = true;
-    } else if !mouse_buttons.pressed(MouseButton::Left) {
-        state.active = false;
+    for entity in &thumbs {
+        commands
+            .entity(entity)
+            .observe(start_scroll_thumb_drag)
+            .observe(drag_scroll_thumb)
+            .observe(end_scroll_thumb_drag);
     }
 }
 
@@ -371,6 +375,34 @@ pub(super) fn scroll_areas(
     }
 }
 
+fn drag_scroll_area(
+    mut event: On<Pointer<Drag>>,
+    thumb_targets: Query<(), With<UiScrollThumb>>,
+    mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
+    scroll_contents: Query<(), With<UiScrollContent>>,
+    mut scroll_nodes: ParamSet<(
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
+        Query<(&UiScrollThumb, &mut Node)>,
+    )>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
+    child_query: Query<&Children>,
+) {
+    if thumb_targets.contains(event.original_event_target()) {
+        return;
+    }
+
+    event.propagate(false);
+    scroll_area_by_delta(
+        event.entity,
+        -event.delta.y,
+        &mut areas,
+        &scroll_contents,
+        &mut scroll_nodes,
+        &virtual_rows,
+        &child_query,
+    );
+}
+
 fn can_scroll_wheel(area: &UiScrollArea, wheel_delta: f32) -> bool {
     if area.max_offset <= 0.0 {
         return false;
@@ -401,57 +433,62 @@ fn hierarchy_depth(entity: Entity, parents: &Query<&ChildOf>) -> usize {
     depth
 }
 
-pub(super) fn drag_scroll_thumbs(
-    mut mouse_motion: MessageReader<MouseMotion>,
+fn start_scroll_thumb_drag(
+    mut event: On<Pointer<DragStart>>,
+    mut state: ResMut<ScrollThumbDragState>,
+) {
+    event.propagate(false);
+    state.active = true;
+    state.released_this_frame = false;
+}
+
+fn drag_scroll_thumb(
+    mut event: On<Pointer<Drag>>,
+    mut state: ResMut<ScrollThumbDragState>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
     scroll_contents: Query<(), With<UiScrollContent>>,
     mut scroll_nodes: ParamSet<(
         Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
-    thumbs: Query<(&UiScrollThumb, Has<PressedUiElement>), With<DraggableUiElement>>,
+    thumbs: Query<&UiScrollThumb, With<DraggableUiElement>>,
     virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
-    let motion_y = mouse_motion.read().map(|event| event.delta.y).sum::<f32>();
-    if motion_y == 0.0 {
-        return;
-    }
+    event.propagate(false);
+    state.active = true;
+    state.released_this_frame = false;
 
-    for (_, mut area, children) in &mut areas {
-        let Some(thumb) = pressed_scroll_thumb(children, &thumbs, &scroll_contents, &child_query)
-        else {
+    let Ok(thumb) = thumbs.get(event.entity) else {
+        return;
+    };
+
+    for (area_entity, area, children) in &mut areas {
+        if !contains_owned_scroll_entity(children, event.entity, &scroll_contents, &child_query) {
             continue;
-        };
+        }
         if thumb.travel <= 0.0 || area.max_offset <= 0.0 {
             return;
         }
 
-        area.offset =
-            (area.offset + motion_y / thumb.travel * area.max_offset).clamp(0.0, area.max_offset);
-        {
-            let mut content_nodes = scroll_nodes.p0();
-            apply_scroll_offset(
-                children,
-                area.offset,
-                &mut content_nodes,
-                &virtual_rows,
-                &child_query,
-            );
-        }
-        {
-            let mut thumb_nodes = scroll_nodes.p1();
-            apply_scroll_thumb_offset(
-                children,
-                area.offset,
-                area.max_offset,
-                &scroll_contents,
-                &mut thumb_nodes,
-                &child_query,
-            );
-        }
+        let delta = event.delta.y / thumb.travel * area.max_offset;
+        scroll_area_by_delta(
+            area_entity,
+            delta,
+            &mut areas,
+            &scroll_contents,
+            &mut scroll_nodes,
+            &virtual_rows,
+            &child_query,
+        );
         return;
     }
+}
+
+fn end_scroll_thumb_drag(mut event: On<Pointer<DragEnd>>, mut state: ResMut<ScrollThumbDragState>) {
+    event.propagate(false);
+    state.active = false;
+    state.released_this_frame = true;
 }
 
 pub(super) fn keep_focused_list_item_visible(
@@ -559,6 +596,58 @@ pub(super) fn clear_focus_auto_scroll_suppression(
 ) {
     for entity in &suppressed {
         commands.entity(entity).remove::<SuppressFocusAutoScroll>();
+    }
+}
+
+pub(super) fn clear_scroll_thumb_drag_release(mut state: ResMut<ScrollThumbDragState>) {
+    state.released_this_frame = false;
+}
+
+fn scroll_area_by_delta(
+    target: Entity,
+    delta: f32,
+    areas: &mut Query<(Entity, &mut UiScrollArea, &Children)>,
+    scroll_contents: &Query<(), With<UiScrollContent>>,
+    scroll_nodes: &mut ParamSet<(
+        Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
+        Query<(&UiScrollThumb, &mut Node)>,
+    )>,
+    virtual_rows: &Query<(), With<VirtualListRow>>,
+    child_query: &Query<&Children>,
+) {
+    if delta == 0.0 {
+        return;
+    }
+
+    let Ok((_, mut area, children)) = areas.get_mut(target) else {
+        return;
+    };
+    let next_offset = (area.offset + delta).clamp(0.0, area.max_offset);
+    if (next_offset - area.offset).abs() <= f32::EPSILON {
+        return;
+    }
+
+    area.offset = next_offset;
+    {
+        let mut content_nodes = scroll_nodes.p0();
+        apply_scroll_offset(
+            children,
+            area.offset,
+            &mut content_nodes,
+            virtual_rows,
+            child_query,
+        );
+    }
+    {
+        let mut thumb_nodes = scroll_nodes.p1();
+        apply_scroll_thumb_offset(
+            children,
+            area.offset,
+            area.max_offset,
+            scroll_contents,
+            &mut thumb_nodes,
+            child_query,
+        );
     }
 }
 
@@ -840,33 +929,6 @@ fn contains_owned_scroll_entity(
         }
     }
     false
-}
-
-fn pressed_scroll_thumb<'a>(
-    children: &Children,
-    thumbs: &'a Query<(&UiScrollThumb, Has<PressedUiElement>), With<DraggableUiElement>>,
-    scroll_contents: &Query<(), With<UiScrollContent>>,
-    child_query: &Query<&Children>,
-) -> Option<&'a UiScrollThumb> {
-    for child in children {
-        if scroll_contents.contains(*child) {
-            continue;
-        }
-
-        if let Ok((thumb, pressed)) = thumbs.get(*child) {
-            if pressed {
-                return Some(thumb);
-            }
-        }
-        if let Ok(grandchildren) = child_query.get(*child) {
-            if let Some(thumb) =
-                pressed_scroll_thumb(grandchildren, thumbs, scroll_contents, child_query)
-            {
-                return Some(thumb);
-            }
-        }
-    }
-    None
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]

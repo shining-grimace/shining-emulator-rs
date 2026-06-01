@@ -1,0 +1,16 @@
+[package]
+name = "android"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "shiningemulator"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+bevy = { workspace = true, features = ["android-game-activity"] }
+app = { path = "../app" }
+base64 = "0.22.1"
+jni = "0.22.4"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"

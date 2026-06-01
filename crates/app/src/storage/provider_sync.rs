@@ -20,11 +20,6 @@ static HTTP_AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
     ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(HTTP_TIMEOUT_SECONDS)))
         .user_agent("shining-emulator-rs")
-        .tls_config(
-            ureq::tls::TlsConfig::builder()
-                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-                .build(),
-        )
         .build()
         .new_agent()
 });
@@ -146,6 +141,11 @@ pub fn sync_provider(provider: &RomProvider) -> Result<ProviderSyncResult, Stora
 }
 
 fn local_roms(provider_id: Uuid, path: &Path) -> Result<Vec<RomMetadata>, StorageError> {
+    #[cfg(target_os = "android")]
+    if let Some(uri) = path.to_str().filter(|path| path.starts_with("content://")) {
+        return android_content_uri_roms(provider_id, uri);
+    }
+
     if !path.is_dir() {
         return Err(StorageError::Provider(format!(
             "Local provider could not be read: {}",
@@ -180,6 +180,30 @@ fn local_roms(provider_id: Uuid, path: &Path) -> Result<Vec<RomMetadata>, Storag
     }
 
     Ok(roms)
+}
+
+#[cfg(target_os = "android")]
+fn android_content_uri_roms(
+    provider_id: Uuid,
+    uri: &str,
+) -> Result<Vec<RomMetadata>, StorageError> {
+    let files = crate::platform::read_android_local_directory_roms(uri).map_err(|error| {
+        StorageError::Provider(format!("Local provider could not be read: {uri}: {error}"))
+    })?;
+
+    Ok(files
+        .into_iter()
+        .filter(|file| is_rom_file_name(&file.file_name))
+        .map(|file| RomMetadata {
+            id: Some(rom_identifier(&file.bytes)),
+            provider_id,
+            file_name: file.file_name.clone(),
+            friendly_name: Some(file_stem_label(&file.file_name)),
+            author: None,
+            license: None,
+            remote_provider_id: None,
+        })
+        .collect())
 }
 
 fn remote_file_rom(provider_id: Uuid, url: &str) -> Result<RomMetadata, StorageError> {
@@ -342,7 +366,14 @@ fn append_query_param(url: &str, key: &str, value: usize) -> String {
 }
 
 fn is_rom_path(path: &Path) -> bool {
-    path.extension()
+    path.file_name()
+        .and_then(|file_name| file_name.to_str())
+        .is_some_and(is_rom_file_name)
+}
+
+fn is_rom_file_name(file_name: &str) -> bool {
+    Path::new(file_name)
+        .extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(), "gb" | "gbc"))
 }

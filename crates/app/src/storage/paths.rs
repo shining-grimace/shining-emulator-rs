@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(not(target_os = "android"))]
 use directories::ProjectDirs;
 
 use crate::storage::errors::StorageError;
@@ -82,12 +83,9 @@ fn app_storage_dir() -> Result<PathBuf, StorageError> {
 
 #[cfg(target_os = "android")]
 fn app_storage_dir() -> Result<PathBuf, StorageError> {
-    env::var_os("ANDROID_DATA")
-        .map(|android_data| PathBuf::from(android_data).join(APP_STORAGE_DIR_NAME))
-        .or_else(|| {
-            env::current_dir()
-                .ok()
-                .map(|dir| dir.join(APP_STORAGE_DIR_NAME))
-        })
+    bevy::android::ANDROID_APP
+        .get()
+        .and_then(|app| app.internal_data_path())
+        .map(|path| path.join(APP_STORAGE_DIR_NAME))
         .ok_or(StorageError::MissingProjectDirectory)
 }

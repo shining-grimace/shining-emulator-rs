@@ -1,6 +1,6 @@
 
-Done: Step 2n
-Next: Step 3a
+Done: Step 3a-3d
+Next: Step 4a
 
 For later:
 - The mobile responsiveness on all scenes needs to be sorted out so it'll work nice in portrait orientation
