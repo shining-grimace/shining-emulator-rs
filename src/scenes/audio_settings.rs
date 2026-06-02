@@ -23,7 +23,11 @@ use crate::ui_elements::interactions::{
     UiFocusNavIds, UiMultiSelect, UiMultiSelectLabel,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
-use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
+use crate::ui_elements::responsive::{
+    ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly, ResponsivePercentWidth,
+    ResponsivePortraitOnly, ResponsiveScreenPadding, UI_PORTRAIT_SCREEN_PADDING,
+};
+use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::styles::{
     UI_BODY_FONT_SIZE, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING,
 };
@@ -288,8 +292,10 @@ fn audio_settings_scene(
     storage: &LocalStorage,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
-    let left_font = font.clone();
+    let body_font = font.clone();
+    let landscape_font = font.clone();
     let preset = load_current_audio_preset(storage);
+    let landscape_preset = preset.clone();
 
     bsn! {
         DespawnOnExit::<AppState>(AppState::AudioSettings)
@@ -300,6 +306,7 @@ fn audio_settings_scene(
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }
+        ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
             (
                 Node {
@@ -315,33 +322,105 @@ fn audio_settings_scene(
                     (
                         Node {
                             width: percent(100),
-                            min_height: px(0.0),
                             flex_grow: 1.0,
                             flex_shrink: 1.0,
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(UI_PANEL_GAP),
+                            min_height: px(0.0),
+                            display: Display::None,
                         }
+                        ResponsiveLandscapeOnly
+                        Children [
+                            audio_landscape_body(landscape_font, theme, landscape_preset),
+                        ]
+                    ),
+                    (
+                        Node {
+                            width: percent(100),
+                            flex_grow: 1.0,
+                            flex_shrink: 1.0,
+                            min_height: px(0.0),
+                            display: Display::None,
+                        }
+                        ResponsivePortraitOnly
                         Children [
                             (
-                                #AudioScrollBar
-                                scroll_view(
+                                #AudioBodyScrollBar
+                                flow_scroll_view(
                                     theme,
-                                    #AudioScrollBar,
+                                    #AudioBodyScrollBar,
                                     ScrollViewConfig {
-                                        width: percent(LEFT_WIDTH_PERCENT),
+                                        width: percent(100),
                                         min_height: px(0.0),
                                         thumb_height: 132.0,
                                     },
-                                    move |_| audio_controls(left_font, theme, preset)
+                                    move |_| audio_body(body_font, theme, preset)
                                 )
-                            ),
-                            audio_buttons(font.clone(), theme),
+                            )
                         ]
                     ),
                     info_message(font.clone(), theme, "", false),
                     action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
                 ]
             )
+        ]
+    }
+}
+
+fn audio_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+    let controls_font = font.clone();
+    let buttons_font = font;
+
+    bsn! {
+        Node {
+            width: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(UI_PANEL_GAP),
+            padding: UiRect::right(px(18.0)),
+        }
+        ResponsiveColumns { gap: UI_PANEL_GAP }
+        Children [
+            (
+                Node {
+                    width: percent(LEFT_WIDTH_PERCENT),
+                    min_height: px(0.0),
+                }
+                ResponsivePercentWidth { landscape: LEFT_WIDTH_PERCENT }
+                Children [
+                    audio_controls(controls_font, theme, preset),
+                ]
+            ),
+            audio_buttons(buttons_font, theme),
+        ]
+    }
+}
+
+fn audio_landscape_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+    let controls_font = font.clone();
+    let buttons_font = font;
+
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(UI_PANEL_GAP),
+        }
+        Children [
+            (
+                #AudioScrollBar
+                scroll_view(
+                    theme,
+                    #AudioScrollBar,
+                    ScrollViewConfig {
+                        width: percent(LEFT_WIDTH_PERCENT),
+                        min_height: px(0.0),
+                        thumb_height: 132.0,
+                    },
+                    move |_| audio_controls(controls_font, theme, preset)
+                )
+            ),
+            audio_buttons(buttons_font, theme),
         ]
     }
 }
@@ -469,6 +548,7 @@ fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
             row_gap: px(BUTTON_GAP),
             padding: UiRect::top(px(58.0)),
         }
+        ResponsivePercentWidth { landscape: RIGHT_WIDTH_PERCENT }
         Children [
             (
                 button(font.clone(), "Save", theme, UiFocusNav::default())
@@ -506,6 +586,7 @@ fn preset_label_row(
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(18.0),
         }
+        ResponsiveFieldRow { gap: 18.0 }
         Children [
             description(font, theme, "Preset:"),
             (
@@ -544,6 +625,7 @@ fn audio_select_row(
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(18.0),
         }
+        ResponsiveFieldRow { gap: 18.0 }
         Children [
             description(font.clone(), theme, label),
             (
@@ -578,6 +660,7 @@ fn built_in_sample_row(
                 justify_content: JustifyContent::SpaceBetween,
                 column_gap: px(18.0),
             }
+            ResponsiveFieldRow { gap: 18.0 }
             DespawnOnExit::<AppState>(AppState::AudioSettings)
             AudioConditionalSection { channel: {channel}, section: SECTION_BUILT_IN_SAMPLE }
             Children [

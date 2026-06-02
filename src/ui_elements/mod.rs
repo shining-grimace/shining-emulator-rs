@@ -9,6 +9,7 @@ pub mod interactions;
 pub mod list_view;
 pub mod loading_indicator;
 pub mod multi_select;
+pub mod responsive;
 pub mod scroll_view;
 pub mod scrollbar;
 pub mod styles;

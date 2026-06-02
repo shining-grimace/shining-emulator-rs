@@ -30,6 +30,11 @@ use crate::ui_elements::list_view::{
     virtual_list_content_height, virtual_list_rows, virtual_list_window,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
+use crate::ui_elements::responsive::{
+    ResponsiveColumns, ResponsiveFlexWidth, ResponsivePxWidth, ResponsiveScreenPadding,
+    UI_PORTRAIT_SCREEN_PADDING,
+};
+use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 
 const HOME_CONTENT_GAP: f32 = 32.0;
@@ -303,6 +308,7 @@ fn home_scene(
     rom_list_data: &HomeRomListData,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
+    let side_font = font.clone();
     let initial_status = if rom_list_data.roms.is_empty() {
         "No ROMs found. Sync or add a ROM provider in Settings."
     } else {
@@ -319,6 +325,7 @@ fn home_scene(
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }
+        ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
             (
                 Node {
@@ -340,6 +347,7 @@ fn home_scene(
                             flex_direction: FlexDirection::Row,
                             column_gap: px(UI_PANEL_GAP),
                         }
+                        ResponsiveColumns { gap: UI_PANEL_GAP }
                         Children [
                             (
                                 Node {
@@ -349,6 +357,7 @@ fn home_scene(
                                     flex_direction: FlexDirection::Column,
                                     row_gap: px(HOME_MESSAGE_GAP),
                                 }
+                                ResponsiveFlexWidth { landscape: 1.0 }
                                 Children [
                                     (
                                         #RomList
@@ -366,57 +375,75 @@ fn home_scene(
                                 ]
                             ),
                             (
-                                Node {
-                                    width: px(HOME_SIDE_PANEL_WIDTH),
-                                    min_height: px(0.0),
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: px(HOME_SIDE_GROUP_GAP),
-                                }
-                                Children [
-                                    (
-                                        Node {
-                                            width: percent(100),
-                                            flex_direction: FlexDirection::Column,
-                                            row_gap: px(HOME_SORT_GROUP_GAP),
-                                        }
-                                        Children [
-                                            (
-                                                #AllSettings
-                                                button(font.clone(), "All Settings", theme, UiFocusNav::default())
-                                                SettingsButton
-                                                UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
-                                            ),
-                                        ]
-                                    ),
-                                    (
-                                        Node {
-                                            width: percent(100),
-                                            flex_direction: FlexDirection::Column,
-                                            row_gap: px(HOME_SORT_LABEL_GAP),
-                                            margin: UiRect::top(px(HOME_SIDE_TOP_GAP)),
-                                        }
-                                        Children [
-                                            description(font.clone(), theme, "Sort ROMs by:"),
-                                            (
-                                                #PrimarySort
-                                                multi_select(font.clone(), theme, sort_select_config(0))
-                                                PrimarySortSelect
-                                                UiFocusNav { up: #AllSettings, right: {Entity::PLACEHOLDER}, down: #SecondarySort, left: #RomList }
-                                            ),
-                                            description(font.clone(), theme, "Then by:"),
-                                            (
-                                                #SecondarySort
-                                                multi_select(font.clone(), theme, sort_select_config(1))
-                                                SecondarySortSelect
-                                                UiFocusNav { up: #PrimarySort, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: #RomList }
-                                            ),
-                                        ]
-                                    ),
-                                ]
+                                #HomeSideScrollBar
+                                flow_scroll_view(
+                                    theme,
+                                    #HomeSideScrollBar,
+                                    ScrollViewConfig {
+                                        width: px(HOME_SIDE_PANEL_WIDTH),
+                                        min_height: px(0.0),
+                                        thumb_height: 72.0,
+                                    },
+                                    move |_| home_side_panel(side_font, theme)
+                                )
+                                ResponsivePxWidth { landscape: HOME_SIDE_PANEL_WIDTH }
                             ),
                         ]
                     ),
                     action_hints(font, assets.icons.clone(), theme, storage, primary_input),
+                ]
+            ),
+        ]
+    }
+}
+
+fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(HOME_SIDE_GROUP_GAP),
+            padding: UiRect::right(px(18.0)),
+        }
+        Children [
+            (
+                Node {
+                    width: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(HOME_SORT_GROUP_GAP),
+                }
+                Children [
+                    (
+                        #AllSettings
+                        button(font.clone(), "All Settings", theme, UiFocusNav::default())
+                        SettingsButton
+                        UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
+                    ),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(HOME_SORT_LABEL_GAP),
+                    margin: UiRect::top(px(HOME_SIDE_TOP_GAP)),
+                }
+                Children [
+                    description(font.clone(), theme, "Sort ROMs by:"),
+                    (
+                        #PrimarySort
+                        multi_select(font.clone(), theme, sort_select_config(0))
+                        PrimarySortSelect
+                        UiFocusNav { up: #AllSettings, right: {Entity::PLACEHOLDER}, down: #SecondarySort, left: #RomList }
+                    ),
+                    description(font.clone(), theme, "Then by:"),
+                    (
+                        #SecondarySort
+                        multi_select(font, theme, sort_select_config(1))
+                        SecondarySortSelect
+                        UiFocusNav { up: #PrimarySort, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: #RomList }
+                    ),
                 ]
             ),
         ]

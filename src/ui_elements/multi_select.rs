@@ -96,17 +96,27 @@ pub fn multi_select_with_width(
         DismissOnOutsideClick
         Children [
             (
-                Text({selected_label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(label_font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
+                Node {
+                    flex_grow: 1.0,
+                    min_width: px(0.0),
+                    overflow: Overflow::clip(),
                 }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
                 IgnorePicking
-                UiMultiSelectLabel
-                TextLayout::new(Justify::Left, LineBreak::NoWrap)
+                Children [
+                    (
+                        Text({selected_label})
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(label_font)),
+                            font_size: px(UI_CONTROL_FONT_SIZE),
+                        }
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
+                        UiElementLabel
+                        IgnorePicking
+                        UiMultiSelectLabel
+                        TextLayout::new(Justify::Left, LineBreak::NoWrap)
+                    )
+                ]
             ),
             chevron_icon(theme.primary),
             (

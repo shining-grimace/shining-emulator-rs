@@ -1,7 +1,7 @@
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
 
-use crate::ui_elements::list_view::VirtualListContent;
+use crate::ui_elements::list_view::{VirtualListContent, VirtualListRow};
 
 use super::focus::FocusedUiElement;
 use super::multi_select::UiMultiSelectOption;
@@ -230,6 +230,7 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
         Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
     mut repeat: Local<KeyScrollRepeatState>,
 ) {
@@ -273,7 +274,13 @@ pub(super) fn scroll_focused_scrollbar_by_keys(
     area.offset = (area.offset + delta).clamp(0.0, area.max_offset);
     {
         let mut content_nodes = scroll_nodes.p0();
-        apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+        apply_scroll_offset(
+            children,
+            area.offset,
+            &mut content_nodes,
+            &virtual_rows,
+            &child_query,
+        );
     }
     {
         let mut thumb_nodes = scroll_nodes.p1();
@@ -303,7 +310,9 @@ pub(super) fn scroll_areas(
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     pointer_states: Query<(), With<HoveredUiElement>>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
+    parents: Query<&ChildOf>,
 ) {
     let wheel_delta = wheel_events.read().map(|event| event.y).sum::<f32>();
     if wheel_delta == 0.0 {
@@ -311,30 +320,24 @@ pub(super) fn scroll_areas(
     }
 
     let target = {
-        let mut direct_popup_hover = None;
-        let mut descendant_popup_hover = None;
-        let mut direct_hover = None;
-        let mut descendant_hover = None;
-        for (entity, _, hovered, popup_scroll, children) in &mut areas {
-            if hovered {
-                if popup_scroll {
-                    direct_popup_hover = Some(entity);
-                    break;
-                }
-                direct_hover.get_or_insert(entity);
+        let mut popup_hover = None;
+        let mut regular_hover = None;
+        for (entity, area, hovered, popup_scroll, children) in &mut areas {
+            if !hovered && !has_hovered_descendant(children, &pointer_states, &child_query) {
+                continue;
             }
-            if has_hovered_descendant(children, &pointer_states, &child_query) {
-                if popup_scroll {
-                    descendant_popup_hover.get_or_insert(entity);
-                } else {
-                    descendant_hover.get_or_insert(entity);
-                }
+            if !can_scroll_wheel(&area, wheel_delta) {
+                continue;
+            }
+
+            let candidate = (entity, hierarchy_depth(entity, &parents));
+            if popup_scroll {
+                popup_hover = deeper_scroll_candidate(popup_hover, candidate);
+            } else {
+                regular_hover = deeper_scroll_candidate(regular_hover, candidate);
             }
         }
-        direct_popup_hover
-            .or(descendant_popup_hover)
-            .or(direct_hover)
-            .or(descendant_hover)
+        popup_hover.or(regular_hover).map(|(entity, _)| entity)
     };
 
     let Some(target) = target else {
@@ -347,7 +350,13 @@ pub(super) fn scroll_areas(
     area.offset = (area.offset - wheel_delta * WHEEL_SCROLL_PIXELS).clamp(0.0, area.max_offset);
     {
         let mut content_nodes = scroll_nodes.p0();
-        apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+        apply_scroll_offset(
+            children,
+            area.offset,
+            &mut content_nodes,
+            &virtual_rows,
+            &child_query,
+        );
     }
     {
         let mut thumb_nodes = scroll_nodes.p1();
@@ -362,6 +371,36 @@ pub(super) fn scroll_areas(
     }
 }
 
+fn can_scroll_wheel(area: &UiScrollArea, wheel_delta: f32) -> bool {
+    if area.max_offset <= 0.0 {
+        return false;
+    }
+
+    let offset_delta = -wheel_delta * WHEEL_SCROLL_PIXELS;
+    (offset_delta < 0.0 && area.offset > 0.0)
+        || (offset_delta > 0.0 && area.offset < area.max_offset)
+}
+
+fn deeper_scroll_candidate(
+    current: Option<(Entity, usize)>,
+    candidate: (Entity, usize),
+) -> Option<(Entity, usize)> {
+    match current {
+        Some(current) if current.1 >= candidate.1 => Some(current),
+        _ => Some(candidate),
+    }
+}
+
+fn hierarchy_depth(entity: Entity, parents: &Query<&ChildOf>) -> usize {
+    let mut depth = 0;
+    let mut current = entity;
+    while let Ok(parent) = parents.get(current) {
+        depth += 1;
+        current = parent.0;
+    }
+    depth
+}
+
 pub(super) fn drag_scroll_thumbs(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
@@ -371,6 +410,7 @@ pub(super) fn drag_scroll_thumbs(
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
     thumbs: Query<(&UiScrollThumb, Has<PressedUiElement>), With<DraggableUiElement>>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
     let motion_y = mouse_motion.read().map(|event| event.delta.y).sum::<f32>();
@@ -391,7 +431,13 @@ pub(super) fn drag_scroll_thumbs(
             (area.offset + motion_y / thumb.travel * area.max_offset).clamp(0.0, area.max_offset);
         {
             let mut content_nodes = scroll_nodes.p0();
-            apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+            apply_scroll_offset(
+                children,
+                area.offset,
+                &mut content_nodes,
+                &virtual_rows,
+                &child_query,
+            );
         }
         {
             let mut thumb_nodes = scroll_nodes.p1();
@@ -431,6 +477,7 @@ pub(super) fn keep_focused_list_item_visible(
         Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
         Query<(&UiScrollThumb, &mut Node)>,
     )>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
     if drag_state.active || drag_state.released_this_frame {
@@ -483,7 +530,13 @@ pub(super) fn keep_focused_list_item_visible(
         area.offset = next_offset;
         {
             let mut content_nodes = scroll_nodes.p0();
-            apply_scroll_offset(children, area.offset, &mut content_nodes, &child_query);
+            apply_scroll_offset(
+                children,
+                area.offset,
+                &mut content_nodes,
+                &virtual_rows,
+                &child_query,
+            );
         }
         {
             let mut thumb_nodes = scroll_nodes.p1();
@@ -913,11 +966,16 @@ fn apply_scroll_offset(
     children: &Children,
     offset: f32,
     content_nodes: &mut Query<(&mut Node, Has<VirtualListContent>), With<UiScrollContent>>,
+    virtual_rows: &Query<(), With<VirtualListRow>>,
     child_query: &Query<&Children>,
 ) {
     for child in children {
         if let Ok((mut node, virtual_content)) = content_nodes.get_mut(*child) {
-            if virtual_content {
+            if virtual_content
+                && child_query.get(*child).is_ok_and(|children| {
+                    has_virtual_row_descendant(children, virtual_rows, child_query)
+                })
+            {
                 continue;
             }
 
@@ -928,9 +986,34 @@ fn apply_scroll_offset(
             continue;
         }
         if let Ok(grandchildren) = child_query.get(*child) {
-            apply_scroll_offset(grandchildren, offset, content_nodes, child_query);
+            apply_scroll_offset(
+                grandchildren,
+                offset,
+                content_nodes,
+                virtual_rows,
+                child_query,
+            );
         }
     }
+}
+
+fn has_virtual_row_descendant(
+    children: &Children,
+    virtual_rows: &Query<(), With<VirtualListRow>>,
+    child_query: &Query<&Children>,
+) -> bool {
+    for child in children {
+        if virtual_rows.get(*child).is_ok() {
+            return true;
+        }
+        if child_query
+            .get(*child)
+            .is_ok_and(|children| has_virtual_row_descendant(children, virtual_rows, child_query))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn apply_scroll_thumb_offset(

@@ -25,7 +25,12 @@ use crate::ui_elements::interactions::{
     UiFocusNav, UiFocusNavIds, UiMultiSelect, UiTextInput,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select_with_width};
-use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
+use crate::ui_elements::responsive::{
+    ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveFlexWidth,
+    ResponsiveLandscapeOnly, ResponsivePortraitOnly, ResponsiveScreenPadding,
+    UI_PORTRAIT_SCREEN_PADDING,
+};
+use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::styles::{UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 use crate::ui_elements::text_input::text_input_with_value_width;
 use crate::ui_elements::theme::UiThemeImageColor;
@@ -177,9 +182,11 @@ fn handle_provider_activation(
     activated: On<Add, ActivatedUiElement>,
     save_buttons: Query<(), With<ProviderSaveButton>>,
     test_buttons: Query<(), With<ProviderTestButton>>,
-    text_fields: Query<(&ProviderTextField, &UiTextInput)>,
-    file_pickers: Query<(&ProviderFilePicker, &UiFilePicker)>,
-    selects: Query<(&ProviderSelect, &UiMultiSelect)>,
+    text_fields: Query<(Entity, &ProviderTextField, &UiTextInput)>,
+    file_pickers: Query<(Entity, &ProviderFilePicker, &UiFilePicker)>,
+    selects: Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
+    nodes: Query<&Node>,
+    parents: Query<&ChildOf>,
     mut storage: ResMut<LocalStorage>,
     target: Res<RomProviderEditTarget>,
     state: Res<State<AppState>>,
@@ -198,6 +205,8 @@ fn handle_provider_activation(
             &text_fields,
             &file_pickers,
             &selects,
+            &nodes,
+            &parents,
             target.provider_index,
             &storage,
         ) {
@@ -236,6 +245,8 @@ fn handle_provider_activation(
             &text_fields,
             &file_pickers,
             &selects,
+            &nodes,
+            &parents,
             target.provider_index,
             &storage,
         ) {
@@ -278,13 +289,22 @@ fn reset_provider_test_connection(mut state: ResMut<ProviderTestConnectionState>
 }
 
 fn sync_provider_conditional_sections(
-    selects: Query<(&ProviderSelect, &UiMultiSelect)>,
-    mut sections: Query<(&ProviderConditionalSection, &mut Node)>,
+    selects: Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
+    mut nodes: ParamSet<(
+        Query<&Node>,
+        Query<(&ProviderConditionalSection, &mut Node)>,
+    )>,
+    parents: Query<&ChildOf>,
 ) {
-    let provider_type = selected_value(&selects, SELECT_TYPE);
-    let pagination_enabled = selected_value(&selects, SELECT_PAGINATION) == 0;
+    let (provider_type, pagination_enabled) = {
+        let node_query = nodes.p0();
+        (
+            selected_value(&selects, SELECT_TYPE, &node_query, &parents),
+            selected_value(&selects, SELECT_PAGINATION, &node_query, &parents) == 0,
+        )
+    };
 
-    for (section, mut node) in &mut sections {
+    for (section, mut node) in &mut nodes.p1() {
         node.display = match section.section {
             SECTION_LOCAL_DIR => display_for(provider_type == 0),
             SECTION_REMOTE_FILE => display_for(provider_type == 1),
@@ -325,6 +345,7 @@ fn rom_provider_scene(
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }
+        ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
             (
                 Node {
@@ -354,14 +375,76 @@ fn provider_form(
     provider: RomProvider,
 ) -> impl Scene {
     let left_provider = provider.clone();
-    let right_provider = provider;
-    let button_font = left_font.clone();
+    let right_provider = provider.clone();
+    let landscape_left_provider = provider.clone();
+    let landscape_right_provider = provider;
+    let landscape_left_font = left_font.clone();
+    let landscape_right_font = right_font.clone();
+    let landscape_heroes = heroes.clone();
 
     bsn! {
         Node {
             width: percent(100),
             flex_grow: 1.0,
             flex_shrink: 1.0,
+            min_height: px(0.0),
+        }
+        Children [
+            (
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    min_height: px(0.0),
+                    display: Display::None,
+                }
+                ResponsiveLandscapeOnly
+                Children [
+                    provider_landscape_body(landscape_left_font, landscape_right_font, landscape_heroes, theme, landscape_left_provider, landscape_right_provider),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: px(0.0),
+                    display: Display::None,
+                }
+                ResponsivePortraitOnly
+                Children [
+                    (
+                        #ProviderBodyScrollBar
+                        flow_scroll_view(
+                            theme,
+                            #ProviderBodyScrollBar,
+                            ScrollViewConfig {
+                                width: percent(100),
+                                min_height: px(0.0),
+                                thumb_height: 120.0,
+                            },
+                            move |_| provider_body(left_font, right_font, heroes, theme, left_provider, right_provider)
+                        )
+                    )
+                ]
+            ),
+        ]
+    }
+}
+
+fn provider_landscape_body(
+    left_font: Handle<Font>,
+    right_font: Handle<Font>,
+    heroes: Handle<Image>,
+    theme: ActiveTheme,
+    left_provider: RomProvider,
+    right_provider: RomProvider,
+) -> impl Scene {
+    let button_font = left_font.clone();
+
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
             min_height: px(0.0),
             flex_direction: FlexDirection::Row,
             column_gap: px(UI_PANEL_GAP),
@@ -432,6 +515,59 @@ fn provider_form(
     }
 }
 
+fn provider_body(
+    left_font: Handle<Font>,
+    right_font: Handle<Font>,
+    heroes: Handle<Image>,
+    theme: ActiveTheme,
+    left_provider: RomProvider,
+    right_provider: RomProvider,
+) -> impl Scene {
+    let button_font = left_font.clone();
+
+    bsn! {
+        Node {
+            width: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(UI_PANEL_GAP),
+            padding: UiRect::right(px(18.0)),
+        }
+        ResponsiveColumns { gap: UI_PANEL_GAP }
+        Children [
+            (
+                Node {
+                    width: px(0.0),
+                    min_width: px(0.0),
+                    min_height: px(0.0),
+                    flex_grow: LEFT_COLUMN_FLEX,
+                    flex_shrink: 1.0,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(CONTROL_GAP),
+                }
+                ResponsiveFlexWidth { landscape: LEFT_COLUMN_FLEX }
+                Children [
+                    provider_left_column(left_font, heroes, theme, left_provider),
+                    provider_action_buttons(button_font, theme),
+                ]
+            ),
+            (
+                Node {
+                    width: px(0.0),
+                    min_width: px(0.0),
+                    min_height: px(0.0),
+                    flex_grow: RIGHT_COLUMN_FLEX,
+                    flex_shrink: 1.0,
+                }
+                ResponsiveFlexWidth { landscape: RIGHT_COLUMN_FLEX }
+                Children [
+                    provider_right_column(right_font, theme, right_provider),
+                ]
+            ),
+        ]
+    }
+}
+
 fn provider_left_column(
     font: Handle<Font>,
     heroes: Handle<Image>,
@@ -492,6 +628,7 @@ fn provider_action_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene
             column_gap: px(BUTTON_GAP),
             padding: UiRect::right(px(22.0)),
         }
+        ResponsiveButtonRow { gap: BUTTON_GAP }
         Children [
             (
                 button(font.clone(), "Test Connection", theme, UiFocusNav::default())
@@ -714,6 +851,7 @@ fn labeled_select(
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(18.0),
         }
+        ResponsiveFieldRow { gap: 18.0 }
         Children [
             description(font.clone(), theme, label),
             (
@@ -738,6 +876,7 @@ fn pagination_controls(
             flex_direction: FlexDirection::Row,
             column_gap: px(UI_PANEL_GAP),
         }
+        ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
             (
                 Node {
@@ -746,6 +885,7 @@ fn pagination_controls(
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                 }
+                ResponsiveFlexWidth { landscape: 1.0 }
                 Children [
                     (
                         Node {
@@ -772,6 +912,7 @@ fn pagination_controls(
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                 }
+                ResponsiveFlexWidth { landscape: 1.0 }
                 Children [
                     labeled_input(font, theme, "Max pages", "Enter number...", max_pages, FIELD_MAX_PAGES, TARGET_MAX_PAGES, false),
                 ]
@@ -800,6 +941,7 @@ fn two_column_fields(
             flex_direction: FlexDirection::Row,
             column_gap: px(UI_PANEL_GAP),
         }
+        ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
             (
                 Node {
@@ -808,6 +950,7 @@ fn two_column_fields(
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                 }
+                ResponsiveFlexWidth { landscape: 1.0 }
                 Children [
                     labeled_input(font.clone(), theme, left_label, left_placeholder, left_value, left_field, left_target, false),
                 ]
@@ -819,6 +962,7 @@ fn two_column_fields(
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                 }
+                ResponsiveFlexWidth { landscape: 1.0 }
                 Children [
                     labeled_input(font, theme, right_label, right_placeholder, right_value, right_field, right_target, false),
                 ]
@@ -978,9 +1122,11 @@ fn focus_nav_ids(up: u16, right: u16, down: u16, left: u16) -> UiFocusNavIds {
 }
 
 fn provider_from_form(
-    text_fields: &Query<(&ProviderTextField, &UiTextInput)>,
-    file_pickers: &Query<(&ProviderFilePicker, &UiFilePicker)>,
-    selects: &Query<(&ProviderSelect, &UiMultiSelect)>,
+    text_fields: &Query<(Entity, &ProviderTextField, &UiTextInput)>,
+    file_pickers: &Query<(Entity, &ProviderFilePicker, &UiFilePicker)>,
+    selects: &Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
     provider_index: Option<usize>,
     storage: &LocalStorage,
 ) -> Result<RomProvider, crate::storage::errors::StorageError> {
@@ -988,53 +1134,89 @@ fn provider_from_form(
     provider_from_form_input(
         existing,
         RomProviderFormInput {
-            friendly_name: field_value(text_fields, FIELD_NAME),
-            priority: (selected_value(selects, SELECT_PRIORITY) + 1).to_string(),
-            enabled: selected_value(selects, SELECT_STATUS) == 0,
-            source_kind: match selected_value(selects, SELECT_TYPE) {
+            friendly_name: field_value(text_fields, FIELD_NAME, nodes, parents),
+            priority: (selected_value(selects, SELECT_PRIORITY, nodes, parents) + 1).to_string(),
+            enabled: selected_value(selects, SELECT_STATUS, nodes, parents) == 0,
+            source_kind: match selected_value(selects, SELECT_TYPE, nodes, parents) {
                 0 => RomProviderSourceKind::LocalDirectory,
                 1 => RomProviderSourceKind::RemoteFile,
                 _ => RomProviderSourceKind::RemoteApi,
             },
-            local_dir_path: picker_value(file_pickers, FIELD_LOCAL_DIR),
-            remote_file_url: field_value(text_fields, FIELD_REMOTE_FILE_URL),
-            api_url: field_value(text_fields, FIELD_API_URL),
-            download_url: field_value(text_fields, FIELD_DOWNLOAD_URL),
-            items_json_path: field_value(text_fields, FIELD_ITEMS_PATH),
-            pagination_enabled: selected_value(selects, SELECT_PAGINATION) == 0,
-            page_count_json_path: field_value(text_fields, FIELD_PAGE_COUNT_PATH),
-            query_page: field_value(text_fields, FIELD_PAGE_PARAM),
-            max_pages: field_value(text_fields, FIELD_MAX_PAGES),
-            item_id_json_path: field_value(text_fields, FIELD_ID_PATH),
-            item_name_json_path: field_value(text_fields, FIELD_NAME_PATH),
-            item_author_json_path: field_value(text_fields, FIELD_AUTHOR_PATH),
-            item_license_json_path: field_value(text_fields, FIELD_LICENSE_PATH),
-            item_filename_json_path: field_value(text_fields, FIELD_FILENAME_PATH),
+            local_dir_path: picker_value(file_pickers, FIELD_LOCAL_DIR, nodes, parents),
+            remote_file_url: field_value(text_fields, FIELD_REMOTE_FILE_URL, nodes, parents),
+            api_url: field_value(text_fields, FIELD_API_URL, nodes, parents),
+            download_url: field_value(text_fields, FIELD_DOWNLOAD_URL, nodes, parents),
+            items_json_path: field_value(text_fields, FIELD_ITEMS_PATH, nodes, parents),
+            pagination_enabled: selected_value(selects, SELECT_PAGINATION, nodes, parents) == 0,
+            page_count_json_path: field_value(text_fields, FIELD_PAGE_COUNT_PATH, nodes, parents),
+            query_page: field_value(text_fields, FIELD_PAGE_PARAM, nodes, parents),
+            max_pages: field_value(text_fields, FIELD_MAX_PAGES, nodes, parents),
+            item_id_json_path: field_value(text_fields, FIELD_ID_PATH, nodes, parents),
+            item_name_json_path: field_value(text_fields, FIELD_NAME_PATH, nodes, parents),
+            item_author_json_path: field_value(text_fields, FIELD_AUTHOR_PATH, nodes, parents),
+            item_license_json_path: field_value(text_fields, FIELD_LICENSE_PATH, nodes, parents),
+            item_filename_json_path: field_value(text_fields, FIELD_FILENAME_PATH, nodes, parents),
         },
     )
 }
 
-fn picker_value(file_pickers: &Query<(&ProviderFilePicker, &UiFilePicker)>, field: u8) -> String {
+fn picker_value(
+    file_pickers: &Query<(Entity, &ProviderFilePicker, &UiFilePicker)>,
+    field: u8,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
+) -> String {
     file_pickers
         .iter()
-        .find_map(|(field_marker, picker)| {
-            (field_marker.field == field).then(|| picker.value.clone())
+        .find_map(|(entity, field_marker, picker)| {
+            (field_marker.field == field && entity_visible(entity, nodes, parents))
+                .then(|| picker.value.clone())
         })
         .unwrap_or_default()
 }
 
-fn field_value(text_fields: &Query<(&ProviderTextField, &UiTextInput)>, field: u8) -> String {
+fn field_value(
+    text_fields: &Query<(Entity, &ProviderTextField, &UiTextInput)>,
+    field: u8,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
+) -> String {
     text_fields
         .iter()
-        .find_map(|(text_field, input)| (text_field.field == field).then(|| input.value.clone()))
+        .find_map(|(entity, text_field, input)| {
+            (text_field.field == field && entity_visible(entity, nodes, parents))
+                .then(|| input.value.clone())
+        })
         .unwrap_or_default()
 }
 
-fn selected_value(selects: &Query<(&ProviderSelect, &UiMultiSelect)>, field: u8) -> usize {
+fn selected_value(
+    selects: &Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
+    field: u8,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
+) -> usize {
     selects
         .iter()
-        .find_map(|(select, multi_select)| (select.field == field).then_some(multi_select.selected))
+        .find_map(|(entity, select, multi_select)| {
+            (select.field == field && entity_visible(entity, nodes, parents))
+                .then_some(multi_select.selected)
+        })
         .unwrap_or_default()
+}
+
+fn entity_visible(entity: Entity, nodes: &Query<&Node>, parents: &Query<&ChildOf>) -> bool {
+    let mut current = Some(entity);
+    while let Some(entity) = current {
+        if nodes
+            .get(entity)
+            .is_ok_and(|node| node.display == Display::None)
+        {
+            return false;
+        }
+        current = parents.get(entity).ok().map(|parent| parent.0);
+    }
+    true
 }
 
 fn status_config(enabled: bool) -> MultiSelectConfig {

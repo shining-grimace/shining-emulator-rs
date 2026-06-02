@@ -48,6 +48,7 @@ fn main() {
             ui_elements::theme::UiThemePlugin,
             ui_elements::info_message::InfoMessagePlugin,
             ui_elements::interactions::UiInteractionsPlugin,
+            ui_elements::responsive::ResponsiveUiPlugin,
             ui_elements::choice_popup::ChoicePopupPlugin,
             scenes::home::HomeScenePlugin,
             scenes::input_mapping::InputMappingScenePlugin,

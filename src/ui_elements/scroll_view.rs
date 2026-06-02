@@ -63,3 +63,55 @@ where
         ]
     }
 }
+
+pub fn flow_scroll_view<S>(
+    theme: ActiveTheme,
+    focus_target: EntityTemplate,
+    config: ScrollViewConfig,
+    content: impl FnOnce(EntityTemplate) -> S,
+) -> impl Scene
+where
+    S: Scene,
+{
+    bsn! {
+        Node {
+            width: {config.width},
+            height: percent(100),
+            min_height: {config.min_height},
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            position_type: PositionType::Relative,
+            overflow: Overflow::clip(),
+        }
+        Button
+        UiElementKind::ScrollBar
+        UiScrollArea { offset: 0.0, max_offset: 0.0 }
+        AutoScrollFocusedChild
+        Children [
+            (
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(0.0),
+                    left: px(0.0),
+                    width: percent(100),
+                }
+                UiScrollContent
+                Children [
+                    content(focus_target)
+                ]
+            ),
+            (
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: px(0.0),
+                    right: px(0.0),
+                    width: px(UI_SCROLLBAR_WIDTH),
+                    height: percent(100),
+                }
+                Children [
+                    scrollbar(theme, config.thumb_height, 0.0)
+                ]
+            ),
+        ]
+    }
+}

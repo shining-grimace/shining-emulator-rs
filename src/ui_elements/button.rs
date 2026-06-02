@@ -40,17 +40,26 @@ pub fn button(
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
             (
-                Text({label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
+                Node {
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
                 IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            )
+                Children [
+                    (
+                        Text({label})
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                            font_size: px(UI_CONTROL_FONT_SIZE),
+                        }
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
+                        UiElementLabel
+                        IgnorePicking
+                        TextLayout::new(Justify::Center, LineBreak::NoWrap)
+                    ),
+                ]
+            ),
         ]
     }
 }

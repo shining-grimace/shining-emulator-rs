@@ -25,6 +25,12 @@ use crate::ui_elements::interactions::{
     UiFocusNav, UiFocusNavIds,
 };
 use crate::ui_elements::list_view::{ListColumn, ListRow, ListViewConfig, list_view};
+use crate::ui_elements::responsive::{
+    ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly,
+    ResponsivePercentWidth, ResponsivePortraitOnly, ResponsiveScreenPadding,
+    UI_PORTRAIT_SCREEN_PADDING,
+};
+use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 use crate::ui_elements::theme::{UiThemeImageColor, UiThemeTextColor};
 
@@ -196,14 +202,19 @@ fn rom_data_scene(
     rom: Option<RomMetadata>,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
-    let left_font = font.clone();
-    let right_font = font.clone();
+    let body_font = font.clone();
+    let landscape_font = font.clone();
+    let body_heroes = assets.heroes.clone();
+    let landscape_heroes = assets.heroes.clone();
     let files = rom
         .as_ref()
         .and_then(|rom| rom.id.as_deref().map(|id| (rom, id)))
         .map(|(rom, id)| storage_files(&storage.rom_dir(id), &rom.file_name))
         .unwrap_or_default();
     let left_files = files.clone();
+    let landscape_left_files = files.clone();
+    let landscape_files = files.clone();
+    let landscape_rom = rom.clone();
 
     bsn! {
         DespawnOnExit::<AppState>(AppState::RomData)
@@ -214,6 +225,7 @@ fn rom_data_scene(
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }
+        ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
             (
                 Node {
@@ -229,21 +241,125 @@ fn rom_data_scene(
                     (
                         Node {
                             width: percent(100),
-                            min_height: px(0.0),
                             flex_grow: 1.0,
                             flex_shrink: 1.0,
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(UI_PANEL_GAP),
+                            min_height: px(0.0),
+                            display: Display::None,
                         }
+                        ResponsiveLandscapeOnly
                         Children [
-                            left_panel(left_font, assets.heroes.clone(), theme, storage, rom.clone(), left_files),
-                            right_panel(right_font, theme, files),
+                            rom_data_landscape_body(landscape_font, landscape_heroes, theme, storage, landscape_rom, landscape_left_files, landscape_files),
+                        ]
+                    ),
+                    (
+                        Node {
+                            width: percent(100),
+                            flex_grow: 1.0,
+                            flex_shrink: 1.0,
+                            min_height: px(0.0),
+                            display: Display::None,
+                        }
+                        ResponsivePortraitOnly
+                        Children [
+                            (
+                                #RomDataBodyScrollBar
+                                flow_scroll_view(
+                                    theme,
+                                    #RomDataBodyScrollBar,
+                                    ScrollViewConfig {
+                                        width: percent(100),
+                                        min_height: px(0.0),
+                                        thumb_height: 112.0,
+                                    },
+                                    move |_| rom_data_body(body_font, body_heroes, theme, storage, rom, left_files, files)
+                                )
+                            )
                         ]
                     ),
                     info_message(font.clone(), theme, "", false),
                     action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
                 ]
             )
+        ]
+    }
+}
+
+fn rom_data_body(
+    font: Handle<Font>,
+    heroes: Handle<Image>,
+    theme: ActiveTheme,
+    storage: &LocalStorage,
+    rom: Option<RomMetadata>,
+    left_files: Vec<StorageFile>,
+    files: Vec<StorageFile>,
+) -> impl Scene {
+    let left_font = font.clone();
+    let right_font = font;
+
+    bsn! {
+        Node {
+            width: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(UI_PANEL_GAP),
+            padding: UiRect::right(px(18.0)),
+        }
+        ResponsiveColumns { gap: UI_PANEL_GAP }
+        Children [
+            left_panel(left_font, heroes, theme, storage, rom, left_files),
+            right_panel(right_font, theme, files),
+        ]
+    }
+}
+
+fn rom_data_landscape_body(
+    font: Handle<Font>,
+    heroes: Handle<Image>,
+    theme: ActiveTheme,
+    storage: &LocalStorage,
+    rom: Option<RomMetadata>,
+    left_files: Vec<StorageFile>,
+    files: Vec<StorageFile>,
+) -> impl Scene {
+    let left_font = font.clone();
+    let right_font = font;
+    let left_heroes = heroes;
+
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            min_height: px(0.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(UI_PANEL_GAP),
+        }
+        Children [
+            (
+                #RomDataLeftScrollBar
+                scroll_view(
+                    theme,
+                    #RomDataLeftScrollBar,
+                    ScrollViewConfig {
+                        width: percent(LEFT_WIDTH_PERCENT),
+                        min_height: px(0.0),
+                        thumb_height: 112.0,
+                    },
+                    move |_| left_panel(left_font, left_heroes, theme, storage, rom, left_files)
+                )
+            ),
+            (
+                #RomDataRightScrollBar
+                scroll_view(
+                    theme,
+                    #RomDataRightScrollBar,
+                    ScrollViewConfig {
+                        width: percent(RIGHT_WIDTH_PERCENT),
+                        min_height: px(0.0),
+                        thumb_height: 112.0,
+                    },
+                    move |_| right_panel(right_font, theme, files)
+                )
+            ),
         ]
     }
 }
@@ -285,6 +401,7 @@ fn left_panel(
             flex_direction: FlexDirection::Column,
             row_gap: px(FIELD_GAP),
         }
+        ResponsivePercentWidth { landscape: LEFT_WIDTH_PERCENT }
         Children [
             description(font.clone(), theme, "Storage Location:"),
             description(font.clone(), theme, storage_location),
@@ -328,6 +445,7 @@ fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) 
             flex_direction: FlexDirection::Column,
             row_gap: px(20.0),
         }
+        ResponsivePercentWidth { landscape: RIGHT_WIDTH_PERCENT }
         Children [
             description(font.clone(), theme, "All Files"),
             (
@@ -341,6 +459,7 @@ fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) 
                     justify_content: JustifyContent::FlexEnd,
                     column_gap: px(22.0),
                 }
+                ResponsiveButtonRow { gap: 22.0 }
                 Children [
                     (
                         button(font.clone(), "Delete SRAM", theme, UiFocusNav::default())
@@ -374,6 +493,7 @@ fn detail_row(
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(18.0),
         }
+        ResponsiveFieldRow { gap: 18.0 }
         Children [
             description(font.clone(), theme, label),
             (

@@ -4,7 +4,7 @@ Next: Step 3a
 
 For later:
 - The mobile responsiveness on all scenes needs to be sorted out so it'll work nice in portrait orientation
-- Settings screens need to be back-navigatable somehow (add back button to all?)
+- Settings screens need to be back-navigatable (add a back button in the top-right)
 
 For theme:
 - Align background images to the same average brightness and the same brightness range

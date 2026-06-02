@@ -27,6 +27,10 @@ use crate::ui_elements::interactions::{
     UI_FOCUS_NONE, UiElementColors, UiElementKind, UiElementLabel, UiFocusId, UiFocusNav,
     UiFocusNavIds,
 };
+use crate::ui_elements::responsive::{
+    ResponsiveColumns, ResponsiveFieldRow, ResponsivePercentWidth, ResponsiveScreenPadding,
+    UI_PORTRAIT_SCREEN_PADDING,
+};
 use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
 use crate::ui_elements::styles::{
     UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_SCREEN_PADDING, control_fill, hover_fill,
@@ -315,6 +319,7 @@ fn input_mapping_scene(
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }
+        ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
             (
                 Node {
@@ -373,6 +378,7 @@ fn mapping_content(
                 bottom: px(FORM_BOTTOM_PADDING),
             },
         }
+        ResponsiveColumns { gap: COLUMN_GAP }
         Children [
             gameboy_mapping_panel(left_font, centre_font, heroes, theme, mapping.clone(), mapping_name),
             right_column(right_font, theme, mapping, save_action, load_action),
@@ -394,6 +400,7 @@ fn gameboy_mapping_panel(
             flex_direction: FlexDirection::Column,
             row_gap: px(54.0),
         }
+        ResponsivePercentWidth { landscape: GAMEBOY_COLUMNS_PERCENT }
         Children [
             (
                 Node {
@@ -401,6 +408,7 @@ fn gameboy_mapping_panel(
                     flex_direction: FlexDirection::Row,
                     column_gap: px(COLUMN_GAP),
                 }
+                ResponsiveColumns { gap: COLUMN_GAP }
                 Children [
                     mapping_intro(left_font.clone(), theme, mapping_name),
                     controller_hero_image(heroes, theme),
@@ -412,6 +420,7 @@ fn gameboy_mapping_panel(
                     flex_direction: FlexDirection::Row,
                     column_gap: px(COLUMN_GAP),
                 }
+                ResponsiveColumns { gap: COLUMN_GAP }
                 Children [
                     core_left_column(left_font, theme, mapping.clone()),
                     core_centre_column(centre_font, theme, mapping),
@@ -427,6 +436,7 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
             width: percent(GAMEBOY_LEFT_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
         }
+        ResponsivePercentWidth { landscape: GAMEBOY_LEFT_COLUMN_PERCENT }
         Children [
             (
                 Node {
@@ -435,6 +445,7 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
                     justify_content: JustifyContent::SpaceBetween,
                     column_gap: px(28.0),
                 }
+                ResponsiveFieldRow { gap: 28.0 }
                 Children [
                     (
                         Node {
@@ -499,6 +510,7 @@ fn core_left_column(
             flex_direction: FlexDirection::Column,
             row_gap: px(ROW_GAP),
         }
+        ResponsivePercentWidth { landscape: GAMEBOY_LEFT_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -531,6 +543,7 @@ fn core_centre_column(
             flex_direction: FlexDirection::Column,
             row_gap: px(ROW_GAP),
         }
+        ResponsivePercentWidth { landscape: GAMEBOY_CENTRE_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -626,6 +639,7 @@ fn right_column(
             row_gap: px(ROW_GAP),
             padding: UiRect::top(px(6.0)),
         }
+        ResponsivePercentWidth { landscape: RIGHT_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -650,6 +664,7 @@ fn mapping_row(
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(20.0),
         }
+        ResponsiveFieldRow { gap: 20.0 }
         Children [
             (
                 Node {
@@ -723,6 +738,7 @@ fn controller_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene
             justify_content: JustifyContent::Center,
             padding: UiRect::vertical(px(6.0)),
         }
+        ResponsivePercentWidth { landscape: GAMEBOY_CENTRE_COLUMN_PERCENT }
         IgnorePicking
         Children [
             (

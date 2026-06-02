@@ -99,15 +99,16 @@ pub(super) fn ensure_initial_focus(
             Without<DisabledUiElement>,
         ),
     >,
+    nodes: Query<&Node>,
+    parents: Query<&ChildOf>,
 ) {
     if !focused.is_empty() {
         return;
     }
 
-    if let Some((entity, _)) = candidates
-        .iter()
-        .find(|(_, initial_focus)| initial_focus.enabled)
-    {
+    if let Some((entity, _)) = candidates.iter().find(|(entity, initial_focus)| {
+        initial_focus.enabled && entity_visible(*entity, &nodes, &parents)
+    }) {
         commands.entity(entity).insert(FocusedUiElement);
     }
 }
@@ -136,6 +137,8 @@ pub(super) fn restore_focus_from_input(
         ),
         With<UiFocusNav>,
     >,
+    nodes: Query<&Node>,
+    parents: Query<&ChildOf>,
     mut last_focused: ResMut<LastFocusedUiElement>,
 ) {
     if !focused.is_empty() || !input.focus_recovery_requested() {
@@ -144,15 +147,17 @@ pub(super) fn restore_focus_from_input(
 
     let target = added_initial_focus
         .iter()
-        .find_map(|(entity, initial)| initial.enabled.then_some(entity))
-        .and_then(|entity| focusable_entity(entity, &candidates))
+        .find_map(|(entity, initial)| {
+            (initial.enabled && entity_visible(entity, &nodes, &parents)).then_some(entity)
+        })
+        .and_then(|entity| focusable_entity(entity, &candidates, &nodes, &parents))
         .or_else(|| {
             last_focused
                 .entity
-                .and_then(|entity| focusable_entity(entity, &candidates))
+                .and_then(|entity| focusable_entity(entity, &candidates, &nodes, &parents))
         })
-        .or_else(|| default_focus_target(&candidates))
-        .or_else(|| initial_focus_target(&candidates));
+        .or_else(|| default_focus_target(&candidates, &nodes, &parents))
+        .or_else(|| initial_focus_target(&candidates, &nodes, &parents));
 
     let Some(target) = target else {
         last_focused.entity = None;
@@ -184,6 +189,7 @@ pub(super) fn navigate_focus(
         Option<&UiScrollArea>,
     )>,
     child_query: Query<&Children>,
+    nodes: Query<&Node>,
     parents: Query<&ChildOf>,
 ) {
     let Some(request) = requested_target(&input, &focused) else {
@@ -197,6 +203,7 @@ pub(super) fn navigate_focus(
             request.kind,
             &candidates,
             &child_query,
+            &nodes,
             &parents,
         )
     } else {
@@ -205,6 +212,7 @@ pub(super) fn navigate_focus(
             request.direction,
             &candidates,
             &child_query,
+            &nodes,
             &parents,
         )
     };
@@ -246,6 +254,8 @@ pub(super) fn focus_pressed_element(
     focusable: Query<&UiElementKind, (With<UiFocusNav>, Without<DisabledUiElement>)>,
     hovered: Query<Entity, With<HoveredUiElement>>,
     focused: Query<Entity, With<FocusedUiElement>>,
+    nodes: Query<&Node>,
+    parents: Query<&ChildOf>,
 ) {
     let clicked = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
 
@@ -266,6 +276,9 @@ pub(super) fn focus_pressed_element(
         let Ok(kind) = focusable.get(entity) else {
             continue;
         };
+        if !entity_visible(entity, &nodes, &parents) {
+            continue;
+        }
         if *kind == UiElementKind::MultiSelectOption {
             continue;
         };
@@ -292,11 +305,13 @@ fn focusable_entity(
         ),
         With<UiFocusNav>,
     >,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     candidates
         .get(entity)
-        .is_ok_and(|(_, kind, _, _, disabled, node, scroll_area)| {
-            focus_available(*kind, disabled, node, scroll_area)
+        .is_ok_and(|(entity, kind, _, _, disabled, _, scroll_area)| {
+            focus_available(entity, *kind, disabled, nodes, parents, scroll_area)
         })
         .then_some(entity)
 }
@@ -314,11 +329,14 @@ fn default_focus_target(
         ),
         With<UiFocusNav>,
     >,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     candidates
         .iter()
-        .find_map(|(entity, kind, _, default, disabled, node, scroll_area)| {
-            (default && focus_available(*kind, disabled, node, scroll_area)).then_some(entity)
+        .find_map(|(entity, kind, _, default, disabled, _, scroll_area)| {
+            (default && focus_available(entity, *kind, disabled, nodes, parents, scroll_area))
+                .then_some(entity)
         })
 }
 
@@ -335,14 +353,18 @@ fn initial_focus_target(
         ),
         With<UiFocusNav>,
     >,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     candidates
         .iter()
-        .find_map(|(entity, kind, initial, _, disabled, node, scroll_area)| {
+        .find_map(|(entity, kind, initial, _, disabled, _, scroll_area)| {
             initial
                 .is_some_and(|initial| initial.enabled)
                 .then_some(entity)
-                .filter(|_| focus_available(*kind, disabled, node, scroll_area))
+                .filter(|entity| {
+                    focus_available(*entity, *kind, disabled, nodes, parents, scroll_area)
+                })
         })
 }
 
@@ -387,6 +409,7 @@ fn resolve_target(
         Option<&UiScrollArea>,
     )>,
     child_query: &Query<&Children>,
+    nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     let mut next = target;
@@ -398,11 +421,11 @@ fn resolve_target(
         }
         hops_remaining -= 1;
 
-        let Ok((nav, kind, disabled, node, scroll_area)) = candidates.get(next) else {
+        let Ok((nav, kind, disabled, _, scroll_area)) = candidates.get(next) else {
             return None;
         };
 
-        if focus_available(*kind, disabled, node, scroll_area) {
+        if focus_available(next, *kind, disabled, nodes, parents, scroll_area) {
             return Some(next);
         }
 
@@ -415,6 +438,7 @@ fn resolve_target(
                 *kind,
                 candidates,
                 child_query,
+                nodes,
                 parents,
             );
         }
@@ -435,12 +459,13 @@ fn resolve_placeholder_target(
         Option<&UiScrollArea>,
     )>,
     child_query: &Query<&Children>,
+    nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     match (kind, direction) {
         (UiElementKind::ScrollBar, FocusDirection::Left) => {
             let children = child_query.get(focused_entity).ok()?;
-            first_focusable_descendant(children, candidates, child_query)
+            first_focusable_descendant(children, candidates, child_query, nodes, parents)
         }
         (UiElementKind::MultiSelectOption, FocusDirection::Up | FocusDirection::Down) => {
             adjacent_multi_select_option(
@@ -448,14 +473,20 @@ fn resolve_placeholder_target(
                 direction,
                 candidates,
                 child_query,
+                nodes,
                 parents,
             )
         }
-        (UiElementKind::ListItem, FocusDirection::Up | FocusDirection::Down) => {
-            adjacent_list_item(focused_entity, direction, candidates, child_query, parents)
-        }
+        (UiElementKind::ListItem, FocusDirection::Up | FocusDirection::Down) => adjacent_list_item(
+            focused_entity,
+            direction,
+            candidates,
+            child_query,
+            nodes,
+            parents,
+        ),
         (UiElementKind::ListItem, FocusDirection::Left | FocusDirection::Right) => {
-            containing_list(focused_entity, candidates, parents)
+            containing_list(focused_entity, candidates, nodes, parents)
         }
         _ => None,
     }
@@ -471,19 +502,22 @@ fn first_focusable_descendant(
         Option<&UiScrollArea>,
     )>,
     child_query: &Query<&Children>,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     for child in children {
         if candidates
             .get(*child)
-            .is_ok_and(|(_, kind, disabled, node, scroll_area)| {
-                focus_available(*kind, disabled, node, scroll_area)
+            .is_ok_and(|(_, kind, disabled, _, scroll_area)| {
+                focus_available(*child, *kind, disabled, nodes, parents, scroll_area)
             })
         {
             return Some(*child);
         }
 
         if let Ok(grandchildren) = child_query.get(*child) {
-            if let Some(entity) = first_focusable_descendant(grandchildren, candidates, child_query)
+            if let Some(entity) =
+                first_focusable_descendant(grandchildren, candidates, child_query, nodes, parents)
             {
                 return Some(entity);
             }
@@ -504,6 +538,7 @@ fn adjacent_multi_select_option(
         Option<&UiScrollArea>,
     )>,
     child_query: &Query<&Children>,
+    nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     let parent = parents.get(focused_entity).ok()?.0;
@@ -513,9 +548,9 @@ fn adjacent_multi_select_option(
         .filter_map(|sibling| {
             candidates
                 .get(sibling)
-                .is_ok_and(|(_, kind, disabled, node, scroll_area)| {
+                .is_ok_and(|(_, kind, disabled, _, scroll_area)| {
                     *kind == UiElementKind::MultiSelectOption
-                        && focus_available(*kind, disabled, node, scroll_area)
+                        && focus_available(sibling, *kind, disabled, nodes, parents, scroll_area)
                 })
                 .then_some(sibling)
         })
@@ -542,6 +577,7 @@ fn adjacent_list_item(
         Option<&UiScrollArea>,
     )>,
     child_query: &Query<&Children>,
+    nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     let parent = parents.get(focused_entity).ok()?.0;
@@ -551,9 +587,9 @@ fn adjacent_list_item(
         .filter_map(|sibling| {
             candidates
                 .get(sibling)
-                .is_ok_and(|(_, kind, disabled, node, scroll_area)| {
+                .is_ok_and(|(_, kind, disabled, _, scroll_area)| {
                     *kind == UiElementKind::ListItem
-                        && focus_available(*kind, disabled, node, scroll_area)
+                        && focus_available(sibling, *kind, disabled, nodes, parents, scroll_area)
                 })
                 .then_some(sibling)
         })
@@ -576,6 +612,7 @@ fn containing_list(
         Option<&Node>,
         Option<&UiScrollArea>,
     )>,
+    nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
 ) -> Option<Entity> {
     let mut current = focused_entity;
@@ -583,8 +620,9 @@ fn containing_list(
         let parent = parents.get(current).ok()?.0;
         if candidates
             .get(parent)
-            .is_ok_and(|(_, kind, disabled, node, scroll_area)| {
-                *kind == UiElementKind::List && focus_available(*kind, disabled, node, scroll_area)
+            .is_ok_and(|(_, kind, disabled, _, scroll_area)| {
+                *kind == UiElementKind::List
+                    && focus_available(parent, *kind, disabled, nodes, parents, scroll_area)
             })
         {
             return Some(parent);
@@ -594,12 +632,18 @@ fn containing_list(
 }
 
 fn focus_available(
+    entity: Entity,
     kind: UiElementKind,
     disabled: bool,
-    node: Option<&Node>,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
     scroll_area: Option<&UiScrollArea>,
 ) -> bool {
     if disabled {
+        return false;
+    }
+
+    if !entity_visible(entity, nodes, parents) {
         return false;
     }
 
@@ -607,11 +651,21 @@ fn focus_available(
         return true;
     }
 
-    if node.is_some_and(|node| node.display == Display::None) {
-        return false;
-    }
-
     scroll_area.is_none_or(|area| area.max_offset > 0.0)
+}
+
+fn entity_visible(entity: Entity, nodes: &Query<&Node>, parents: &Query<&ChildOf>) -> bool {
+    let mut current = Some(entity);
+    while let Some(entity) = current {
+        if nodes
+            .get(entity)
+            .is_ok_and(|node| node.display == Display::None)
+        {
+            return false;
+        }
+        current = parents.get(entity).ok().map(|parent| parent.0);
+    }
+    true
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
