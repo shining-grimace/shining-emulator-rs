@@ -2,6 +2,7 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 
 use crate::app_state::AppState;
+use crate::ui_elements::back_button::UiBackButton;
 use crate::ui_elements::file_picker::{UiFilePicker, UiFilePickerActivated};
 
 use super::focus::FocusedUiElement;
@@ -26,6 +27,7 @@ pub(super) fn activate_controls(
     kinds: Query<&UiElementKind>,
     focused: Query<(Entity, &UiElementKind), With<FocusedUiElement>>,
     selected_rows: Query<Entity, With<SelectedUiElement>>,
+    back_buttons: Query<(), With<UiBackButton>>,
     file_pickers: Query<
         (Entity, Option<&Children>),
         (With<UiFilePicker>, Without<DisabledUiElement>),
@@ -41,6 +43,18 @@ pub(super) fn activate_controls(
     let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
 
     if input.quit_app || (input.back && *state.get() != AppState::InputMapping) {
+        match back_navigation_target(*state.get()) {
+            Some(target) => next_state.set(target),
+            None => {
+                app_exit.write(AppExit::Success);
+            }
+        }
+    }
+
+    if clicked_entities
+        .iter()
+        .any(|entity| back_buttons.get(*entity).is_ok())
+    {
         match back_navigation_target(*state.get()) {
             Some(target) => next_state.set(target),
             None => {

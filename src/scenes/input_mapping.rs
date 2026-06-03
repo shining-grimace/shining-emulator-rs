@@ -20,7 +20,6 @@ use crate::storage::input_mappings::{
 use crate::ui_elements::action_hint::action_hints_with_labels;
 use crate::ui_elements::button::button;
 use crate::ui_elements::description::description;
-use crate::ui_elements::heading::heading;
 use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, IgnorePicking, InitialFocus,
@@ -32,6 +31,7 @@ use crate::ui_elements::responsive::{
     UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
+use crate::ui_elements::settings_header::settings_header;
 use crate::ui_elements::styles::{
     UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_SCREEN_PADDING, control_fill, hover_fill,
     ui_border, ui_radius,
@@ -331,7 +331,7 @@ fn input_mapping_scene(
                     row_gap: px(CONTENT_GAP),
                 }
                 Children [
-                    heading(font.clone(), theme, "Input Mapping"),
+                    settings_header(font.clone(), assets.icons.clone(), theme, "Input Mapping"),
                     (
                         #InputMappingScrollBar
                         scroll_view(

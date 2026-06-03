@@ -18,7 +18,6 @@ use crate::ui_elements::action_hint::action_hints_with_labels;
 use crate::ui_elements::button::button;
 use crate::ui_elements::description::description;
 use crate::ui_elements::file_picker::{UiFilePicker, directory_picker_with_value};
-use crate::ui_elements::heading::heading;
 use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, IgnorePicking, InitialFocus, UI_FOCUS_NONE, UiFocusId,
@@ -31,6 +30,7 @@ use crate::ui_elements::responsive::{
     UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
+use crate::ui_elements::settings_header::settings_header;
 use crate::ui_elements::styles::{UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 use crate::ui_elements::text_input::text_input_with_value_width;
 use crate::ui_elements::theme::UiThemeImageColor;
@@ -357,7 +357,7 @@ fn rom_provider_scene(
                     row_gap: px(CONTENT_GAP),
                 }
                 Children [
-                    heading(font.clone(), theme, "ROM Provider"),
+                    settings_header(font.clone(), assets.icons.clone(), theme, "ROM Provider"),
                     provider_form(left_font, right_font, heroes, theme, provider.clone()),
                     info_message(font.clone(), theme, "", false),
                     action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),

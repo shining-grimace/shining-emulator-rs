@@ -16,7 +16,6 @@ use crate::ui_elements::description::description;
 use crate::ui_elements::file_picker::{
     UiAudioFilePicker, UiFilePicker, UiFilePickerValue, file_picker_with_value,
 };
-use crate::ui_elements::heading::heading;
 use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, IgnorePicking, InitialFocus, UI_FOCUS_NONE, UiFocusId, UiFocusNav,
@@ -28,6 +27,7 @@ use crate::ui_elements::responsive::{
     ResponsivePortraitOnly, ResponsiveScreenPadding, UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
+use crate::ui_elements::settings_header::settings_header;
 use crate::ui_elements::styles::{
     UI_BODY_FONT_SIZE, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING,
 };
@@ -318,7 +318,7 @@ fn audio_settings_scene(
                     row_gap: px(CONTENT_GAP),
                 }
                 Children [
-                    heading(font.clone(), theme, "Audio Preset Settings"),
+                    settings_header(font.clone(), assets.icons.clone(), theme, "Audio Preset Settings"),
                     (
                         Node {
                             width: percent(100),

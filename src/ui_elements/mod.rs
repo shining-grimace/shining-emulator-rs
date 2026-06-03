@@ -1,4 +1,5 @@
 pub mod action_hint;
+pub mod back_button;
 pub mod button;
 pub mod choice_popup;
 pub mod description;
@@ -12,6 +13,7 @@ pub mod multi_select;
 pub mod responsive;
 pub mod scroll_view;
 pub mod scrollbar;
+pub mod settings_header;
 pub mod styles;
 pub mod text_input;
 pub mod theme;
