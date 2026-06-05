@@ -3,12 +3,10 @@ use bevy::text::FontSourceTemplate;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
-
-const APP_LOGO_WIDTH: f32 = 520.0;
-const DEVELOPER_LOGO_SIZE: f32 = 72.0;
-const DEVELOPER_BRANDING_MARGIN: f32 = 32.0;
-const DEVELOPER_BRANDING_GAP: f32 = 16.0;
-const DEVELOPER_TEXT_SIZE: f32 = 28.0;
+use crate::dimensions::{
+    APP_LOGO_WIDTH, DEVELOPER_BRANDING_GAP, DEVELOPER_BRANDING_MARGIN, DEVELOPER_LOGO_SIZE,
+    DEVELOPER_TEXT_SIZE,
+};
 pub const SPLASH_SCREEN_SECONDS: f32 = 2.0;
 
 pub struct SplashScenePlugin;

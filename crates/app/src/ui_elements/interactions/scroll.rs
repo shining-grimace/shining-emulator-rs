@@ -1,6 +1,7 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
+use crate::dimensions::{KEY_SCROLL_PIXELS, SCROLLBAR_VERTICAL_PADDING, WHEEL_SCROLL_PIXELS};
 use crate::ui_elements::list_view::{VirtualListContent, VirtualListRow};
 
 use super::focus::FocusedUiElement;
@@ -9,11 +10,8 @@ use super::picking::{DraggableUiElement, HoveredUiElement};
 use super::tree::contains_entity;
 use super::visual_state::UiElementKind;
 
-const WHEEL_SCROLL_PIXELS: f32 = 48.0;
-const KEY_SCROLL_PIXELS: f32 = 48.0;
 const KEY_SCROLL_REPEAT_DELAY_SECONDS: f32 = 0.32;
 const KEY_SCROLL_REPEAT_SECONDS: f32 = 0.045;
-const SCROLLBAR_VERTICAL_PADDING: f32 = 12.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct AutoScrollFocusedChild;
@@ -92,6 +90,12 @@ pub(super) struct ScrollThumbDragState {
     released_this_frame: bool,
 }
 
+impl ScrollThumbDragState {
+    pub(super) fn released_this_frame(&self) -> bool {
+        self.released_this_frame
+    }
+}
+
 pub(super) fn update_dynamic_scroll_metrics(
     mut areas: Query<(
         Entity,
@@ -164,11 +168,14 @@ pub(super) fn update_scroll_thumb_colours(
     mut thumbs: Query<(Entity, &UiScrollThumbColors, &mut BackgroundColor), With<UiScrollThumb>>,
 ) {
     for (entity, colours, mut background) in &mut thumbs {
-        background.0 = if has_focused_scrollbar_ancestor(entity, &parents, &focused) {
+        let next_background = if has_focused_scrollbar_ancestor(entity, &parents, &focused) {
             colours.secondary
         } else {
             colours.primary
         };
+        if background.0 != next_background {
+            background.0 = next_background;
+        }
     }
 }
 

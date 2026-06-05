@@ -3,13 +3,11 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT};
 use crate::ui_elements::interactions::{
     IgnorePicking, UiElementColors, UiElementKind, UiElementLabel, UiFocusNav,
 };
-use crate::ui_elements::styles::{
-    UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, control_fill, hover_fill, ui_border,
-    ui_radius,
-};
+use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 pub fn button(

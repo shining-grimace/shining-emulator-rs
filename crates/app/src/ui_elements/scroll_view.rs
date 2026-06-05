@@ -2,11 +2,11 @@ use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::UI_SCROLLBAR_WIDTH;
 use crate::ui_elements::interactions::{
     AutoScrollFocusedChild, UiElementKind, UiScrollArea, UiScrollContent,
 };
 use crate::ui_elements::scrollbar::scrollbar;
-use crate::ui_elements::styles::UI_SCROLLBAR_WIDTH;
 
 pub struct ScrollViewConfig {
     pub width: Val,

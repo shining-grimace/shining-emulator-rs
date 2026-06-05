@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    UI_BODY_FONT_SIZE, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_INNER_PADDING, UI_MAX_CONTENT_WIDTH,
+    UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
+    UI_SECTION_GAP, UI_WIDE_PRIMARY_COLUMN_PERCENT, UI_WIDE_SECONDARY_COLUMN_PERCENT,
+};
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
 use crate::ui_elements::action_hint::action_hints_with_labels;
@@ -24,22 +29,11 @@ use crate::ui_elements::interactions::{
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
     ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly, ResponsivePercentWidth,
-    ResponsivePortraitOnly, ResponsiveScreenPadding, UI_PORTRAIT_SCREEN_PADDING,
+    ResponsivePortraitOnly, ResponsiveScreenPadding,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
-use crate::ui_elements::styles::{
-    UI_BODY_FONT_SIZE, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING,
-};
 use crate::ui_elements::theme::UiThemeTextColor;
-
-const CONTENT_GAP: f32 = 24.0;
-const CONTROL_GAP: f32 = 20.0;
-const CHANNEL_GAP: f32 = 14.0;
-const BUTTON_GAP: f32 = 28.0;
-const SCROLL_CONTENT_BOTTOM_PADDING: f32 = 320.0;
-const LEFT_WIDTH_PERCENT: f32 = 70.0;
-const RIGHT_WIDTH_PERCENT: f32 = 30.0;
 
 const OSCILLATOR_SQUARE: usize = 0;
 const OSCILLATOR_BUILT_IN_SAMPLER: usize = 4;
@@ -315,7 +309,7 @@ fn audio_settings_scene(
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTENT_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     settings_header(font.clone(), assets.icons.clone(), theme, "Audio Preset Settings"),
@@ -381,10 +375,10 @@ fn audio_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> im
         Children [
             (
                 Node {
-                    width: percent(LEFT_WIDTH_PERCENT),
+                    width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
                     min_height: px(0.0),
                 }
-                ResponsivePercentWidth { landscape: LEFT_WIDTH_PERCENT }
+                ResponsivePercentWidth { landscape: UI_WIDE_PRIMARY_COLUMN_PERCENT }
                 Children [
                     audio_controls(controls_font, theme, preset),
                 ]
@@ -413,7 +407,7 @@ fn audio_landscape_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPre
                     theme,
                     #AudioScrollBar,
                     ScrollViewConfig {
-                        width: percent(LEFT_WIDTH_PERCENT),
+                        width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
                         min_height: px(0.0),
                         thumb_height: 132.0,
                     },
@@ -438,12 +432,12 @@ fn audio_controls(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CONTROL_GAP),
+            row_gap: px(UI_CONTROL_GAP),
             padding: UiRect {
                 left: px(0.0),
                 right: px(18.0),
                 top: px(0.0),
-                bottom: px(SCROLL_CONTENT_BOTTOM_PADDING),
+                bottom: px(UI_SCROLL_CONTENT_BOTTOM_PADDING),
             },
         }
         Children [
@@ -466,7 +460,7 @@ fn channel_one_controls(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CHANNEL_GAP),
+            row_gap: px(UI_INNER_PADDING),
         }
         Children [
             description(font.clone(), theme, "Channel 1"),
@@ -489,7 +483,7 @@ fn channel_two_controls(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CHANNEL_GAP),
+            row_gap: px(UI_INNER_PADDING),
         }
         Children [
             description(font.clone(), theme, "Channel 2"),
@@ -510,7 +504,7 @@ fn channel_three_controls(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CHANNEL_GAP),
+            row_gap: px(UI_INNER_PADDING),
         }
         Children [
             description(font.clone(), theme, "Channel 3"),
@@ -529,7 +523,7 @@ fn channel_four_controls(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CHANNEL_GAP),
+            row_gap: px(UI_INNER_PADDING),
         }
         Children [
             description(font.clone(), theme, "Channel 4"),
@@ -543,12 +537,12 @@ fn channel_four_controls(
 fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
     bsn! {
         Node {
-            width: percent(RIGHT_WIDTH_PERCENT),
+            width: percent(UI_WIDE_SECONDARY_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
-            row_gap: px(BUTTON_GAP),
+            row_gap: px(UI_SECTION_GAP),
             padding: UiRect::top(px(58.0)),
         }
-        ResponsivePercentWidth { landscape: RIGHT_WIDTH_PERCENT }
+        ResponsivePercentWidth { landscape: UI_WIDE_SECONDARY_COLUMN_PERCENT }
         Children [
             (
                 button(font.clone(), "Save", theme, UiFocusNav::default())

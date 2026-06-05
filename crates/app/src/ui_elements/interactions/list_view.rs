@@ -2,11 +2,13 @@ use bevy::picking::Pickable;
 use bevy::prelude::*;
 use bevy::ui::UiGlobalTransform;
 
+use crate::ui_elements::list_view::{VirtualListRow, VirtualListSelection};
+
 use super::focus::FocusedUiElement;
 use super::scroll::UiScrollArea;
 use super::tree::contains_entity;
 use super::ui_input::UiInputState;
-use super::visual_state::{DisabledUiElement, UiElementKind};
+use super::visual_state::{DisabledUiElement, SelectedUiElement, UiElementKind};
 
 const MONOSPACE_CHARACTER_WIDTH_RATIO: f32 = 0.62;
 
@@ -149,6 +151,30 @@ pub(super) fn update_list_item_pickability(
 
             if pickable != Some(&desired) {
                 commands.entity(entity).insert(desired);
+            }
+        }
+    }
+}
+
+pub(super) fn sync_virtual_list_selection(
+    mut commands: Commands,
+    selections: Query<(&VirtualListSelection, &Children)>,
+    rows: Query<(Entity, &VirtualListRow, Has<SelectedUiElement>)>,
+    child_query: Query<&Children>,
+) {
+    for (selection, children) in &selections {
+        for (entity, row, selected) in &rows {
+            if !contains_entity(children, entity, &child_query) {
+                continue;
+            }
+
+            let should_select = selection
+                .selected_item_index
+                .is_some_and(|selected| selected == row.item_index);
+            if should_select && !selected {
+                commands.entity(entity).insert(SelectedUiElement);
+            } else if !should_select && selected {
+                commands.entity(entity).remove::<SelectedUiElement>();
             }
         }
     }

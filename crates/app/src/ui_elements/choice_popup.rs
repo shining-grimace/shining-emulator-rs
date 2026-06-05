@@ -3,12 +3,13 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::UI_BODY_FONT_SIZE;
 use crate::ui_elements::button::button;
 use crate::ui_elements::interactions::tree::contains_entity;
 use crate::ui_elements::interactions::{
     HoveredUiElement, InitialFocus, ModalUiElement, UiFocusNav, UiPointerClicked,
 };
-use crate::ui_elements::styles::{UI_BODY_FONT_SIZE, ui_border, ui_padding, ui_radius};
+use crate::ui_elements::styles::{ui_border, ui_padding, ui_radius};
 use crate::ui_elements::theme::{UiThemeBorderColor, UiThemeTextColor};
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]

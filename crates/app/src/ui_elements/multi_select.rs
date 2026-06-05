@@ -3,22 +3,20 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    POPUP_OPTION_GAP, POPUP_SCROLLBAR_GAP, POPUP_SCROLLBAR_THUMB_HEIGHT, POPUP_TOP_OFFSET,
+    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_MULTI_SELECT_WIDTH,
+};
 use crate::ui_elements::interactions::{
     AutoScrollFocusedChild, DismissOnOutsideClick, IgnorePicking, UiElementColors, UiElementKind,
     UiElementLabel, UiFocusNav, UiMultiSelect, UiMultiSelectLabel, UiMultiSelectOption,
     UiMultiSelectPopup, UiPopupScrollArea, UiScrollArea, UiScrollContent,
 };
 use crate::ui_elements::scrollbar::scrollbar_with_display;
-use crate::ui_elements::styles::{
-    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_MULTI_SELECT_WIDTH, control_fill,
-    hover_fill, ui_border, ui_radius,
-};
+use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 const MAX_VISIBLE_POPUP_OPTIONS: usize = 5;
-const POPUP_OPTION_GAP: f32 = 8.0;
-const POPUP_SCROLLBAR_GAP: f32 = 10.0;
-const POPUP_SCROLLBAR_THUMB_HEIGHT: f32 = 56.0;
 
 #[derive(Clone)]
 pub struct MultiSelectConfig {
@@ -123,7 +121,7 @@ pub fn multi_select_with_width(
                 Node {
                     display: Display::None,
                     position_type: PositionType::Absolute,
-                    top: px(UI_ELEMENT_HEIGHT + 8.0),
+                    top: px(POPUP_TOP_OFFSET),
                     left: px(0.0),
                     width: percent(100),
                     border: ui_border(),

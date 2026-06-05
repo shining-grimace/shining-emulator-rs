@@ -4,13 +4,13 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{ACTION_HINT_GAP, ACTION_HINT_ICON_SIZE, UI_BODY_FONT_SIZE};
 use crate::input::selection::{PrimaryInputDevice, selected_mapping};
 use crate::storage::LocalStorage;
 use crate::storage::input_mappings::{
     InputAction, InputDeviceMapping, InputDeviceType, InputKeyId,
 };
 use crate::ui_elements::interactions::IgnorePicking;
-use crate::ui_elements::styles::UI_BODY_FONT_SIZE;
 use crate::ui_elements::theme::{UiThemeImageColor, UiThemeTextColor};
 
 const ICON_TEXTURE_SIZE: f32 = 1024.0;
@@ -29,7 +29,6 @@ const START_ICON_Y: f32 = 2.0;
 const META_ICON_X: f32 = 0.0;
 const META_ICON_Y: f32 = 4.0;
 const SMALL_ICON_SIZE: f32 = 4.0;
-const ACTION_HINT_ICON_SIZE: f32 = 48.0;
 
 pub fn action_hints(
     font: Handle<Font>,
@@ -58,7 +57,7 @@ pub fn action_hints_with_labels(
         Node {
             width: percent(100),
             justify_content: JustifyContent::FlexEnd,
-            column_gap: px(42.0),
+            column_gap: px(ACTION_HINT_GAP),
         }
         Children [
             action_hint(font.clone(), icons.clone(), theme, InputAction::B, quit_key, back_label),

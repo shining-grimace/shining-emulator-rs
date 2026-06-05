@@ -3,14 +3,14 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT};
 use crate::ui_elements::interactions::{
     AutoScrollFocusedChild, IgnorePicking, UiElementAccent, UiElementColors, UiElementKind,
     UiElementLabel, UiFocusNav, UiListCellText, UiListViewFocus, UiScrollArea, UiScrollContent,
 };
 use crate::ui_elements::scrollbar::scrollbar;
 use crate::ui_elements::styles::{
-    UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT, control_fill, hover_fill, transparent,
-    ui_border, ui_padding, ui_radius,
+    control_fill, hover_fill, transparent, ui_border, ui_padding, ui_radius,
 };
 use crate::ui_elements::theme::{
     UiElementTheme, UiThemeBackgroundColor, UiThemeBorderColor, UiThemeTextColor,
@@ -40,6 +40,11 @@ pub struct VirtualListScrollArea;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct VirtualListContent;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+pub struct VirtualListSelection {
+    pub selected_item_index: Option<usize>,
+}
 
 #[derive(Clone, Copy, Component, Debug)]
 pub struct VirtualListRow {
@@ -134,6 +139,7 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
                                 }
                                 UiScrollContent
                                 VirtualListContent
+                                VirtualListSelection::default()
                                 Children [
                                     {rows}
                                 ]

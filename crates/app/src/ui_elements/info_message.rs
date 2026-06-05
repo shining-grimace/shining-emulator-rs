@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
-use crate::ui_elements::styles::UI_BODY_FONT_SIZE;
+use crate::dimensions::UI_BODY_FONT_SIZE;
 use crate::ui_elements::theme::UiThemeTextColor;
 
 pub const INFO_MESSAGE_VISIBLE_SECONDS: f32 = 3.5;

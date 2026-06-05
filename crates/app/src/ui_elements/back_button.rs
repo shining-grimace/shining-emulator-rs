@@ -3,16 +3,14 @@ use bevy::math::Rect;
 use bevy::prelude::*;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{BACK_BUTTON_SIZE, BACK_ICON_SIZE_PX};
 use crate::ui_elements::interactions::IgnorePicking;
-use crate::ui_elements::styles::UI_ELEMENT_HEIGHT;
 use crate::ui_elements::theme::UiThemeImageColor;
 
 const ICON_TEXTURE_SIZE: f32 = 1024.0;
 const BACK_ICON_X: f32 = 0.25;
 const BACK_ICON_Y: f32 = 0.5;
 const BACK_ICON_SIZE: f32 = 0.25;
-const BACK_BUTTON_SIZE: f32 = UI_ELEMENT_HEIGHT * 1.5;
-const BACK_ICON_SIZE_PX: f32 = 34.0 * 1.5;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct UiBackButton;

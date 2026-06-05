@@ -5,8 +5,6 @@ use crate::ui_elements::interactions::{
     DisabledUiElement, FocusedUiElement, InitialFocus, UiFocusId, UiFocusNav, UiFocusNavIds,
 };
 
-pub const UI_PORTRAIT_SCREEN_PADDING: f32 = 32.0;
-
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct ResponsiveScreenPadding {
     pub landscape: f32,

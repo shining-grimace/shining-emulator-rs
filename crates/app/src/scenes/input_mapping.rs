@@ -9,6 +9,13 @@ use bevy::text::FontSourceTemplate;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    ACTION_HINT_GAP, HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_BUTTON_WIDTH,
+    UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_MAPPING_FORM_BOTTOM_PADDING,
+    UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT, UI_MAPPING_GAMEBOY_COLUMNS_PERCENT,
+    UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT, UI_MAPPING_RIGHT_COLUMN_PERCENT, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_WIDE_CONTENT_WIDTH,
+};
 use crate::input::key_ids::{gamepad_button_id, key_code_id};
 use crate::input::mappings::{RuntimeInputMappings, ensure_essential_navigation_mappings};
 use crate::input::selection::{InputMappingEditTarget, PrimaryInputDevice, mapping_label};
@@ -28,33 +35,14 @@ use crate::ui_elements::interactions::{
 };
 use crate::ui_elements::responsive::{
     ResponsiveColumns, ResponsiveFieldRow, ResponsivePercentWidth, ResponsiveScreenPadding,
-    UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
-use crate::ui_elements::styles::{
-    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_SCREEN_PADDING, control_fill, hover_fill,
-    ui_border, ui_radius,
-};
+use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{
     UiElementTheme, UiThemeBorderColor, UiThemeImageColor, UiThemeTextColor,
 };
 
-const CONTENT_WIDTH: f32 = 1500.0;
-const CONTENT_GAP: f32 = 18.0;
-const COLUMN_GAP: f32 = 42.0;
-const FORM_BOTTOM_PADDING: f32 = 72.0;
-const LEFT_COLUMN_PERCENT: f32 = 40.0;
-const CENTRE_COLUMN_PERCENT: f32 = 28.0;
-const RIGHT_COLUMN_PERCENT: f32 = 32.0;
-const GAMEBOY_COLUMNS_PERCENT: f32 = LEFT_COLUMN_PERCENT + CENTRE_COLUMN_PERCENT;
-const GAMEBOY_LEFT_COLUMN_PERCENT: f32 = LEFT_COLUMN_PERCENT / GAMEBOY_COLUMNS_PERCENT * 100.0;
-const GAMEBOY_CENTRE_COLUMN_PERCENT: f32 = CENTRE_COLUMN_PERCENT / GAMEBOY_COLUMNS_PERCENT * 100.0;
-const ROW_GAP: f32 = 24.0;
-const BUTTON_WIDTH: f32 = 208.0;
-const HERO_TEXTURE_SIZE: f32 = 454.0;
-const HERO_GRID_UNITS: f32 = 2.0;
-const HERO_IMAGE_SIZE: f32 = 184.0;
 const CONTROLLER_HERO_X: f32 = 0.0;
 const CONTROLLER_HERO_Y: f32 = 0.0;
 
@@ -324,11 +312,11 @@ fn input_mapping_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTENT_GAP),
+                    row_gap: px(UI_PANEL_GAP),
                 }
                 Children [
                     settings_header(font.clone(), assets.icons.clone(), theme, "Input Mapping"),
@@ -370,15 +358,15 @@ fn mapping_content(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Row,
-            column_gap: px(COLUMN_GAP),
+            column_gap: px(ACTION_HINT_GAP),
             padding: UiRect {
                 left: px(0.0),
                 right: px(28.0),
                 top: px(0.0),
-                bottom: px(FORM_BOTTOM_PADDING),
+                bottom: px(UI_MAPPING_FORM_BOTTOM_PADDING),
             },
         }
-        ResponsiveColumns { gap: COLUMN_GAP }
+        ResponsiveColumns { gap: ACTION_HINT_GAP }
         Children [
             gameboy_mapping_panel(left_font, centre_font, heroes, theme, mapping.clone(), mapping_name),
             right_column(right_font, theme, mapping, save_action, load_action),
@@ -396,19 +384,19 @@ fn gameboy_mapping_panel(
 ) -> impl Scene {
     bsn! {
         Node {
-            width: percent(GAMEBOY_COLUMNS_PERCENT),
+            width: percent(UI_MAPPING_GAMEBOY_COLUMNS_PERCENT),
             flex_direction: FlexDirection::Column,
             row_gap: px(54.0),
         }
-        ResponsivePercentWidth { landscape: GAMEBOY_COLUMNS_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_COLUMNS_PERCENT }
         Children [
             (
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Row,
-                    column_gap: px(COLUMN_GAP),
+                    column_gap: px(ACTION_HINT_GAP),
                 }
-                ResponsiveColumns { gap: COLUMN_GAP }
+                ResponsiveColumns { gap: ACTION_HINT_GAP }
                 Children [
                     mapping_intro(left_font.clone(), theme, mapping_name),
                     controller_hero_image(heroes, theme),
@@ -418,9 +406,9 @@ fn gameboy_mapping_panel(
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Row,
-                    column_gap: px(COLUMN_GAP),
+                    column_gap: px(ACTION_HINT_GAP),
                 }
-                ResponsiveColumns { gap: COLUMN_GAP }
+                ResponsiveColumns { gap: ACTION_HINT_GAP }
                 Children [
                     core_left_column(left_font, theme, mapping.clone()),
                     core_centre_column(centre_font, theme, mapping),
@@ -433,10 +421,10 @@ fn gameboy_mapping_panel(
 fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -> impl Scene {
     bsn! {
         Node {
-            width: percent(GAMEBOY_LEFT_COLUMN_PERCENT),
+            width: percent(UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
         }
-        ResponsivePercentWidth { landscape: GAMEBOY_LEFT_COLUMN_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT }
         Children [
             (
                 Node {
@@ -506,11 +494,11 @@ fn core_left_column(
 
     bsn! {
         Node {
-            width: percent(GAMEBOY_LEFT_COLUMN_PERCENT),
+            width: percent(UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
-            row_gap: px(ROW_GAP),
+            row_gap: px(UI_CONTENT_GAP),
         }
-        ResponsivePercentWidth { landscape: GAMEBOY_LEFT_COLUMN_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -539,11 +527,11 @@ fn core_centre_column(
 
     bsn! {
         Node {
-            width: percent(GAMEBOY_CENTRE_COLUMN_PERCENT),
+            width: percent(UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
-            row_gap: px(ROW_GAP),
+            row_gap: px(UI_CONTENT_GAP),
         }
-        ResponsivePercentWidth { landscape: GAMEBOY_CENTRE_COLUMN_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -634,12 +622,12 @@ fn right_column(
 
     bsn! {
         Node {
-            width: percent(RIGHT_COLUMN_PERCENT),
+            width: percent(UI_MAPPING_RIGHT_COLUMN_PERCENT),
             flex_direction: FlexDirection::Column,
-            row_gap: px(ROW_GAP),
+            row_gap: px(UI_CONTENT_GAP),
             padding: UiRect::top(px(6.0)),
         }
-        ResponsivePercentWidth { landscape: RIGHT_COLUMN_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_RIGHT_COLUMN_PERCENT }
         Children [
             {rows}
         ]
@@ -694,7 +682,7 @@ fn mapping_button(font: Handle<Font>, theme: ActiveTheme, label: String) -> impl
 
     bsn! {
         Node {
-            width: px(BUTTON_WIDTH),
+            width: px(UI_BUTTON_WIDTH),
             height: px(UI_ELEMENT_HEIGHT),
             flex_shrink: 0.0,
             border: ui_border(),
@@ -732,13 +720,13 @@ fn mapping_button(font: Handle<Font>, theme: ActiveTheme, label: String) -> impl
 fn controller_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
     bsn! {
         Node {
-            width: percent(GAMEBOY_CENTRE_COLUMN_PERCENT),
+            width: percent(UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT),
             min_height: px(196.0),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             padding: UiRect::vertical(px(6.0)),
         }
-        ResponsivePercentWidth { landscape: GAMEBOY_CENTRE_COLUMN_PERCENT }
+        ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT }
         IgnorePicking
         Children [
             (

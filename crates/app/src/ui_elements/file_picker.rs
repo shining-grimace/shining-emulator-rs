@@ -3,18 +3,18 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    FILE_PICKER_GAP, UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT,
+    UI_FILE_PICKER_WIDTH, UI_INNER_PADDING,
+};
 use crate::ui_elements::interactions::{
     DisabledUiElement, HoveredUiElement, IgnorePicking, UiElementColors, UiElementKind,
     UiElementLabel, UiFocusNav, tree::contains_entity,
 };
-use crate::ui_elements::styles::{
-    UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_FILE_PICKER_WIDTH,
-    UI_INNER_PADDING, control_fill, hover_fill, ui_border, ui_radius,
-};
+use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 const FILE_PICKER_VISIBLE_CHARS: usize = 20;
-const FILE_PICKER_GAP: f32 = 12.0;
 
 #[derive(Clone, Component, Debug, Default, FromTemplate)]
 pub struct UiFilePicker {
@@ -237,7 +237,10 @@ pub(crate) fn update_file_picker_hover_colours(
     for (picker_entity, hovered, picker_children) in &pickers {
         for (entity, fill, mut background) in &mut hover_fills {
             if picker_entity == entity || contains_entity(picker_children, entity, &child_query) {
-                background.0 = if hovered { fill.hover_fill } else { fill.fill };
+                let next_background = if hovered { fill.hover_fill } else { fill.fill };
+                if background.0 != next_background {
+                    background.0 = next_background;
+                }
             }
         }
     }

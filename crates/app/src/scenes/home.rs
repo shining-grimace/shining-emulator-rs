@@ -5,6 +5,11 @@ use bevy::ui::UiGlobalTransform;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    UI_CONTENT_GAP, UI_CONTEXT_POPUP_LEFT, UI_FIELD_GAP, UI_MAX_CONTENT_WIDTH,
+    UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING,
+    UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP, UI_SIDEBAR_WIDTH,
+};
 use crate::input::selection::PrimaryInputDevice;
 use crate::scenes::rom_data::RomDataEditTarget;
 use crate::storage::LocalStorage;
@@ -22,7 +27,7 @@ use crate::ui_elements::info_message::{
 };
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, InitialFocus, SelectedUiElement,
-    SuppressFocusAutoScroll, UiElementKind, UiFocusNav, UiListCellText, UiScrollArea,
+    SuppressFocusAutoScroll, UiElementKind, UiFocusNav, UiListCellText, UiSchedule, UiScrollArea,
 };
 use crate::ui_elements::list_view::{
     ListColumn, ListRow, ListViewConfig, VirtualListContent, VirtualListRow, VirtualListScrollArea,
@@ -32,20 +37,9 @@ use crate::ui_elements::list_view::{
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
     ResponsiveColumns, ResponsiveFlexWidth, ResponsivePxWidth, ResponsiveScreenPadding,
-    UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
-use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 
-const HOME_CONTENT_GAP: f32 = 32.0;
-const HOME_MESSAGE_GAP: f32 = 12.0;
-const HOME_SIDE_PANEL_WIDTH: f32 = 280.0;
-const HOME_SIDE_TOP_GAP: f32 = 50.0;
-const HOME_SIDE_GROUP_GAP: f32 = 46.0;
-const HOME_SORT_LABEL_GAP: f32 = 12.0;
-const HOME_SORT_GROUP_GAP: f32 = 24.0;
-const AUTO_SAVE_POPUP_WIDTH: f32 = 260.0;
-const AUTO_SAVE_POPUP_LEFT: f32 = 760.0;
 const HOME_ROM_COLUMN_COUNT: usize = 5;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
 
@@ -96,8 +90,11 @@ impl Plugin for HomeScenePlugin {
                     .run_if(in_state(AppState::Home)),
             )
             .add_systems(
-                PostUpdate,
+                Update,
                 (sync_sorted_rom_rows, clear_invisible_home_row_state)
+                    .chain()
+                    .after(UiSchedule::Scroll)
+                    .before(UiSchedule::VisualState)
                     .run_if(in_state(AppState::Home)),
             )
             .add_observer(handle_home_activation);
@@ -218,8 +215,6 @@ fn handle_home_activation(
     settings_buttons: Query<(), With<SettingsButton>>,
     popup_options: Query<&ChoicePopupOption>,
     rom_rows: Query<(Entity, &VirtualListRow)>,
-    row_nodes: Query<(&ComputedNode, &UiGlobalTransform)>,
-    lists: Query<(&ComputedNode, &UiGlobalTransform), With<HomeRomList>>,
     popup_roots: Query<(Entity, &HomePopupRoot, &Children)>,
     child_query: Query<&Children>,
     focused: Query<Entity, With<FocusedUiElement>>,
@@ -242,11 +237,25 @@ fn handle_home_activation(
         match option.option_index {
             0 => {
                 set_latest_info_message(&mut messages, "Resume Auto-save selected.");
-                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+                focus_home_rom_row(
+                    &mut commands,
+                    popup_rom_index,
+                    &rom_rows,
+                    &focused,
+                    &popup_roots,
+                    &child_query,
+                );
             }
             1 => {
                 set_latest_info_message(&mut messages, "Cold Boot selected.");
-                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+                focus_home_rom_row(
+                    &mut commands,
+                    popup_rom_index,
+                    &rom_rows,
+                    &focused,
+                    &popup_roots,
+                    &child_query,
+                );
             }
             2 => {
                 if let Some(rom_index) = popup_rom_index {
@@ -258,21 +267,30 @@ fn handle_home_activation(
             }
             _ => {
                 set_latest_info_message(&mut messages, "Launch cancelled.");
-                focus_home_rom_row(&mut commands, popup_rom_index, &rom_rows, &focused);
+                focus_home_rom_row(
+                    &mut commands,
+                    popup_rom_index,
+                    &rom_rows,
+                    &focused,
+                    &popup_roots,
+                    &child_query,
+                );
             }
         }
     } else if let Ok((_, row)) = rom_rows.get(entity) {
-        if home_row_visible(entity, &row_nodes, &lists) {
-            despawn_home_popups(&mut commands, &popup_roots);
-            for entity in &focused {
-                commands.entity(entity).remove::<FocusedUiElement>();
-            }
-            commands.spawn_scene(auto_save_popup_scene(
-                &assets,
-                *theme,
-                rom_list_data.roms.get(row.item_index).cloned(),
-            ));
+        if row.item_index == usize::MAX {
+            return;
         }
+
+        despawn_home_popups(&mut commands, &popup_roots);
+        for entity in &focused {
+            commands.entity(entity).remove::<FocusedUiElement>();
+        }
+        commands.spawn_scene(auto_save_popup_scene(
+            &assets,
+            *theme,
+            rom_list_data.roms.get(row.item_index).cloned(),
+        ));
     }
 }
 
@@ -281,6 +299,8 @@ fn focus_home_rom_row(
     rom_index: Option<usize>,
     rom_rows: &Query<(Entity, &VirtualListRow)>,
     focused: &Query<Entity, With<FocusedUiElement>>,
+    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
+    child_query: &Query<&Children>,
 ) {
     let Some(rom_index) = rom_index else {
         return;
@@ -293,7 +313,7 @@ fn focus_home_rom_row(
     };
 
     for entity in focused {
-        if entity != row_entity {
+        if entity != row_entity && !inside_home_popup(entity, popup_roots, child_query) {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
     }
@@ -334,7 +354,7 @@ fn home_scene(
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(HOME_CONTENT_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     heading(font.clone(), theme, "Shining Emulator"),
@@ -355,7 +375,7 @@ fn home_scene(
                                     flex_shrink: 1.0,
                                     min_height: px(0.0),
                                     flex_direction: FlexDirection::Column,
-                                    row_gap: px(HOME_MESSAGE_GAP),
+                                    row_gap: px(UI_FIELD_GAP),
                                 }
                                 ResponsiveFlexWidth { landscape: 1.0 }
                                 Children [
@@ -380,13 +400,13 @@ fn home_scene(
                                     theme,
                                     #HomeSideScrollBar,
                                     ScrollViewConfig {
-                                        width: px(HOME_SIDE_PANEL_WIDTH),
+                                        width: px(UI_SIDEBAR_WIDTH),
                                         min_height: px(0.0),
                                         thumb_height: 72.0,
                                     },
                                     move |_| home_side_panel(side_font, theme)
                                 )
-                                ResponsivePxWidth { landscape: HOME_SIDE_PANEL_WIDTH }
+                                ResponsivePxWidth { landscape: UI_SIDEBAR_WIDTH }
                             ),
                         ]
                     ),
@@ -403,7 +423,7 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
             width: percent(100),
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: px(HOME_SIDE_GROUP_GAP),
+            row_gap: px(UI_SIDEBAR_GROUP_GAP),
             padding: UiRect::right(px(18.0)),
         }
         Children [
@@ -411,7 +431,7 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(HOME_SORT_GROUP_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     (
@@ -426,8 +446,8 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(HOME_SORT_LABEL_GAP),
-                    margin: UiRect::top(px(HOME_SIDE_TOP_GAP)),
+                    row_gap: px(UI_FIELD_GAP),
+                    margin: UiRect::top(px(UI_SIDEBAR_TOP_GAP)),
                 }
                 Children [
                     description(font.clone(), theme, "Sort ROMs by:"),
@@ -633,12 +653,7 @@ fn refresh_home_rom_rows(
     let current_focused_entity = rows
         .iter()
         .find_map(|(entity, _, _, focused, _)| focused.then_some(entity));
-    let selected_item_index = rows
-        .iter()
-        .find_map(|(_, row, _, _, selected)| selected.then_some(row.item_index))
-        .filter(|item_index| *item_index != usize::MAX);
     let mut next_focused_entity = None;
-    let mut next_selected_entity = None;
 
     for (entity, mut row, children, _, _) in &mut *rows {
         let Some(rom_index) = rom_list_data.order.get(first_visible + row.slot).copied() else {
@@ -657,9 +672,6 @@ fn refresh_home_rom_rows(
         if focused_item_index == Some(rom_index) {
             next_focused_entity = Some(entity);
         }
-        if selected_item_index == Some(rom_index) {
-            next_selected_entity = Some(entity);
-        }
         if row.item_index == rom_index {
             continue;
         }
@@ -674,7 +686,7 @@ fn refresh_home_rom_rows(
         if focused && Some(entity) != next_focused_entity {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
-        if selected && Some(entity) != next_selected_entity {
+        if selected {
             commands.entity(entity).remove::<SelectedUiElement>();
         }
     }
@@ -684,11 +696,6 @@ fn refresh_home_rom_rows(
         if Some(next_focused_entity) != current_focused_entity {
             entity_commands.insert(SuppressFocusAutoScroll);
         }
-    }
-    if let Some(next_selected_entity) = next_selected_entity {
-        commands
-            .entity(next_selected_entity)
-            .insert(SelectedUiElement);
     }
 }
 
@@ -758,7 +765,7 @@ fn auto_save_popup_scene(
         DespawnOnExit::<AppState>(AppState::Home)
         Node {
             position_type: PositionType::Absolute,
-            left: px(AUTO_SAVE_POPUP_LEFT),
+            left: px(UI_CONTEXT_POPUP_LEFT),
             bottom: px(126.0),
         }
         HomePopupRoot { rom_index: {rom_index} }
@@ -766,7 +773,7 @@ fn auto_save_popup_scene(
         Children [
             choice_popup(font, theme, ChoicePopupConfig {
                 title: rom_name,
-                width: AUTO_SAVE_POPUP_WIDTH,
+                width: UI_MULTI_SELECT_WIDTH,
                 options: ["Resume Auto-save", "Cold Boot", "ROM Data", "Cancel"],
             })
         ]
@@ -778,8 +785,18 @@ fn despawn_home_popups(
     popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
 ) {
     for (popup, _, _) in popup_roots {
-        commands.entity(popup).despawn();
+        commands.entity(popup).try_despawn();
     }
+}
+
+fn inside_home_popup(
+    entity: Entity,
+    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
+    child_query: &Query<&Children>,
+) -> bool {
+    popup_roots.iter().any(|(popup, _, children)| {
+        entity == popup || contains_entity_recursive(children, entity, child_query)
+    })
 }
 
 fn popup_rom_index(

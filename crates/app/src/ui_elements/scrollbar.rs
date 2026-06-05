@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{SCROLLBAR_TRACK_PADDING, UI_SCROLLBAR_WIDTH};
 use crate::ui_elements::interactions::{
     DraggableUiElement, IgnorePicking, UiScrollThumb, UiScrollThumbColors, UiScrollbar,
 };
-use crate::ui_elements::styles::{UI_SCROLLBAR_WIDTH, control_fill};
+use crate::ui_elements::styles::control_fill;
 use crate::ui_elements::theme::{UiScrollThumbTheme, UiThemeBackgroundColor};
 
 pub fn scrollbar(theme: ActiveTheme, thumb_height: f32, travel: f32) -> impl Scene {
@@ -24,7 +25,7 @@ pub fn scrollbar_with_display(
             display: {display},
             width: px(UI_SCROLLBAR_WIDTH),
             height: percent(100),
-            padding: UiRect::vertical(px(6.0)),
+            padding: UiRect::vertical(px(SCROLLBAR_TRACK_PADDING)),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
         }

@@ -5,6 +5,12 @@ use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_CONTENT_GAP, UI_CONTROL_GAP,
+    UI_FIELD_GAP, UI_FORM_LEFT_COLUMN_FLEX, UI_FORM_RIGHT_COLUMN_FLEX, UI_MULTI_SELECT_WIDTH,
+    UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SECTION_GAP,
+    UI_WIDE_CONTENT_WIDTH,
+};
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
 use crate::storage::provider_sync::{
@@ -27,24 +33,11 @@ use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select_with_widt
 use crate::ui_elements::responsive::{
     ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveFlexWidth,
     ResponsiveLandscapeOnly, ResponsivePortraitOnly, ResponsiveScreenPadding,
-    UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
-use crate::ui_elements::styles::{UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 use crate::ui_elements::text_input::text_input_with_value_width;
 use crate::ui_elements::theme::UiThemeImageColor;
-
-const CONTENT_GAP: f32 = 28.0;
-const CONTROL_GAP: f32 = 20.0;
-const FIELD_GAP: f32 = 12.0;
-const PROVIDER_MAX_CONTENT_WIDTH: f32 = 1500.0;
-const LEFT_COLUMN_FLEX: f32 = 38.0;
-const RIGHT_COLUMN_FLEX: f32 = 62.0;
-const BUTTON_GAP: f32 = 28.0;
-const PROVIDER_HERO_TEXTURE_SIZE: f32 = 454.0;
-const PROVIDER_HERO_GRID_UNITS: f32 = 2.0;
-const PROVIDER_HERO_IMAGE_SIZE: f32 = 184.0;
 const CLOUD_SYNC_HERO_X: f32 = 1.0;
 const CLOUD_SYNC_HERO_Y: f32 = 0.0;
 
@@ -350,11 +343,11 @@ fn rom_provider_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(PROVIDER_MAX_CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTENT_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     settings_header(font.clone(), assets.icons.clone(), theme, "ROM Provider"),
@@ -455,10 +448,10 @@ fn provider_landscape_body(
                     width: px(0.0),
                     min_width: px(0.0),
                     min_height: px(0.0),
-                    flex_grow: LEFT_COLUMN_FLEX,
+                    flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
                     flex_shrink: 1.0,
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTROL_GAP),
+                    row_gap: px(UI_CONTROL_GAP),
                 }
                 Children [
                     (
@@ -492,7 +485,7 @@ fn provider_landscape_body(
                     width: px(0.0),
                     min_width: px(0.0),
                     min_height: px(0.0),
-                    flex_grow: RIGHT_COLUMN_FLEX,
+                    flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
                     flex_shrink: 1.0,
                 }
                 Children [
@@ -540,12 +533,12 @@ fn provider_body(
                     width: px(0.0),
                     min_width: px(0.0),
                     min_height: px(0.0),
-                    flex_grow: LEFT_COLUMN_FLEX,
+                    flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
                     flex_shrink: 1.0,
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTROL_GAP),
+                    row_gap: px(UI_CONTROL_GAP),
                 }
-                ResponsiveFlexWidth { landscape: LEFT_COLUMN_FLEX }
+                ResponsiveFlexWidth { landscape: UI_FORM_LEFT_COLUMN_FLEX }
                 Children [
                     provider_left_column(left_font, heroes, theme, left_provider),
                     provider_action_buttons(button_font, theme),
@@ -556,10 +549,10 @@ fn provider_body(
                     width: px(0.0),
                     min_width: px(0.0),
                     min_height: px(0.0),
-                    flex_grow: RIGHT_COLUMN_FLEX,
+                    flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
                     flex_shrink: 1.0,
                 }
-                ResponsiveFlexWidth { landscape: RIGHT_COLUMN_FLEX }
+                ResponsiveFlexWidth { landscape: UI_FORM_RIGHT_COLUMN_FLEX }
                 Children [
                     provider_right_column(right_font, theme, right_provider),
                 ]
@@ -583,7 +576,7 @@ fn provider_left_column(
             width: percent(100),
             min_width: px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CONTROL_GAP),
+            row_gap: px(UI_CONTROL_GAP),
             padding: UiRect {
                 left: px(0.0),
                 right: px(22.0),
@@ -625,10 +618,10 @@ fn provider_action_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene
     bsn! {
         Node {
             width: percent(100),
-            column_gap: px(BUTTON_GAP),
+            column_gap: px(UI_SECTION_GAP),
             padding: UiRect::right(px(22.0)),
         }
-        ResponsiveButtonRow { gap: BUTTON_GAP }
+        ResponsiveButtonRow { gap: UI_SECTION_GAP }
         Children [
             (
                 button(font.clone(), "Test Connection", theme, UiFocusNav::default())
@@ -694,7 +687,7 @@ fn provider_right_column(
             width: percent(100),
             min_width: px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: px(CONTROL_GAP),
+            row_gap: px(UI_CONTROL_GAP),
             padding: UiRect {
                 left: px(0.0),
                 right: px(22.0),
@@ -708,7 +701,7 @@ fn provider_right_column(
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTROL_GAP),
+                    row_gap: px(UI_CONTROL_GAP),
                 }
                 Children [
                     labeled_input(font.clone(), theme, "API URL", "Enter URL...", api_url, FIELD_API_URL, TARGET_API_URL, false),
@@ -793,7 +786,7 @@ fn labeled_input(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(FIELD_GAP),
+            row_gap: px(UI_FIELD_GAP),
         }
         Children [
             description(font.clone(), theme, label),
@@ -822,7 +815,7 @@ fn labeled_directory_picker(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(FIELD_GAP),
+            row_gap: px(UI_FIELD_GAP),
         }
         Children [
             description(font.clone(), theme, label),
@@ -891,7 +884,7 @@ fn pagination_controls(
                         Node {
                             width: percent(100),
                             flex_direction: FlexDirection::Column,
-                            row_gap: px(FIELD_GAP),
+                            row_gap: px(UI_FIELD_GAP),
                         }
                         Children [
                             description(font.clone(), theme, "Pagination"),
@@ -975,7 +968,7 @@ fn provider_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
-            min_height: px(PROVIDER_HERO_IMAGE_SIZE),
+            min_height: px(HERO_IMAGE_SIZE),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
             padding: UiRect::vertical(px(12.0)),
@@ -984,8 +977,8 @@ fn provider_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
         Children [
             (
                 Node {
-                    width: px(PROVIDER_HERO_IMAGE_SIZE),
-                    height: px(PROVIDER_HERO_IMAGE_SIZE),
+                    width: px(HERO_IMAGE_SIZE),
+                    height: px(HERO_IMAGE_SIZE),
                 }
                 ImageNode {
                     image: {image},
@@ -1000,7 +993,7 @@ fn provider_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
 }
 
 fn hero_grid_rect(x: f32, y: f32) -> Rect {
-    let unit = PROVIDER_HERO_TEXTURE_SIZE / PROVIDER_HERO_GRID_UNITS;
+    let unit = HERO_TEXTURE_SIZE / HERO_GRID_UNITS;
     Rect {
         min: Vec2::new(x * unit, y * unit),
         max: Vec2::new((x + 1.0) * unit, (y + 1.0) * unit),

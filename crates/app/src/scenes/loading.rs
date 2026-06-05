@@ -6,10 +6,8 @@ use crate::app_assets::{
 };
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
-use crate::dimensions::UI_HINT_MARGIN;
-use crate::ui_elements::loading_indicator::{
-    LOADING_INDICATOR_GRID_SIZE, LoadingIndicatorPlugin, loading_indicator_scene,
-};
+use crate::dimensions::{LOADING_INDICATOR_GRID_SIZE, UI_HINT_MARGIN};
+use crate::ui_elements::loading_indicator::{LoadingIndicatorPlugin, loading_indicator_scene};
 
 pub struct LoadingScenePlugin;
 

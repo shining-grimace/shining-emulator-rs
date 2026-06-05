@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use crate::app_state::AppState;
 use crate::ui_elements::back_button::UiBackButton;
 use crate::ui_elements::file_picker::{UiFilePicker, UiFilePickerActivated};
+use crate::ui_elements::list_view::{VirtualListRow, VirtualListSelection};
 
 use super::focus::FocusedUiElement;
 use super::multi_select::{
@@ -41,6 +42,9 @@ pub(super) fn activate_controls(
 ) {
     let keyboard_activation = input.select;
     let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
+    if clicked_entities.is_empty() && !input.select && !input.back && !input.quit_app {
+        return;
+    }
 
     if input.quit_app || (input.back && *state.get() != AppState::InputMapping) {
         match back_navigation_target(*state.get()) {
@@ -156,9 +160,11 @@ pub(super) fn activate_controls(
             .is_ok_and(|kind| *kind == UiElementKind::ListItem)
     }) {
         for selected_entity in &selected_rows {
-            commands
-                .entity(selected_entity)
-                .remove::<SelectedUiElement>();
+            if selected_entity != clicked_entity {
+                commands
+                    .entity(selected_entity)
+                    .remove::<SelectedUiElement>();
+            }
         }
         commands
             .entity(clicked_entity)
@@ -178,6 +184,44 @@ pub(super) fn activate_controls(
             commands.entity(entity).insert(ActivatedUiElement);
             file_picker_activated.write(UiFilePickerActivated { picker: entity });
         }
+    }
+}
+
+pub(super) fn select_virtual_list_rows(
+    mut clicked: MessageReader<UiPointerClicked>,
+    virtual_rows: Query<&VirtualListRow>,
+    mut virtual_selections: Query<&mut VirtualListSelection>,
+    parents: Query<&ChildOf>,
+) {
+    for clicked_entity in clicked.read().map(|click| click.entity) {
+        let Ok(row) = virtual_rows.get(clicked_entity) else {
+            continue;
+        };
+        if row.item_index == usize::MAX {
+            continue;
+        }
+        select_virtual_list_row(
+            clicked_entity,
+            row.item_index,
+            &mut virtual_selections,
+            &parents,
+        );
+    }
+}
+
+fn select_virtual_list_row(
+    row_entity: Entity,
+    item_index: usize,
+    virtual_selections: &mut Query<&mut VirtualListSelection>,
+    parents: &Query<&ChildOf>,
+) {
+    let mut current = Some(row_entity);
+    while let Some(entity) = current {
+        if let Ok(mut selection) = virtual_selections.get_mut(entity) {
+            selection.selected_item_index = Some(item_index);
+            return;
+        }
+        current = parents.get(entity).ok().map(|parent| parent.0);
     }
 }
 

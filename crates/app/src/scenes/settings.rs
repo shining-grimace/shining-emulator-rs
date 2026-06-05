@@ -5,6 +5,11 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged, active_theme_for_setting};
 use crate::app_ui_scale::{UI_SCALE_LABELS, apply_ui_scale_setting};
+use crate::dimensions::{
+    UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
+    UI_SECONDARY_COLUMN_PERCENT, UI_SECTION_GAP,
+};
 use crate::input::selection::{
     InputMappingEditTarget, PrimaryInputDevice, mapping_label, selected_mapping_index,
 };
@@ -27,18 +32,10 @@ use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
     ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly,
     ResponsivePercentWidth, ResponsivePortraitOnly, ResponsiveScreenPadding,
-    UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
-use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 
-const SETTINGS_CONTENT_GAP: f32 = 24.0;
-const SETTINGS_CONTROL_GAP: f32 = 20.0;
-const SETTINGS_RIGHT_SECTION_GAP: f32 = 28.0;
-const SETTINGS_BUTTON_ROW_GAP: f32 = 16.0;
-const SETTINGS_LEFT_WIDTH_PERCENT: f32 = 48.0;
-const SETTINGS_RIGHT_WIDTH_PERCENT: f32 = 52.0;
 const SETTINGS_SAVE_ERROR_MESSAGE: &str = "Settings could not be saved";
 
 const FIELD_FORCE_BUTTON_OVERLAY: u8 = 0;
@@ -532,7 +529,7 @@ fn settings_scene(
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(SETTINGS_CONTENT_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     settings_header(font.clone(), assets.icons.clone(), theme, "Settings"),
@@ -592,7 +589,7 @@ fn settings_left_column(
         Node {
             width: percent(100),
             flex_direction: FlexDirection::Column,
-            row_gap: px(SETTINGS_CONTROL_GAP),
+            row_gap: px(UI_CONTROL_GAP),
             padding: UiRect::right(px(18.0)),
         }
         Children [
@@ -760,10 +757,10 @@ fn settings_left_column(
             (
                 Node {
                     width: percent(100),
-                    column_gap: px(SETTINGS_BUTTON_ROW_GAP),
+                    column_gap: px(UI_BUTTON_ROW_GAP),
                     padding: UiRect::bottom(px(120.0)),
                 }
-                ResponsiveButtonRow { gap: SETTINGS_BUTTON_ROW_GAP }
+                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
                 Children [
                     (
                         button(font.clone(), "Delete", theme, UiFocusNav::default())
@@ -810,22 +807,22 @@ fn settings_body(
         Children [
             (
                 Node {
-                    width: percent(SETTINGS_LEFT_WIDTH_PERCENT),
+                    width: percent(UI_PRIMARY_COLUMN_PERCENT),
                     min_height: px(0.0),
                 }
-                ResponsivePercentWidth { landscape: SETTINGS_LEFT_WIDTH_PERCENT }
+                ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
                 Children [
                     settings_left_column(left_font, theme, settings, input_config),
                 ]
             ),
             (
                 Node {
-                    width: percent(SETTINGS_RIGHT_WIDTH_PERCENT),
+                    width: percent(UI_SECONDARY_COLUMN_PERCENT),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(SETTINGS_RIGHT_SECTION_GAP),
+                    row_gap: px(UI_SECTION_GAP),
                 }
-                ResponsivePercentWidth { landscape: SETTINGS_RIGHT_WIDTH_PERCENT }
+                ResponsivePercentWidth { landscape: UI_SECONDARY_COLUMN_PERCENT }
                 Children [
                     (
                         Node {
@@ -846,9 +843,9 @@ fn settings_body(
                                 Node {
                                     width: percent(100),
                                     justify_content: JustifyContent::FlexEnd,
-                                    column_gap: px(SETTINGS_BUTTON_ROW_GAP),
+                                    column_gap: px(UI_BUTTON_ROW_GAP),
                                 }
-                                ResponsiveButtonRow { gap: SETTINGS_BUTTON_ROW_GAP }
+                                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
                                 Children [
                                     (
                                         button(right_font.clone(), "Sync", theme, UiFocusNav::default())
@@ -909,7 +906,7 @@ fn settings_landscape_body(
                     theme,
                     #LeftScrollBar,
                     ScrollViewConfig {
-                        width: percent(SETTINGS_LEFT_WIDTH_PERCENT),
+                        width: percent(UI_PRIMARY_COLUMN_PERCENT),
                         min_height: px(0.0),
                         thumb_height: 112.0,
                     },
@@ -918,10 +915,10 @@ fn settings_landscape_body(
             ),
             (
                 Node {
-                    width: percent(SETTINGS_RIGHT_WIDTH_PERCENT),
+                    width: percent(UI_SECONDARY_COLUMN_PERCENT),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(SETTINGS_RIGHT_SECTION_GAP),
+                    row_gap: px(UI_SECTION_GAP),
                 }
                 Children [
                     settings_provider_column(right_font, theme, providers),
@@ -957,9 +954,9 @@ fn settings_provider_column(
                 Node {
                     width: percent(100),
                     justify_content: JustifyContent::FlexEnd,
-                    column_gap: px(SETTINGS_BUTTON_ROW_GAP),
+                    column_gap: px(UI_BUTTON_ROW_GAP),
                 }
-                ResponsiveButtonRow { gap: SETTINGS_BUTTON_ROW_GAP }
+                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
                 Children [
                     (
                         button(font.clone(), "Sync", theme, UiFocusNav::default())

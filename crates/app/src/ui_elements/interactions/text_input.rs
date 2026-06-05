@@ -176,8 +176,12 @@ pub(super) fn update_text_input_text(
 
         for child in children {
             if let Ok((mut text_component, mut text_colour)) = text_query.get_mut(*child) {
-                text_component.0 = text.clone();
-                text_colour.0 = colour;
+                if text_component.0 != text {
+                    text_component.0 = text.clone();
+                }
+                if text_colour.0 != colour {
+                    text_colour.0 = colour;
+                }
             }
         }
     }

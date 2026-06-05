@@ -9,6 +9,11 @@ use bevy::text::FontSourceTemplate;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{
+    HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_CONTENT_GAP, UI_MAX_CONTENT_WIDTH,
+    UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
+    UI_SECONDARY_COLUMN_PERCENT,
+};
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
@@ -27,20 +32,11 @@ use crate::ui_elements::list_view::{ListColumn, ListRow, ListViewConfig, list_vi
 use crate::ui_elements::responsive::{
     ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly,
     ResponsivePercentWidth, ResponsivePortraitOnly, ResponsiveScreenPadding,
-    UI_PORTRAIT_SCREEN_PADDING,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
-use crate::ui_elements::styles::{UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP, UI_SCREEN_PADDING};
 use crate::ui_elements::theme::{UiThemeImageColor, UiThemeTextColor};
 
-const CONTENT_GAP: f32 = 24.0;
-const LEFT_WIDTH_PERCENT: f32 = 48.0;
-const RIGHT_WIDTH_PERCENT: f32 = 52.0;
-const FIELD_GAP: f32 = 18.0;
-const HERO_TEXTURE_SIZE: f32 = 454.0;
-const HERO_GRID_UNITS: f32 = 2.0;
-const HERO_IMAGE_SIZE: f32 = 184.0;
 const STORAGE_HERO_X: f32 = 0.0;
 const STORAGE_HERO_Y: f32 = 1.0;
 
@@ -234,7 +230,7 @@ fn rom_data_scene(
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(CONTENT_GAP),
+                    row_gap: px(UI_CONTENT_GAP),
                 }
                 Children [
                     settings_header(font.clone(), assets.icons.clone(), theme, "ROM Storage Details"),
@@ -340,7 +336,7 @@ fn rom_data_landscape_body(
                     theme,
                     #RomDataLeftScrollBar,
                     ScrollViewConfig {
-                        width: percent(LEFT_WIDTH_PERCENT),
+                        width: percent(UI_PRIMARY_COLUMN_PERCENT),
                         min_height: px(0.0),
                         thumb_height: 112.0,
                     },
@@ -353,7 +349,7 @@ fn rom_data_landscape_body(
                     theme,
                     #RomDataRightScrollBar,
                     ScrollViewConfig {
-                        width: percent(RIGHT_WIDTH_PERCENT),
+                        width: percent(UI_SECONDARY_COLUMN_PERCENT),
                         min_height: px(0.0),
                         thumb_height: 112.0,
                     },
@@ -396,12 +392,12 @@ fn left_panel(
 
     bsn! {
         Node {
-            width: percent(LEFT_WIDTH_PERCENT),
+            width: percent(UI_PRIMARY_COLUMN_PERCENT),
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
-            row_gap: px(FIELD_GAP),
+            row_gap: px(UI_PANEL_GAP),
         }
-        ResponsivePercentWidth { landscape: LEFT_WIDTH_PERCENT }
+        ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
         Children [
             description(font.clone(), theme, "Storage Location:"),
             description(font.clone(), theme, storage_location),
@@ -440,12 +436,12 @@ fn left_panel(
 fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) -> impl Scene {
     bsn! {
         Node {
-            width: percent(RIGHT_WIDTH_PERCENT),
+            width: percent(UI_SECONDARY_COLUMN_PERCENT),
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(20.0),
         }
-        ResponsivePercentWidth { landscape: RIGHT_WIDTH_PERCENT }
+        ResponsivePercentWidth { landscape: UI_SECONDARY_COLUMN_PERCENT }
         Children [
             description(font.clone(), theme, "All Files"),
             (

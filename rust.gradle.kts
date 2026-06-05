@@ -4,8 +4,6 @@ val NDK_TOOLCHAIN_PATH = "/home/thomas/Android/Sdk/ndk/29.0.14206865/toolchains/
 val TARGET_SDK = 35
 
 tasks.register<Exec>("cargoBuildAarch64") {
-    outputs.upToDateWhen { false }
-
     // Environment needed by Bevy app
     environment("AR", "$NDK_TOOLCHAIN_PATH/bin/llvm-ar")
     environment("CC", "$NDK_TOOLCHAIN_PATH/bin/aarch64-linux-android${TARGET_SDK}-clang")
@@ -21,11 +19,15 @@ tasks.register<Exec>("cargoBuildAarch64") {
         "aarch64-linux-android",
         "--release"
     )
+
+    // Avoid running cargo if no source files changed
+    inputs.dir("crates")
+    inputs.file("Cargo.toml")
+    inputs.file("Cargo.lock")
+    outputs.file("target/aarch64-linux-android/release/libshiningemulator.so")
 }
 
 tasks.register<Exec>("cargoBuildX86_64") {
-    outputs.upToDateWhen { false }
-
     // Environment needed by Bevy app
     environment("AR", "$NDK_TOOLCHAIN_PATH/bin/llvm-ar")
     environment("CC", "$NDK_TOOLCHAIN_PATH/bin/x86_64-linux-android${TARGET_SDK}-clang")
@@ -39,8 +41,14 @@ tasks.register<Exec>("cargoBuildX86_64") {
         "android",
         "--target",
         "x86_64-linux-android",
-        "--release",
+        "--release"
     )
+
+    // Avoid running cargo if no source files changed
+    inputs.dir("crates")
+    inputs.file("Cargo.toml")
+    inputs.file("Cargo.lock")
+    outputs.file("target/x86_64-linux-android/release/libshiningemulator.so")
 }
 
 tasks.register("copyAarch64Lib") {
@@ -51,7 +59,6 @@ tasks.register("copyAarch64Lib") {
             into("app/src/main/jniLibs/arm64-v8a")
         }
     }
-    outputs.upToDateWhen { false }
 }
 
 tasks.register("copyX86_64Lib") {
@@ -62,11 +69,23 @@ tasks.register("copyX86_64Lib") {
             into("app/src/main/jniLibs/x86_64")
         }
     }
-    outputs.upToDateWhen { false }
 }
 
 tasks.register("rustBuild") {
-    dependsOn("copyAarch64Lib", "copyX86_64Lib")
+    // Only build for the architecture(s) that Android Studio is currently targeting.
+    val abis = project.findProperty("android.injected.build.abi")?.toString() ?: ""
+    
+    if (abis.isEmpty()) {
+        dependsOn("copyAarch64Lib", "copyX86_64Lib")
+    } else {
+        if (abis.contains("arm64-v8a")) {
+            dependsOn("copyAarch64Lib")
+        }
+        if (abis.contains("x86_64")) {
+            dependsOn("copyX86_64Lib")
+        }
+    }
+
     doLast {
         file("app/src/main/jniLibs").setLastModified(System.currentTimeMillis())
     }

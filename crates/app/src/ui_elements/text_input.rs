@@ -3,14 +3,12 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
+use crate::dimensions::{UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING};
 use crate::ui_elements::interactions::{
     EditableUiElement, IgnorePicking, UiElementColors, UiElementKind, UiElementLabel, UiFocusNav,
     UiTextInput, UiTextInputText,
 };
-use crate::ui_elements::styles::{
-    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, control_fill, hover_fill, ui_border,
-    ui_radius,
-};
+use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
 
 pub fn text_input_with_value_width(

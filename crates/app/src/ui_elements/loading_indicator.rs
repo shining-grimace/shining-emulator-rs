@@ -2,9 +2,7 @@ use bevy::prelude::*;
 
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
-
-pub const LOADING_INDICATOR_SQUARE_SIZE: f32 = 24.0;
-pub const LOADING_INDICATOR_GRID_SIZE: f32 = LOADING_INDICATOR_SQUARE_SIZE * 2.0;
+use crate::dimensions::{LOADING_INDICATOR_GRID_SIZE, LOADING_INDICATOR_SQUARE_SIZE};
 
 const LOADING_INDICATOR_STEP_SECONDS: f32 = 0.25;
 
