@@ -1,4 +1,5 @@
 pub mod audio_settings;
+pub mod gameplay;
 pub mod home;
 pub mod input_mapping;
 pub mod loading;

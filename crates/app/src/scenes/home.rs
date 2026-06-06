@@ -236,26 +236,10 @@ fn handle_home_activation(
         despawn_home_popups(&mut commands, &popup_roots);
         match option.option_index {
             0 => {
-                set_latest_info_message(&mut messages, "Resume Auto-save selected.");
-                focus_home_rom_row(
-                    &mut commands,
-                    popup_rom_index,
-                    &rom_rows,
-                    &focused,
-                    &popup_roots,
-                    &child_query,
-                );
+                next_state.set(AppState::Gameplay);
             }
             1 => {
-                set_latest_info_message(&mut messages, "Cold Boot selected.");
-                focus_home_rom_row(
-                    &mut commands,
-                    popup_rom_index,
-                    &rom_rows,
-                    &focused,
-                    &popup_roots,
-                    &child_query,
-                );
+                next_state.set(AppState::Gameplay);
             }
             2 => {
                 if let Some(rom_index) = popup_rom_index {

@@ -313,6 +313,14 @@ mod tests {
     }
 
     #[test]
+    fn back_navigation_from_gameplay_returns_to_home() {
+        assert_eq!(
+            back_navigation_target(AppState::Gameplay),
+            Some(AppState::Home)
+        );
+    }
+
+    #[test]
     fn back_navigation_from_home_exits_app() {
         assert_eq!(back_navigation_target(AppState::Home), None);
     }

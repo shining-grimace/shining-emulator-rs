@@ -49,9 +49,29 @@ pub fn action_hints_with_labels(
     back_label: &'static str,
     action_label: &'static str,
 ) -> impl Scene {
+    action_hints_for_actions(
+        font,
+        icons,
+        theme,
+        storage,
+        primary_input,
+        (InputAction::B, back_label),
+        (InputAction::A, action_label),
+    )
+}
+
+pub fn action_hints_for_actions(
+    font: Handle<Font>,
+    icons: Handle<Image>,
+    theme: ActiveTheme,
+    storage: &LocalStorage,
+    primary_input: &PrimaryInputDevice,
+    first: (InputAction, &'static str),
+    second: (InputAction, &'static str),
+) -> impl Scene {
     let mapping = selected_mapping(primary_input, storage);
-    let quit_key = action_key_hint(mapping, InputAction::B);
-    let select_key = action_key_hint(mapping, InputAction::A);
+    let first_key = action_key_hint(mapping, first.0);
+    let second_key = action_key_hint(mapping, second.0);
 
     bsn! {
         Node {
@@ -60,8 +80,8 @@ pub fn action_hints_with_labels(
             column_gap: px(ACTION_HINT_GAP),
         }
         Children [
-            action_hint(font.clone(), icons.clone(), theme, InputAction::B, quit_key, back_label),
-            action_hint(font, icons, theme, InputAction::A, select_key, action_label)
+            action_hint(font.clone(), icons.clone(), theme, first.0, first_key, first.1),
+            action_hint(font, icons, theme, second.0, second_key, second.1)
         ]
     }
 }
