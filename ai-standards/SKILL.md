@@ -14,9 +14,10 @@
 ## Core Principles
 
 1. **Make Invalid States Unrepresentable:** Leverage Rust's type system (Enums, Newtypes, State variables) to enforce correct logic at compile time. If a state shouldn't exist, the compiler shouldn't allow it to be written.
-2. **Feature-First Organization:** Code must be organized by feature or domain (e.g., `settings`, `file_browser`, `rendering`), not by ECS type (e.g., not a global `systems` or `components` folder). 
+2. **Feature-First Organization:** Code must be organized by feature or domain (e.g., `settings`, `file_browser`, `rendering`), not by ECS type (e.g., not a global `systems` or `components` folder)
 3. **Data-Oriented Design Over OOP:** Data (Components/Resources) and behavior (Systems/Traits) must remain strictly separated. Composition over inheritance is mandatory.
 4. **Fearless Concurrency & Ownership:** Lean on Rust's borrow checker. Minimize allocations, avoid shared mutability (`Arc<Mutex<T>>`) when Bevy's `ResMut` or message passing (Events/Channels) can solve the problem natively.
+5. **Single-responsibility Organization** Define common, shared parts together in files or modules which have single responsibility (a dimensions file, a colors file, a behavious directory, etc.) and try to keep feature files smaller than around 200 lines unless it's a large feature.
 
 ## Rules
 

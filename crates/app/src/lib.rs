@@ -6,6 +6,7 @@ mod background;
 mod binary_text;
 mod circuit_board;
 mod dimensions;
+mod game_boy;
 mod input;
 mod scenes;
 mod storage;
@@ -61,6 +62,7 @@ where
         .add_plugins(ui_elements::action_hint::ActionHintPlugin)
         .add_plugins(scenes::audio_settings::AudioSettingsScenePlugin)
         .add_plugins(scenes::gameplay::GameplayScenePlugin)
+        .add_plugins(game_boy::GameBoyPlugin)
         .add_plugins((
             input::InputPlugin,
             background::BackgroundPlugin,

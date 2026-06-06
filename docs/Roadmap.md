@@ -81,9 +81,9 @@ Steps:
 a. Implement the design features of the emulation screen: fade background
    elements away, fade audio away, show a placeholder error message "Not
    Implemented", and allow the user to navigate back to the Home screen
-b. Create a plugin for writing to GameBoy frames from a ring buffer, drawing
-   random greyscale pixels every frame, scheduled to produce frames as close
-   as possible to the refresh rate of a real GameBoy
+b. Create a plugin for writing to GameBoy frames borrowed from a ring buffer,
+   drawing random greyscale pixels every frame, scheduled to produce frames
+   as close as possible to the refresh rate of a real GameBoy
 c. Create a plugin for rendering the last-written GameBoy frame buffer
 
 # Stage 5 - Audio Setup
