@@ -83,7 +83,6 @@ pub const HERO_IMAGE_SIZE: f32 = 184.0;
 pub const UI_SIDEBAR_WIDTH: f32 = 280.0;
 pub const UI_SIDEBAR_TOP_GAP: f32 = 50.0;
 pub const UI_SIDEBAR_GROUP_GAP: f32 = 46.0;
-pub const UI_CONTEXT_POPUP_LEFT: f32 = 760.0;
 pub const UI_SCROLL_CONTENT_BOTTOM_PADDING: f32 = 320.0;
 
 pub const UI_PRIMARY_COLUMN_PERCENT: f32 = 48.0;

@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
 use bevy::ui::UiGlobalTransform;
+use bevy::window::PrimaryWindow;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    UI_CONTENT_GAP, UI_CONTEXT_POPUP_LEFT, UI_FIELD_GAP, UI_MAX_CONTENT_WIDTH,
-    UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING,
+    UI_CONTENT_GAP, UI_FIELD_GAP, UI_MAX_CONTENT_WIDTH, UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
     UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP, UI_SIDEBAR_WIDTH,
 };
 use crate::input::selection::PrimaryInputDevice;
@@ -36,12 +37,14 @@ use crate::ui_elements::list_view::{
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
-    ResponsiveColumns, ResponsiveFlexWidth, ResponsivePxWidth, ResponsiveScreenPadding,
+    ResponsiveColumns, ResponsiveFlexWidth, ResponsiveScreenPadding,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 
 const HOME_ROM_COLUMN_COUNT: usize = 5;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
+const HOME_POPUP_SCREEN_MARGIN: f32 = 16.0;
+const HOME_POPUP_ESTIMATED_HEIGHT: f32 = 300.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SettingsButton;
@@ -54,6 +57,9 @@ struct PrimarySortSelect;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SecondarySortSelect;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct HomeSidePanelSlot;
 
 #[derive(Clone, Copy, Component, Debug, Default)]
 struct HomeRomRowsBound;
@@ -79,6 +85,10 @@ impl Plugin for HomeScenePlugin {
         app.init_resource::<HomeRomListData>()
             .init_resource::<HomeVirtualListSyncState>()
             .add_systems(OnEnter(AppState::Home), spawn_home_scene)
+            .add_systems(
+                PreUpdate,
+                apply_home_side_panel_layout.run_if(in_state(AppState::Home)),
+            )
             .add_systems(
                 Update,
                 (
@@ -218,6 +228,7 @@ fn handle_home_activation(
     popup_roots: Query<(Entity, &HomePopupRoot, &Children)>,
     child_query: Query<&Children>,
     focused: Query<Entity, With<FocusedUiElement>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     rom_list_data: Res<HomeRomListData>,
     mut rom_data_target: ResMut<RomDataEditTarget>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
@@ -267,6 +278,7 @@ fn handle_home_activation(
         }
 
         despawn_home_popups(&mut commands, &popup_roots);
+        let popup_position = centered_home_popup_position(&windows);
         for entity in &focused {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
@@ -274,6 +286,7 @@ fn handle_home_activation(
             &assets,
             *theme,
             rom_list_data.roms.get(row.item_index).cloned(),
+            popup_position,
         ));
     }
 }
@@ -390,7 +403,7 @@ fn home_scene(
                                     },
                                     move |_| home_side_panel(side_font, theme)
                                 )
-                                ResponsivePxWidth { landscape: UI_SIDEBAR_WIDTH }
+                                HomeSidePanelSlot
                             ),
                         ]
                     ),
@@ -401,6 +414,31 @@ fn home_scene(
     }
 }
 
+fn apply_home_side_panel_layout(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut panels: Query<&mut Node, With<HomeSidePanelSlot>>,
+) {
+    let Some(window) = windows.iter().next() else {
+        return;
+    };
+    let portrait = window.width() < window.height();
+
+    for mut node in &mut panels {
+        node.min_height = px(0.0);
+        if portrait {
+            node.width = percent(100);
+            node.height = px(0.0);
+            node.flex_grow = 1.0;
+            node.flex_shrink = 1.0;
+        } else {
+            node.width = px(UI_SIDEBAR_WIDTH);
+            node.height = percent(100);
+            node.flex_grow = 0.0;
+            node.flex_shrink = 0.0;
+        }
+    }
+}
+
 fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
     bsn! {
         Node {
@@ -408,7 +446,12 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(UI_SIDEBAR_GROUP_GAP),
-            padding: UiRect::right(px(18.0)),
+            padding: UiRect {
+                left: px(0.0),
+                right: px(18.0),
+                top: px(0.0),
+                bottom: px(UI_SCROLL_CONTENT_BOTTOM_PADDING),
+            },
         }
         Children [
             (
@@ -736,6 +779,7 @@ fn auto_save_popup_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
     rom: Option<HomeRom>,
+    position: Vec2,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
     let rom_name = rom
@@ -749,8 +793,8 @@ fn auto_save_popup_scene(
         DespawnOnExit::<AppState>(AppState::Home)
         Node {
             position_type: PositionType::Absolute,
-            left: px(UI_CONTEXT_POPUP_LEFT),
-            bottom: px(126.0),
+            left: px(position.x),
+            top: px(position.y),
         }
         HomePopupRoot { rom_index: {rom_index} }
         DismissChoicePopupOnOutsideClick
@@ -762,6 +806,32 @@ fn auto_save_popup_scene(
             })
         ]
     }
+}
+
+fn centered_home_popup_position(windows: &Query<&Window, With<PrimaryWindow>>) -> Vec2 {
+    let window_size = windows
+        .single()
+        .map(|window| Vec2::new(window.width(), window.height()))
+        .unwrap_or(Vec2::new(UI_MAX_CONTENT_WIDTH, 720.0));
+
+    let centered = Vec2::new(
+        (window_size.x - UI_MULTI_SELECT_WIDTH) * 0.5,
+        (window_size.y - HOME_POPUP_ESTIMATED_HEIGHT) * 0.5,
+    );
+
+    clamp_home_popup_position(centered, window_size)
+}
+
+fn clamp_home_popup_position(position: Vec2, window_size: Vec2) -> Vec2 {
+    let max_left = (window_size.x - UI_MULTI_SELECT_WIDTH - HOME_POPUP_SCREEN_MARGIN)
+        .max(HOME_POPUP_SCREEN_MARGIN);
+    let max_top = (window_size.y - HOME_POPUP_ESTIMATED_HEIGHT - HOME_POPUP_SCREEN_MARGIN)
+        .max(HOME_POPUP_SCREEN_MARGIN);
+
+    Vec2::new(
+        position.x.clamp(HOME_POPUP_SCREEN_MARGIN, max_left),
+        position.y.clamp(HOME_POPUP_SCREEN_MARGIN, max_top),
+    )
 }
 
 fn despawn_home_popups(

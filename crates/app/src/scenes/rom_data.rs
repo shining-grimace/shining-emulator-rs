@@ -31,7 +31,7 @@ use crate::ui_elements::interactions::{
 use crate::ui_elements::list_view::{ListColumn, ListRow, ListViewConfig, list_view};
 use crate::ui_elements::responsive::{
     ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly,
-    ResponsivePercentWidth, ResponsivePortraitOnly, ResponsiveScreenPadding,
+    ResponsivePortraitOnly, ResponsiveScreenPadding,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
@@ -392,12 +392,11 @@ fn left_panel(
 
     bsn! {
         Node {
-            width: percent(UI_PRIMARY_COLUMN_PERCENT),
+            width: percent(100),
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(UI_PANEL_GAP),
         }
-        ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
         Children [
             description(font.clone(), theme, "Storage Location:"),
             description(font.clone(), theme, storage_location),
@@ -436,12 +435,11 @@ fn left_panel(
 fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) -> impl Scene {
     bsn! {
         Node {
-            width: percent(UI_SECONDARY_COLUMN_PERCENT),
+            width: percent(100),
             min_height: px(0.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(20.0),
         }
-        ResponsivePercentWidth { landscape: UI_SECONDARY_COLUMN_PERCENT }
         Children [
             description(font.clone(), theme, "All Files"),
             (
@@ -491,16 +489,38 @@ fn detail_row(
         }
         ResponsiveFieldRow { gap: 18.0 }
         Children [
-            description(font.clone(), theme, label),
             (
-                Text({value})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
-                    font_size: px(20.0),
+                Node {
+                    flex_grow: 1.0,
+                    min_width: px(0.0),
                 }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
+                Children [
+                    description(font.clone(), theme, label),
+                ]
+            ),
+            (
+                Node {
+                    flex_grow: 1.0,
+                    min_width: px(0.0),
+                    padding: UiRect::right(px(22.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::FlexEnd,
+                    overflow: Overflow::clip(),
+                }
                 IgnorePicking
+                Children [
+                    (
+                        Text({value})
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                            font_size: px(20.0),
+                        }
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
+                        IgnorePicking
+                        TextLayout::new(Justify::Right, LineBreak::NoWrap)
+                    )
+                ]
             )
         ]
     }
