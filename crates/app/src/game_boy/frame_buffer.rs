@@ -14,6 +14,16 @@ pub(crate) struct GameBoyFrame {
     pixels: Box<[u8]>,
 }
 
+impl GameBoyFrame {
+    pub(crate) fn sequence(&self) -> GameBoyFrameSequence {
+        self.sequence
+    }
+
+    pub(crate) fn pixels(&self) -> &[u8] {
+        self.pixels.as_ref()
+    }
+}
+
 impl Default for GameBoyFrame {
     fn default() -> Self {
         Self {
@@ -71,6 +81,11 @@ impl GameBoyFrameRing {
             latest_sequence,
             sequence,
         })
+    }
+
+    pub(crate) fn latest_written_frame(&self) -> Option<&GameBoyFrame> {
+        self.latest_written_index
+            .and_then(|index| self.frames.get(index))
     }
 }
 

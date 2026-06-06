@@ -96,17 +96,15 @@ Assets:
 - assets/audio/sample-*.wav
 
 Steps:
-a. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
-   press of the left Ctrl key, conditionally in debug builds only
-b. Add the plugin to the project
-c. Load the MIDI file and defeult audio configuration during the loading
+a. Add the plugin to the project
+b. Load the MIDI file and defeult audio configuration during the loading
    screen
-d. Implement the track control as per the current theme on the transition from
+c. Implement the track control as per the current theme on the transition from
    the Splash screen of the app
-e. Ensure that playback stops when a game is launched from the Home screen, and
+d. Ensure that playback stops when a game is launched from the Home screen, and
    starts again when navigating back
-f. Ensure everything in the Audio Settings screen works as expected
-g. Ensure that changing the theme in the Settings screen immediately seeks to
+e. Ensure everything in the Audio Settings screen works as expected
+f. Ensure that changing the theme in the Settings screen immediately seeks to
    the corresponding audio playback position
 
 # Stage 6 - Emulation
@@ -132,13 +130,15 @@ Polish everything, and add extra unnecessary things for charm and replayability.
 NOTE: Move some of these up?
 
 Steps:
-a. Remove remaining jank from the UI
-b. Consider accessibility
-c. Consider multi language support
-c. Consider compatibility with libretro cores
-b. Check is vsync enabled, or any other possible cause of high CPU usage in settings
-c. Make sure all dead-code annotations are removed
-b. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
+a. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
+   press of the left Ctrl key, conditionally in debug builds only
+b. Remove remaining jank from the UI
+c. Consider accessibility
+d. Consider multi language support
+e. Consider compatibility with libretro cores
+f. Check is vsync enabled, or any other possible cause of high CPU usage in settings
+g. Make sure all dead-code annotations are removed
+h. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
    in/out and fading in/out on appear/disappear, row focus highlights in list views
    translating from one to another, scrolling being ease-out rather than instant
-a. Easter eggs?
+i. Easter eggs?
