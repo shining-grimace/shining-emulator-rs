@@ -16,6 +16,7 @@ pub struct ThemeDefinition {
     pub secondary: Color,
     pub tertiary: Color,
     pub background_asset_path: Option<&'static str>,
+    pub audio_anchor: Option<u32>,
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -25,6 +26,7 @@ pub struct ActiveTheme {
     pub secondary: Color,
     pub tertiary: Color,
     pub background_asset_path: Option<&'static str>,
+    pub audio_anchor: Option<u32>,
 }
 
 #[derive(Event)]
@@ -38,6 +40,7 @@ impl From<ThemeDefinition> for ActiveTheme {
             secondary: theme.secondary,
             tertiary: theme.tertiary,
             background_asset_path: theme.background_asset_path,
+            audio_anchor: theme.audio_anchor,
         }
     }
 }
@@ -76,6 +79,7 @@ pub const MINIMAL_THEME: ThemeDefinition = ThemeDefinition {
     secondary: Color::srgb_u8(0xe4, 0xbd, 0xa3),
     tertiary: Color::srgb_u8(0x8c, 0xb9, 0xca),
     background_asset_path: None,
+    audio_anchor: None,
 };
 
 pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
@@ -85,6 +89,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x3c, 0x3c, 0xb5),
         tertiary: Color::srgb_u8(0xb5, 0xb5, 0x3c),
         background_asset_path: Some("images/theme-1.png"),
+        audio_anchor: Some(1),
     },
     ThemeDefinition {
         name: "Jungle",
@@ -92,6 +97,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x27, 0x38, 0xb5),
         tertiary: Color::srgb_u8(0x7f, 0xb5, 0x27),
         background_asset_path: Some("images/theme-2.png"),
+        audio_anchor: Some(2),
     },
     ThemeDefinition {
         name: "Temple",
@@ -99,6 +105,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xad, 0x85, 0xb5),
         tertiary: Color::srgb_u8(0x85, 0xb5, 0x95),
         background_asset_path: Some("images/theme-3.png"),
+        audio_anchor: Some(3),
     },
     ThemeDefinition {
         name: "Cyber",
@@ -106,6 +113,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0x58, 0x45),
         tertiary: Color::srgb_u8(0x45, 0xb5, 0x93),
         background_asset_path: Some("images/theme-4.png"),
+        audio_anchor: Some(4),
     },
     ThemeDefinition {
         name: "Engine room",
@@ -113,6 +121,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xa5, 0xaa, 0xb5),
         tertiary: Color::srgb_u8(0xb5, 0xa8, 0xa5),
         background_asset_path: Some("images/theme-5.png"),
+        audio_anchor: Some(5),
     },
     ThemeDefinition {
         name: "Deep sea",
@@ -120,6 +129,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x99, 0xb5, 0x1e),
         tertiary: Color::srgb_u8(0x85, 0x1e, 0xb5),
         background_asset_path: Some("images/theme-6.png"),
+        audio_anchor: Some(6),
     },
     ThemeDefinition {
         name: "Starry night",
@@ -127,6 +137,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0x8f, 0xa3),
         tertiary: Color::srgb_u8(0x90, 0xb5, 0x8f),
         background_asset_path: Some("images/theme-7.png"),
+        audio_anchor: Some(7),
     },
     ThemeDefinition {
         name: "Alien space",
@@ -134,6 +145,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x72, 0xb5, 0x89),
         tertiary: Color::srgb_u8(0xb5, 0x72, 0x7c),
         background_asset_path: Some("images/theme-8.png"),
+        audio_anchor: Some(8),
     },
     ThemeDefinition {
         name: "Black hole",
@@ -141,6 +153,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0xa1, 0x60),
         tertiary: Color::srgb_u8(0x60, 0x9e, 0xb5),
         background_asset_path: Some("images/theme-9.png"),
+        audio_anchor: Some(9),
     },
     ThemeDefinition {
         name: "Loneliness",
@@ -148,6 +161,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb3, 0xb5, 0x5a),
         tertiary: Color::srgb_u8(0x89, 0x5a, 0xb5),
         background_asset_path: Some("images/theme-10.png"),
+        audio_anchor: Some(10),
     },
     ThemeDefinition {
         name: "Cathedral",
@@ -155,6 +169,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0xa5, 0x6d),
         tertiary: Color::srgb_u8(0x6d, 0xa1, 0xb5),
         background_asset_path: Some("images/theme-11.png"),
+        audio_anchor: Some(11),
     },
     ThemeDefinition {
         name: "Runway",
@@ -162,6 +177,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb3, 0xb5, 0x41),
         tertiary: Color::srgb_u8(0x41, 0x79, 0xb5),
         background_asset_path: Some("images/theme-12.png"),
+        audio_anchor: Some(12),
     },
     ThemeDefinition {
         name: "Swamp",
@@ -169,6 +185,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0x3c, 0x29),
         tertiary: Color::srgb_u8(0x29, 0x5c, 0xb5),
         background_asset_path: Some("images/theme-13.png"),
+        audio_anchor: Some(13),
     },
     ThemeDefinition {
         name: "Fire cavern",
@@ -176,6 +193,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x4a, 0x40, 0xb5),
         tertiary: Color::srgb_u8(0x71, 0xb5, 0x40),
         background_asset_path: Some("images/theme-14.png"),
+        audio_anchor: Some(14),
     },
     ThemeDefinition {
         name: "Twilight city",
@@ -183,6 +201,7 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0x4e, 0xb5, 0xb3),
         tertiary: Color::srgb_u8(0xb5, 0x80, 0x4e),
         background_asset_path: Some("images/theme-15.png"),
+        audio_anchor: Some(15),
     },
     ThemeDefinition {
         name: "In the clouds",
@@ -190,5 +209,32 @@ pub const IMAGE_THEMES: [ThemeDefinition; IMAGE_THEME_COUNT] = [
         secondary: Color::srgb_u8(0xb5, 0xb0, 0x86),
         tertiary: Color::srgb_u8(0x99, 0x86, 0xb5),
         background_asset_path: Some("images/theme-16.png"),
+        audio_anchor: Some(16),
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimal_theme_has_no_audio_anchor() {
+        let theme = active_theme_for_setting(MINIMAL_THEME_SETTING);
+
+        assert_eq!(theme.audio_anchor, None);
+    }
+
+    #[test]
+    fn image_theme_audio_anchors_match_theme_numbers() {
+        for setting in
+            FIRST_IMAGE_THEME_SETTING..FIRST_IMAGE_THEME_SETTING + IMAGE_THEME_COUNT as u8
+        {
+            let theme = active_theme_for_setting(setting);
+
+            assert_eq!(
+                theme.audio_anchor,
+                Some((setting - FIRST_IMAGE_THEME_SETTING + 1) as u32)
+            );
+        }
+    }
+}
