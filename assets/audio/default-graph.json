@@ -1,0 +1,144 @@
+{
+  "type": "Midi",
+  "node_id": 101,
+  "source": {
+    "FilePath": {
+      "path": "audio/audio.mid",
+      "track_index": 1
+    }
+  },
+  "channels": {
+    "0": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.4,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.24,
+        "duty_cycle": 0.5
+      }
+    },
+    "1": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.35,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.2,
+        "duty_cycle": 0.25
+      }
+    },
+    "2": {
+      "type": "TriangleWave",
+      "amplitude": 0.28
+    },
+    "3": {
+      "type": "LfsrNoise",
+      "amplitude": 0.12,
+      "inside_feedback": false
+    },
+    "4": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.4,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.18,
+        "duty_cycle": 0.5
+      }
+    },
+    "5": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.35,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.16,
+        "duty_cycle": 0.25
+      }
+    },
+    "6": {
+      "type": "TriangleWave",
+      "amplitude": 0.2
+    },
+    "7": {
+      "type": "LfsrNoise",
+      "amplitude": 0.08,
+      "inside_feedback": false
+    },
+    "8": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.4,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.18,
+        "duty_cycle": 0.5
+      }
+    },
+    "9": {
+      "type": "LfsrNoise",
+      "amplitude": 0.16,
+      "inside_feedback": false
+    },
+    "10": {
+      "type": "TriangleWave",
+      "amplitude": 0.2
+    },
+    "11": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.35,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.16,
+        "duty_cycle": 0.25
+      }
+    },
+    "12": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.4,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.16,
+        "duty_cycle": 0.5
+      }
+    },
+    "13": {
+      "type": "AdsrEnvelope",
+      "attack_time": 0.01,
+      "decay_time": 0.08,
+      "sustain_multiplier": 0.35,
+      "release_time": 0.08,
+      "source": {
+        "type": "SquareWave",
+        "amplitude": 0.14,
+        "duty_cycle": 0.25
+      }
+    },
+    "14": {
+      "type": "TriangleWave",
+      "amplitude": 0.18
+    },
+    "15": {
+      "type": "LfsrNoise",
+      "amplitude": 0.08,
+      "inside_feedback": false
+    }
+  }
+}

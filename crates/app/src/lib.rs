@@ -2,6 +2,7 @@ mod app_assets;
 mod app_state;
 mod app_theme;
 mod app_ui_scale;
+mod audio;
 mod background;
 mod binary_text;
 mod circuit_board;
@@ -63,6 +64,7 @@ where
         .add_plugins(scenes::audio_settings::AudioSettingsScenePlugin)
         .add_plugins(scenes::gameplay::GameplayScenePlugin)
         .add_plugins(game_boy::GameBoyPlugin)
+        .add_plugins(audio::AudioPlugin)
         .add_plugins((
             input::InputPlugin,
             background::BackgroundPlugin,
