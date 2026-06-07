@@ -19,7 +19,8 @@ use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult
 use crate::ui_elements::action_hint::action_hints;
 use crate::ui_elements::button::button;
 use crate::ui_elements::choice_popup::{
-    ChoicePopupConfig, ChoicePopupOption, DismissChoicePopupOnOutsideClick, choice_popup,
+    ChoicePopupConfig, ChoicePopupContext, ChoicePopupOption, centered_choice_popup_position,
+    choice_popup_context_index, choice_popup_menu, despawn_choice_popups, inside_choice_popup,
 };
 use crate::ui_elements::description::description;
 use crate::ui_elements::heading::heading;
@@ -43,7 +44,6 @@ use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 
 const HOME_ROM_COLUMN_COUNT: usize = 5;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
-const HOME_POPUP_SCREEN_MARGIN: f32 = 16.0;
 const HOME_POPUP_ESTIMATED_HEIGHT: f32 = 300.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -63,11 +63,6 @@ struct HomeSidePanelSlot;
 
 #[derive(Clone, Copy, Component, Debug, Default)]
 struct HomeRomRowsBound;
-
-#[derive(Clone, Copy, Component, Debug, FromTemplate)]
-struct HomePopupRoot {
-    rom_index: usize,
-}
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct HomeStatusMessage;
@@ -225,7 +220,7 @@ fn handle_home_activation(
     settings_buttons: Query<(), With<SettingsButton>>,
     popup_options: Query<&ChoicePopupOption>,
     rom_rows: Query<(Entity, &VirtualListRow)>,
-    popup_roots: Query<(Entity, &HomePopupRoot, &Children)>,
+    popup_roots: Query<(Entity, &ChoicePopupContext, &Children)>,
     child_query: Query<&Children>,
     focused: Query<Entity, With<FocusedUiElement>>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -243,8 +238,8 @@ fn handle_home_activation(
     if settings_buttons.get(entity).is_ok() {
         next_state.set(AppState::Settings);
     } else if let Ok(option) = popup_options.get(entity) {
-        let popup_rom_index = popup_rom_index(entity, &popup_roots, &child_query);
-        despawn_home_popups(&mut commands, &popup_roots);
+        let popup_rom_index = choice_popup_context_index(entity, &popup_roots, &child_query);
+        despawn_choice_popups(&mut commands, &popup_roots);
         match option.option_index {
             0 => {
                 next_state.set(AppState::Gameplay);
@@ -277,17 +272,21 @@ fn handle_home_activation(
             return;
         }
 
-        despawn_home_popups(&mut commands, &popup_roots);
-        let popup_position = centered_home_popup_position(&windows);
+        let Some(rom) = rom_list_data.roms.get(row.item_index).cloned() else {
+            set_latest_info_message(&mut messages, "ROM data could not be opened.");
+            return;
+        };
+
+        despawn_choice_popups(&mut commands, &popup_roots);
+        let popup_position = centered_choice_popup_position(
+            &windows,
+            UI_MULTI_SELECT_WIDTH,
+            HOME_POPUP_ESTIMATED_HEIGHT,
+        );
         for entity in &focused {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
-        commands.spawn_scene(auto_save_popup_scene(
-            &assets,
-            *theme,
-            rom_list_data.roms.get(row.item_index).cloned(),
-            popup_position,
-        ));
+        commands.spawn_scene(auto_save_popup_scene(&assets, *theme, rom, popup_position));
     }
 }
 
@@ -296,7 +295,7 @@ fn focus_home_rom_row(
     rom_index: Option<usize>,
     rom_rows: &Query<(Entity, &VirtualListRow)>,
     focused: &Query<Entity, With<FocusedUiElement>>,
-    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
     child_query: &Query<&Children>,
 ) {
     let Some(rom_index) = rom_index else {
@@ -310,7 +309,7 @@ fn focus_home_rom_row(
     };
 
     for entity in focused {
-        if entity != row_entity && !inside_home_popup(entity, popup_roots, child_query) {
+        if entity != row_entity && !inside_choice_popup(entity, popup_roots, child_query) {
             commands.entity(entity).remove::<FocusedUiElement>();
         }
     }
@@ -778,104 +777,26 @@ fn refresh_home_status_message(
 fn auto_save_popup_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
-    rom: Option<HomeRom>,
+    rom: HomeRom,
     position: Vec2,
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
-    let rom_name = rom
-        .as_ref()
-        .map(|rom| rom.name.clone())
-        .unwrap_or_else(|| "ROM".to_string());
-    let rom_index = rom.map(|rom| rom.rom_index).unwrap_or(usize::MAX);
 
     bsn! {
         #AutoSavePopup
         DespawnOnExit::<AppState>(AppState::Home)
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(position.x),
-            top: px(position.y),
-        }
-        HomePopupRoot { rom_index: {rom_index} }
-        DismissChoicePopupOnOutsideClick
-        Children [
-            choice_popup(font, theme, ChoicePopupConfig {
-                title: rom_name,
+        choice_popup_menu(
+            font,
+            theme,
+            ChoicePopupConfig {
+                title: rom.name,
                 width: UI_MULTI_SELECT_WIDTH,
                 options: ["Resume Auto-save", "Cold Boot", "ROM Data", "Cancel"],
-            })
-        ]
+            },
+            position,
+            rom.rom_index,
+        )
     }
-}
-
-fn centered_home_popup_position(windows: &Query<&Window, With<PrimaryWindow>>) -> Vec2 {
-    let window_size = windows
-        .single()
-        .map(|window| Vec2::new(window.width(), window.height()))
-        .unwrap_or(Vec2::new(UI_MAX_CONTENT_WIDTH, 720.0));
-
-    let centered = Vec2::new(
-        (window_size.x - UI_MULTI_SELECT_WIDTH) * 0.5,
-        (window_size.y - HOME_POPUP_ESTIMATED_HEIGHT) * 0.5,
-    );
-
-    clamp_home_popup_position(centered, window_size)
-}
-
-fn clamp_home_popup_position(position: Vec2, window_size: Vec2) -> Vec2 {
-    let max_left = (window_size.x - UI_MULTI_SELECT_WIDTH - HOME_POPUP_SCREEN_MARGIN)
-        .max(HOME_POPUP_SCREEN_MARGIN);
-    let max_top = (window_size.y - HOME_POPUP_ESTIMATED_HEIGHT - HOME_POPUP_SCREEN_MARGIN)
-        .max(HOME_POPUP_SCREEN_MARGIN);
-
-    Vec2::new(
-        position.x.clamp(HOME_POPUP_SCREEN_MARGIN, max_left),
-        position.y.clamp(HOME_POPUP_SCREEN_MARGIN, max_top),
-    )
-}
-
-fn despawn_home_popups(
-    commands: &mut Commands,
-    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
-) {
-    for (popup, _, _) in popup_roots {
-        commands.entity(popup).try_despawn();
-    }
-}
-
-fn inside_home_popup(
-    entity: Entity,
-    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
-    child_query: &Query<&Children>,
-) -> bool {
-    popup_roots.iter().any(|(popup, _, children)| {
-        entity == popup || contains_entity_recursive(children, entity, child_query)
-    })
-}
-
-fn popup_rom_index(
-    option_entity: Entity,
-    popup_roots: &Query<(Entity, &HomePopupRoot, &Children)>,
-    child_query: &Query<&Children>,
-) -> Option<usize> {
-    popup_roots
-        .iter()
-        .find(|(_, _, children)| contains_entity_recursive(children, option_entity, child_query))
-        .map(|(_, popup, _)| popup.rom_index)
-        .filter(|index| *index != usize::MAX)
-}
-
-fn contains_entity_recursive(
-    children: &Children,
-    target: Entity,
-    child_query: &Query<&Children>,
-) -> bool {
-    children.iter().any(|child| {
-        child == target
-            || child_query
-                .get(child)
-                .is_ok_and(|children| contains_entity_recursive(children, target, child_query))
-    })
 }
 
 fn clear_invisible_home_row_state(

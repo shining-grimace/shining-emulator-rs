@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::window::PrimaryWindow;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::UI_BODY_FONT_SIZE;
@@ -11,6 +12,8 @@ use crate::ui_elements::interactions::{
 };
 use crate::ui_elements::styles::{ui_border, ui_padding, ui_radius};
 use crate::ui_elements::theme::{UiThemeBorderColor, UiThemeTextColor};
+
+const CHOICE_POPUP_SCREEN_MARGIN: f32 = 16.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct ChoicePopupRoot;
@@ -25,6 +28,11 @@ pub struct ChoicePopupOption {
     pub option_index: usize,
 }
 
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct ChoicePopupContext {
+    pub context_index: usize,
+}
+
 pub struct ChoicePopupConfig {
     pub title: String,
     pub width: f32,
@@ -36,6 +44,27 @@ pub struct ChoicePopupPlugin;
 impl Plugin for ChoicePopupPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostUpdate, dismiss_choice_popups_on_outside_click);
+    }
+}
+
+pub fn choice_popup_menu(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    config: ChoicePopupConfig,
+    position: Vec2,
+    context_index: usize,
+) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(position.x),
+            top: px(position.y),
+        }
+        ChoicePopupContext { context_index: {context_index} }
+        DismissChoicePopupOnOutsideClick
+        Children [
+            choice_popup(font, theme, config)
+        ]
     }
 }
 
@@ -87,6 +116,71 @@ pub fn choice_popup(
             ),
         ]
     }
+}
+
+pub fn centered_choice_popup_position(
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    width: f32,
+    estimated_height: f32,
+) -> Vec2 {
+    let window_size = windows
+        .single()
+        .map(|window| Vec2::new(window.width(), window.height()))
+        .unwrap_or(Vec2::new(width, estimated_height));
+
+    let centered = Vec2::new(
+        (window_size.x - width) * 0.5,
+        (window_size.y - estimated_height) * 0.5,
+    );
+
+    clamp_choice_popup_position(centered, window_size, width, estimated_height)
+}
+
+pub fn clamp_choice_popup_position(
+    position: Vec2,
+    window_size: Vec2,
+    width: f32,
+    estimated_height: f32,
+) -> Vec2 {
+    let max_left =
+        (window_size.x - width - CHOICE_POPUP_SCREEN_MARGIN).max(CHOICE_POPUP_SCREEN_MARGIN);
+    let max_top = (window_size.y - estimated_height - CHOICE_POPUP_SCREEN_MARGIN)
+        .max(CHOICE_POPUP_SCREEN_MARGIN);
+
+    Vec2::new(
+        position.x.clamp(CHOICE_POPUP_SCREEN_MARGIN, max_left),
+        position.y.clamp(CHOICE_POPUP_SCREEN_MARGIN, max_top),
+    )
+}
+
+pub fn despawn_choice_popups(
+    commands: &mut Commands,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+) {
+    for (popup, _, _) in popup_roots {
+        commands.entity(popup).try_despawn();
+    }
+}
+
+pub fn inside_choice_popup(
+    entity: Entity,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+    child_query: &Query<&Children>,
+) -> bool {
+    popup_roots.iter().any(|(popup, _, children)| {
+        entity == popup || contains_entity(children, entity, child_query)
+    })
+}
+
+pub fn choice_popup_context_index(
+    option_entity: Entity,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+    child_query: &Query<&Children>,
+) -> Option<usize> {
+    popup_roots
+        .iter()
+        .find(|(_, _, children)| contains_entity(children, option_entity, child_query))
+        .map(|(_, popup, _)| popup.context_index)
 }
 
 fn dismiss_choice_popups_on_outside_click(
