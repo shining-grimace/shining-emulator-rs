@@ -17,7 +17,9 @@ impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MidiGraphPlugin)
             .add_systems(OnEnter(AppState::Splash), start_menu_audio)
-            .add_systems(OnExit(AppState::Splash), seek_menu_audio_to_active_theme);
+            .add_systems(OnExit(AppState::Splash), seek_menu_audio_to_active_theme)
+            .add_systems(OnEnter(AppState::Gameplay), stop_menu_audio)
+            .add_systems(OnExit(AppState::Gameplay), restart_menu_audio);
     }
 }
 
@@ -46,11 +48,49 @@ fn seek_menu_audio_to_active_theme(
         return;
     };
 
+    queue_menu_audio_event(
+        &mut audio_context,
+        Event::CueData(CueData::SeekWhenIdeal(anchor)),
+        "theme seek",
+    );
+}
+
+fn stop_menu_audio(mut audio_context: ResMut<MidiGraphAudioContext>, theme: Res<ActiveTheme>) {
+    if theme.audio_anchor.is_none() {
+        return;
+    }
+
+    queue_menu_audio_event(&mut audio_context, Event::Volume(0.0), "stop volume");
+    queue_menu_audio_event(
+        &mut audio_context,
+        Event::NoteOff { note: 0, vel: 1.0 },
+        "stop notes",
+    );
+}
+
+fn restart_menu_audio(mut audio_context: ResMut<MidiGraphAudioContext>, theme: Res<ActiveTheme>) {
+    let Some(anchor) = theme.audio_anchor else {
+        return;
+    };
+
+    queue_menu_audio_event(&mut audio_context, Event::Volume(1.0), "restart volume");
+    queue_menu_audio_event(
+        &mut audio_context,
+        Event::CueData(CueData::SeekWhenIdeal(anchor)),
+        "restart seek",
+    );
+}
+
+fn queue_menu_audio_event(
+    audio_context: &mut MidiGraphAudioContext,
+    event: Event,
+    description: &'static str,
+) {
     let sender = audio_context.get_event_sender();
     if let Err(error) = sender.try_send(Message {
         target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
-        data: Event::CueData(CueData::SeekWhenIdeal(anchor)),
+        data: event,
     }) {
-        eprintln!("failed to queue menu audio theme seek: {error}");
+        eprintln!("failed to queue menu audio {description}: {error}");
     }
 }
