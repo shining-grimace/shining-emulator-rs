@@ -1,10 +1,15 @@
 use bevy::prelude::*;
 use bevy::ui::UiScale;
+use bevy_midi_graph::{MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource};
+use std::fs;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged, active_theme_for_setting};
 use crate::app_ui_scale::{UI_SCALE_LABELS, apply_ui_scale_setting};
+use crate::audio::preset_graph::{
+    apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
+};
 use crate::dimensions::{
     UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP,
     UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
@@ -22,8 +27,8 @@ use crate::ui_elements::button::button;
 use crate::ui_elements::description::description;
 use crate::ui_elements::info_message::{InfoMessage, info_message_text, set_latest_info_message};
 use crate::ui_elements::interactions::{
-    ActivatedUiElement, DefaultFocusTarget, DisabledUiElement, InitialFocus, SelectedUiElement,
-    UI_FOCUS_NONE, UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiMultiSelect,
+    ActivatedUiElement, DefaultFocusTarget, InitialFocus, SelectedUiElement, UI_FOCUS_NONE,
+    UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiMultiSelect,
 };
 use crate::ui_elements::list_view::{
     ListColumn, ListRow, ListViewConfig, collect_list_item_entities, list_view,
@@ -99,6 +104,12 @@ struct EditPrimaryMappingButton;
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct EditAudioPresetButton;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct CreateAudioPresetButton;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct DeleteAudioPresetButton;
+
 pub struct SettingsScenePlugin;
 
 impl Plugin for SettingsScenePlugin {
@@ -144,6 +155,11 @@ fn save_settings_select_on_activation(
     mut ui_scale: ResMut<UiScale>,
     mut primary_input: ResMut<PrimaryInputDevice>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+    asset_server: Res<AssetServer>,
+    mut audio_context: ResMut<MidiGraphAudioContext>,
+    midi_assets: Res<Assets<MidiFileSource>>,
+    sf2_assets: Res<Assets<Sf2FileSource>>,
+    wave_assets: Res<Assets<WaveFileSource>>,
 ) {
     if *state.get() != AppState::Settings {
         return;
@@ -153,7 +169,11 @@ fn save_settings_select_on_activation(
         return;
     };
 
-    let value = ui_select.selected as u8;
+    let value = if settings_select.field == FIELD_AUDIO_PRESET {
+        selected_audio_preset_number(&storage, ui_select.selected)
+    } else {
+        ui_select.selected as u8
+    };
     if settings_select.field == FIELD_PRIMARY_INPUT {
         primary_input.mapping_index = selected_mapping_index(
             &PrimaryInputDevice {
@@ -202,6 +222,17 @@ fn save_settings_select_on_activation(
     if settings_select.field == FIELD_UI_SCALE {
         apply_ui_scale_setting(value, &mut ui_scale);
     }
+    if settings_select.field == FIELD_AUDIO_PRESET {
+        apply_current_audio_preset_to_playback(
+            &storage,
+            &asset_server,
+            &mut audio_context,
+            &midi_assets,
+            &sf2_assets,
+            &wave_assets,
+            &mut messages,
+        );
+    }
 }
 
 fn handle_mapping_button_activation(
@@ -224,14 +255,185 @@ fn handle_mapping_button_activation(
 fn handle_audio_preset_button_activation(
     activated: On<Add, ActivatedUiElement>,
     edit_buttons: Query<(), With<EditAudioPresetButton>>,
+    create_buttons: Query<(), With<CreateAudioPresetButton>>,
+    delete_buttons: Query<(), With<DeleteAudioPresetButton>>,
     state: Res<State<AppState>>,
+    mut storage: ResMut<LocalStorage>,
     mut next_state: ResMut<NextState<AppState>>,
+    mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+    asset_server: Res<AssetServer>,
+    mut audio_context: ResMut<MidiGraphAudioContext>,
+    midi_assets: Res<Assets<MidiFileSource>>,
+    sf2_assets: Res<Assets<Sf2FileSource>>,
+    wave_assets: Res<Assets<WaveFileSource>>,
 ) {
-    if *state.get() != AppState::Settings || edit_buttons.get(activated.entity).is_err() {
+    if *state.get() != AppState::Settings {
         return;
     }
 
-    next_state.set(AppState::AudioSettings);
+    if edit_buttons.get(activated.entity).is_ok() {
+        next_state.set(AppState::AudioSettings);
+    } else if create_buttons.get(activated.entity).is_ok() {
+        create_audio_preset(&mut storage, &mut next_state, &mut messages);
+    } else if delete_buttons.get(activated.entity).is_ok() {
+        delete_audio_preset(
+            &mut storage,
+            &mut next_state,
+            &mut messages,
+            &asset_server,
+            &mut audio_context,
+            &midi_assets,
+            &sf2_assets,
+            &wave_assets,
+        );
+    }
+}
+
+fn apply_current_audio_preset_to_playback(
+    storage: &LocalStorage,
+    asset_server: &Res<AssetServer>,
+    audio_context: &mut MidiGraphAudioContext,
+    midi_assets: &Res<Assets<MidiFileSource>>,
+    sf2_assets: &Res<Assets<Sf2FileSource>>,
+    wave_assets: &Res<Assets<WaveFileSource>>,
+    messages: &mut Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+) {
+    let preset_path = storage
+        .paths
+        .audio_preset_file(storage.data.settings.audio_preset.min(9));
+    let preset = match load_audio_preset(&preset_path) {
+        Ok(preset) => preset,
+        Err(error) => {
+            eprintln!("failed to load audio preset: {error}");
+            set_latest_info_message(
+                messages,
+                &format!("Audio preset could not be loaded: {error}"),
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = apply_audio_preset_to_playback(
+        &preset,
+        asset_server,
+        audio_context,
+        midi_assets,
+        sf2_assets,
+        wave_assets,
+    ) {
+        eprintln!("failed to apply audio preset: {error}");
+        set_latest_info_message(
+            messages,
+            &format!("Audio preset could not be applied: {error}"),
+        );
+    }
+}
+
+fn delete_audio_preset(
+    storage: &mut LocalStorage,
+    next_state: &mut NextState<AppState>,
+    messages: &mut Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+    asset_server: &Res<AssetServer>,
+    audio_context: &mut MidiGraphAudioContext,
+    midi_assets: &Res<Assets<MidiFileSource>>,
+    sf2_assets: &Res<Assets<Sf2FileSource>>,
+    wave_assets: &Res<Assets<WaveFileSource>>,
+) {
+    let preset_index = storage.data.settings.audio_preset.min(9);
+    if preset_index == 0 {
+        set_latest_info_message(messages, "The default audio preset cannot be deleted.");
+        return;
+    }
+
+    let preset_path = storage.paths.audio_preset_file(preset_index);
+    if let Err(error) = fs::remove_file(&preset_path) {
+        eprintln!(
+            "failed to delete audio preset {} at {}: {error}",
+            preset_index,
+            preset_path.display()
+        );
+        set_latest_info_message(messages, "Audio preset could not be deleted.");
+        return;
+    }
+
+    storage.data.settings.audio_preset = 0;
+    if let Err(error) = storage.save_settings() {
+        eprintln!("failed to save audio preset selection after delete: {error}");
+        set_latest_info_message(messages, SETTINGS_SAVE_ERROR_MESSAGE);
+        return;
+    }
+
+    apply_current_audio_preset_to_playback(
+        storage,
+        asset_server,
+        audio_context,
+        midi_assets,
+        sf2_assets,
+        wave_assets,
+        messages,
+    );
+    set_latest_info_message(messages, "Audio preset deleted.");
+    next_state.set(AppState::Settings);
+}
+
+fn create_audio_preset(
+    storage: &mut LocalStorage,
+    next_state: &mut NextState<AppState>,
+    messages: &mut Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+) {
+    let Some(index) = next_available_audio_preset_index(storage) else {
+        set_latest_info_message(messages, "All audio preset slots are already in use.");
+        return;
+    };
+
+    let preset = default_audio_preset();
+    let preset_path = storage.paths.audio_preset_file(index);
+    if let Some(parent) = preset_path.parent()
+        && let Err(error) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("failed to create audio preset directory: {error}");
+        set_latest_info_message(messages, "Audio preset could not be created.");
+        return;
+    }
+
+    match serde_json::to_string_pretty(&preset)
+        .map(|json| std::fs::write(&preset_path, format!("{json}\n")))
+    {
+        Ok(Ok(())) => {
+            storage.data.settings.audio_preset = index;
+            if let Err(error) = storage.save_settings() {
+                eprintln!("failed to save audio preset selection: {error}");
+                set_latest_info_message(messages, SETTINGS_SAVE_ERROR_MESSAGE);
+                return;
+            }
+            next_state.set(AppState::AudioSettings);
+        }
+        Ok(Err(error)) => {
+            eprintln!("failed to create audio preset {}: {error}", index);
+            set_latest_info_message(messages, "Audio preset could not be created.");
+        }
+        Err(error) => {
+            eprintln!("failed to serialise audio preset {}: {error}", index);
+            set_latest_info_message(messages, "Audio preset could not be created.");
+        }
+    }
+}
+
+fn next_available_audio_preset_index(storage: &LocalStorage) -> Option<u8> {
+    (1..=9).find(|index| !storage.paths.audio_preset_file(*index).exists())
+}
+
+fn selected_audio_preset_number(storage: &LocalStorage, selected: usize) -> u8 {
+    existing_audio_preset_numbers(storage)
+        .get(selected)
+        .copied()
+        .unwrap_or(0)
+}
+
+fn existing_audio_preset_numbers(storage: &LocalStorage) -> Vec<u8> {
+    (0..=9)
+        .filter(|index| *index == 0 || storage.paths.audio_preset_file(*index).exists())
+        .collect()
 }
 
 fn handle_provider_button_activation(
@@ -502,6 +704,8 @@ fn settings_scene(
     let settings = storage.data.settings;
     let input_config = primary_input_config(storage, primary_input);
     let landscape_input_config = input_config.clone();
+    let audio_config = audio_preset_config(storage, settings.audio_preset as usize);
+    let landscape_audio_config = audio_config.clone();
     let providers = storage.data.providers.clone();
     let landscape_providers = providers.clone();
     let info_text = if sync_running {
@@ -543,7 +747,7 @@ fn settings_scene(
                         }
                         ResponsiveLandscapeOnly
                         Children [
-                            settings_landscape_body(landscape_font, theme, settings, landscape_input_config, landscape_providers),
+                            settings_landscape_body(landscape_font, theme, settings, landscape_input_config, landscape_audio_config, landscape_providers),
                         ]
                     ),
                     (
@@ -566,7 +770,7 @@ fn settings_scene(
                                         min_height: px(0.0),
                                         thumb_height: 112.0,
                                     },
-                                    move |_| settings_body(body_font, theme, settings, input_config, providers)
+                                    move |_| settings_body(body_font, theme, settings, input_config, audio_config, providers)
                                 )
                             )
                         ]
@@ -584,6 +788,7 @@ fn settings_left_column(
     theme: ActiveTheme,
     settings: crate::storage::data::GeneralSettings,
     input_config: MultiSelectConfig,
+    audio_config: MultiSelectConfig,
 ) -> impl Scene {
     bsn! {
         Node {
@@ -747,7 +952,7 @@ fn settings_left_column(
                 Children [
                     description(font.clone(), theme, "Audio Preset"),
                     (
-                        multi_select(font.clone(), theme, audio_preset_config(settings.audio_preset as usize))
+                        multi_select(font.clone(), theme, audio_config)
                         SettingsSelect { field: FIELD_AUDIO_PRESET }
                         UiFocusId { id: TARGET_AUDIO_PRESET }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_AUDIO_PRESET).up}, right: {settings_focus_nav(TARGET_AUDIO_PRESET).right}, down: {settings_focus_nav(TARGET_AUDIO_PRESET).down}, left: {settings_focus_nav(TARGET_AUDIO_PRESET).left} }
@@ -764,7 +969,7 @@ fn settings_left_column(
                 Children [
                     (
                         button(font.clone(), "Delete", theme, UiFocusNav::default())
-                        DisabledUiElement
+                        DeleteAudioPresetButton
                         UiFocusId { id: TARGET_DELETE_MAPPING }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_DELETE_MAPPING).up}, right: {settings_focus_nav(TARGET_DELETE_MAPPING).right}, down: {settings_focus_nav(TARGET_DELETE_MAPPING).down}, left: {settings_focus_nav(TARGET_DELETE_MAPPING).left} }
                     ),
@@ -776,6 +981,7 @@ fn settings_left_column(
                     ),
                     (
                         button(font.clone(), "Create", theme, UiFocusNav::default())
+                        CreateAudioPresetButton
                         UiFocusId { id: TARGET_CREATE_MAPPING }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_CREATE_MAPPING).up}, right: {settings_focus_nav(TARGET_CREATE_MAPPING).right}, down: {settings_focus_nav(TARGET_CREATE_MAPPING).down}, left: {settings_focus_nav(TARGET_CREATE_MAPPING).left} }
                     ),
@@ -790,6 +996,7 @@ fn settings_body(
     theme: ActiveTheme,
     settings: crate::storage::data::GeneralSettings,
     input_config: MultiSelectConfig,
+    audio_config: MultiSelectConfig,
     providers: Vec<RomProvider>,
 ) -> impl Scene {
     let left_font = font.clone();
@@ -812,7 +1019,7 @@ fn settings_body(
                 }
                 ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
                 Children [
-                    settings_left_column(left_font, theme, settings, input_config),
+                    settings_left_column(left_font, theme, settings, input_config, audio_config),
                 ]
             ),
             (
@@ -886,6 +1093,7 @@ fn settings_landscape_body(
     theme: ActiveTheme,
     settings: crate::storage::data::GeneralSettings,
     input_config: MultiSelectConfig,
+    audio_config: MultiSelectConfig,
     providers: Vec<RomProvider>,
 ) -> impl Scene {
     let left_font = font.clone();
@@ -910,7 +1118,7 @@ fn settings_landscape_body(
                         min_height: px(0.0),
                         thumb_height: 112.0,
                     },
-                    move |_| settings_left_column(left_font, theme, settings, input_config)
+                    move |_| settings_left_column(left_font, theme, settings, input_config, audio_config)
                 )
             ),
             (
@@ -1067,8 +1275,24 @@ fn primary_input_config(
     }
 }
 
-fn audio_preset_config(selected: usize) -> MultiSelectConfig {
-    select_config(selected.min(0), vec!["Preset 0"])
+fn audio_preset_config(storage: &LocalStorage, selected: usize) -> MultiSelectConfig {
+    let numbers = existing_audio_preset_numbers(storage);
+    let options = numbers
+        .iter()
+        .map(|index| format!("Preset {index}"))
+        .collect::<Vec<_>>();
+
+    let selected_label = format!("Preset {}", selected.min(9));
+    let selected_index = options
+        .iter()
+        .position(|option| option == &selected_label)
+        .unwrap_or(0);
+
+    MultiSelectConfig {
+        selected: selected_index,
+        options,
+        nav: UiFocusNav::default(),
+    }
 }
 
 fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {

@@ -16,6 +16,7 @@ use std::{collections::HashSet, mem};
 use bevy::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::audio::preset_graph::default_audio_preset;
 use crate::input::mappings::ensure_essential_navigation_mappings;
 use crate::storage::data::{GeneralSettings, LastPlayedTimestamps, LocalStorageData, RomMetadata};
 use crate::storage::errors::StorageError;
@@ -327,7 +328,7 @@ where
 fn ensure_default_audio_preset(paths: &StoragePaths) -> Result<(), StorageError> {
     let preset_path = paths.default_audio_preset_file();
     if !preset_path.exists() {
-        fs::write(preset_path, "{}\n")?;
+        write_json(&preset_path, &default_audio_preset())?;
     }
     Ok(())
 }

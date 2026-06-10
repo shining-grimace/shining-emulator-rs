@@ -1,6 +1,6 @@
 
-Done: Step 5d
-Next: Step 5e
+Done: Step 5e
+Next: Step 5f
 
 For theme:
 - Align background images to the same average brightness and the same brightness range

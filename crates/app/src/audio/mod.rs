@@ -1,15 +1,20 @@
 use bevy::prelude::*;
 use bevy_midi_graph::{
-    MidiGraphAudioContext, MidiGraphPlugin,
+    MidiFileSource, MidiGraphAudioContext, MidiGraphPlugin, Sf2FileSource, WaveFileSource,
     midi::event::{CueData, Event, EventTarget, Message},
 };
 
-use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::audio::preset_graph::{
+    apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
+};
+use crate::storage::LocalStorage;
 
-const MENU_PROGRAM_NO: usize = 1;
-const MENU_MIDI_NODE_ID: u64 = 101;
+pub(crate) mod preset_graph;
+
+pub(crate) const MENU_PROGRAM_NO: usize = 1;
+pub(crate) const MENU_MIDI_NODE_ID: u64 = 101;
 
 pub struct AudioPlugin;
 
@@ -24,20 +29,42 @@ impl Plugin for AudioPlugin {
 }
 
 fn start_menu_audio(
-    mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut audio_context: ResMut<MidiGraphAudioContext>,
-    assets: Res<AppAssets>,
+    midi_assets: Res<Assets<MidiFileSource>>,
+    sf2_assets: Res<Assets<Sf2FileSource>>,
+    wave_assets: Res<Assets<WaveFileSource>>,
+    storage: Res<LocalStorage>,
     theme: Res<ActiveTheme>,
 ) {
     if theme.audio_anchor.is_none() {
         return;
     }
 
-    audio_context.start_new_program(
-        &mut commands,
-        MENU_PROGRAM_NO,
-        assets.default_audio_graph.clone(),
-    );
+    let preset_path = storage
+        .paths
+        .audio_preset_file(storage.data.settings.audio_preset.min(9));
+    let preset = match load_audio_preset(&preset_path) {
+        Ok(preset) => preset,
+        Err(error) => {
+            eprintln!("failed to load startup audio preset; using defaults: {error}");
+            default_audio_preset()
+        }
+    };
+    if let Err(error) = apply_audio_preset_to_playback(
+        &preset,
+        &asset_server,
+        &mut audio_context,
+        &midi_assets,
+        &sf2_assets,
+        &wave_assets,
+    ) {
+        eprintln!("failed to prepare menu audio preset: {error}");
+        return;
+    }
+    if let Err(error) = audio_context.change_program(MENU_PROGRAM_NO) {
+        eprintln!("failed to start menu audio preset: {error}");
+    }
 }
 
 fn seek_menu_audio_to_active_theme(

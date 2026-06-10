@@ -3,11 +3,15 @@ use std::fs;
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
-use serde::{Deserialize, Serialize};
+use bevy_midi_graph::{MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource};
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
+use crate::audio::preset_graph::{
+    AudioChannelPreset, AudioPreset, apply_audio_preset_to_playback, default_audio_preset,
+    load_audio_preset,
+};
 use crate::dimensions::{
     UI_BODY_FONT_SIZE, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_INNER_PADDING, UI_MAX_CONTENT_WIDTH,
     UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
@@ -21,7 +25,7 @@ use crate::ui_elements::description::description;
 use crate::ui_elements::file_picker::{
     UiAudioFilePicker, UiFilePicker, UiFilePickerValue, file_picker_with_value,
 };
-use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
+use crate::ui_elements::info_message::{InfoMessage, info_message_text, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, IgnorePicking, InitialFocus, UI_FOCUS_NONE, UiFocusId, UiFocusNav,
     UiFocusNavIds, UiMultiSelect, UiMultiSelectLabel,
@@ -90,22 +94,6 @@ struct AudioDeleteButton;
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct AudioRestoreButton;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AudioPreset {
-    channels: Vec<AudioChannelPreset>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AudioChannelPreset {
-    oscillator: String,
-    built_in_sample: String,
-    custom_sample_path: String,
-    modulation_a: String,
-    modulation_b: Option<String>,
-}
-
 pub struct AudioSettingsScenePlugin;
 
 impl Plugin for AudioSettingsScenePlugin {
@@ -155,6 +143,11 @@ fn handle_audio_settings_activation(
     )>,
     child_query: Query<&Children>,
     storage: Res<LocalStorage>,
+    asset_server: Res<AssetServer>,
+    mut audio_context: ResMut<MidiGraphAudioContext>,
+    midi_assets: Res<Assets<MidiFileSource>>,
+    sf2_assets: Res<Assets<Sf2FileSource>>,
+    wave_assets: Res<Assets<WaveFileSource>>,
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
@@ -168,7 +161,20 @@ fn handle_audio_settings_activation(
         match serde_json::to_string_pretty(&preset)
             .map(|json| fs::write(current_preset_path(&storage), format!("{json}\n")))
         {
-            Ok(Ok(())) => next_state.set(AppState::Settings),
+            Ok(Ok(())) => match apply_audio_preset_to_playback(
+                &preset,
+                &asset_server,
+                &mut audio_context,
+                &midi_assets,
+                &sf2_assets,
+                &wave_assets,
+            ) {
+                Ok(()) => next_state.set(AppState::Settings),
+                Err(error) => {
+                    eprintln!("failed to apply audio preset: {error}");
+                    set_audio_preset_apply_error_message(&mut text_queries.p0(), &error);
+                }
+            },
             Ok(Err(error)) => {
                 eprintln!("failed to save audio preset: {error}");
                 set_latest_info_message(&mut text_queries.p0(), "Audio preset could not be saved.");
@@ -201,22 +207,35 @@ fn handle_audio_settings_activation(
         match serde_json::to_string_pretty(&preset)
             .map(|json| fs::write(current_preset_path(&storage), format!("{json}\n")))
         {
-            Ok(Ok(())) => {
-                apply_audio_preset_to_selects(
-                    &preset,
-                    &mut selects.p1(),
-                    &mut text_queries.p1(),
-                    &child_query,
-                );
-                apply_audio_preset_to_pickers(
-                    &preset,
-                    &mut pickers.p1(),
-                    &mut text_queries.p2(),
-                    &child_query,
-                );
-                apply_audio_conditional_sections(&selects.p0(), &mut sections);
-                set_latest_info_message(&mut text_queries.p0(), "Audio preset restored.");
-            }
+            Ok(Ok(())) => match apply_audio_preset_to_playback(
+                &preset,
+                &asset_server,
+                &mut audio_context,
+                &midi_assets,
+                &sf2_assets,
+                &wave_assets,
+            ) {
+                Ok(()) => {
+                    apply_audio_preset_to_selects(
+                        &preset,
+                        &mut selects.p1(),
+                        &mut text_queries.p1(),
+                        &child_query,
+                    );
+                    apply_audio_preset_to_pickers(
+                        &preset,
+                        &mut pickers.p1(),
+                        &mut text_queries.p2(),
+                        &child_query,
+                    );
+                    apply_audio_conditional_sections(&selects.p0(), &mut sections);
+                    set_latest_info_message(&mut text_queries.p0(), "Audio preset restored.");
+                }
+                Err(error) => {
+                    eprintln!("failed to apply restored audio preset: {error}");
+                    set_audio_preset_apply_error_message(&mut text_queries.p0(), &error);
+                }
+            },
             Ok(Err(error)) => {
                 eprintln!("failed to restore audio preset: {error}");
                 set_latest_info_message(
@@ -279,6 +298,16 @@ fn display_for(visible: bool) -> Display {
     }
 }
 
+fn set_audio_preset_apply_error_message(
+    messages: &mut Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
+    error: &str,
+) {
+    set_latest_info_message(
+        messages,
+        &format!("Audio preset could not be applied: {error}"),
+    );
+}
+
 fn audio_settings_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
@@ -288,8 +317,10 @@ fn audio_settings_scene(
     let font = assets.ubuntu_mono_font.clone();
     let body_font = font.clone();
     let landscape_font = font.clone();
-    let preset = load_current_audio_preset(storage);
+    let (preset, load_message) = load_current_audio_preset(storage);
     let landscape_preset = preset.clone();
+    let preset_label = format!("Preset {}", storage.data.settings.audio_preset.min(9));
+    let landscape_preset_label = preset_label.clone();
 
     bsn! {
         DespawnOnExit::<AppState>(AppState::AudioSettings)
@@ -323,7 +354,7 @@ fn audio_settings_scene(
                         }
                         ResponsiveLandscapeOnly
                         Children [
-                            audio_landscape_body(landscape_font, theme, landscape_preset),
+                            audio_landscape_body(landscape_font, theme, landscape_preset, landscape_preset_label),
                         ]
                     ),
                     (
@@ -346,12 +377,12 @@ fn audio_settings_scene(
                                         min_height: px(0.0),
                                         thumb_height: 132.0,
                                     },
-                                    move |_| audio_body(body_font, theme, preset)
+                                    move |_| audio_body(body_font, theme, preset, preset_label)
                                 )
                             )
                         ]
                     ),
-                    info_message(font.clone(), theme, "", false),
+                    info_message_text(font.clone(), theme, load_message.unwrap_or_default(), false),
                     action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
                 ]
             )
@@ -359,7 +390,12 @@ fn audio_settings_scene(
     }
 }
 
-fn audio_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+fn audio_body(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioPreset,
+    preset_label: String,
+) -> impl Scene {
     let controls_font = font.clone();
     let buttons_font = font;
 
@@ -380,7 +416,7 @@ fn audio_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> im
                 }
                 ResponsivePercentWidth { landscape: UI_WIDE_PRIMARY_COLUMN_PERCENT }
                 Children [
-                    audio_controls(controls_font, theme, preset),
+                    audio_controls(controls_font, theme, preset, preset_label),
                 ]
             ),
             audio_buttons(buttons_font, theme),
@@ -388,7 +424,12 @@ fn audio_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> im
     }
 }
 
-fn audio_landscape_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+fn audio_landscape_body(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioPreset,
+    preset_label: String,
+) -> impl Scene {
     let controls_font = font.clone();
     let buttons_font = font;
 
@@ -411,7 +452,7 @@ fn audio_landscape_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPre
                         min_height: px(0.0),
                         thumb_height: 132.0,
                     },
-                    move |_| audio_controls(controls_font, theme, preset)
+                    move |_| audio_controls(controls_font, theme, preset, preset_label)
                 )
             ),
             audio_buttons(buttons_font, theme),
@@ -419,7 +460,12 @@ fn audio_landscape_body(font: Handle<Font>, theme: ActiveTheme, preset: AudioPre
     }
 }
 
-fn audio_controls(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -> impl Scene {
+fn audio_controls(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    preset: AudioPreset,
+    preset_label: String,
+) -> impl Scene {
     let ch1 = preset_channel(&preset, 0);
     let ch2 = preset_channel(&preset, 1);
     let ch3 = preset_channel(&preset, 2);
@@ -441,7 +487,7 @@ fn audio_controls(font: Handle<Font>, theme: ActiveTheme, preset: AudioPreset) -
             },
         }
         Children [
-            preset_label_row(font.clone(), theme, "Preset 0"),
+            preset_label_row(font.clone(), theme, preset_label),
             channel_one_controls(font.clone(), theme, ch1, ch1_oscillator),
             channel_two_controls(font.clone(), theme, ch2, ch2_oscillator),
             channel_three_controls(font.clone(), theme, ch3),
@@ -566,11 +612,7 @@ fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
     }
 }
 
-fn preset_label_row(
-    font: Handle<Font>,
-    theme: ActiveTheme,
-    preset_name: &'static str,
-) -> impl Scene {
+fn preset_label_row(font: Handle<Font>, theme: ActiveTheme, preset_name: String) -> impl Scene {
     let value_font = font.clone();
 
     bsn! {
@@ -750,45 +792,16 @@ fn current_preset_path(storage: &LocalStorage) -> std::path::PathBuf {
         .audio_preset_file(storage.data.settings.audio_preset.min(9))
 }
 
-fn load_current_audio_preset(storage: &LocalStorage) -> AudioPreset {
-    fs::read(current_preset_path(storage))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_else(default_audio_preset)
-}
-
-fn default_audio_preset() -> AudioPreset {
-    AudioPreset {
-        channels: vec![
-            AudioChannelPreset {
-                oscillator: "Square Wave".to_string(),
-                built_in_sample: "Piano".to_string(),
-                custom_sample_path: String::new(),
-                modulation_a: "Duty Cycle".to_string(),
-                modulation_b: Some("Pitch Envelope".to_string()),
-            },
-            AudioChannelPreset {
-                oscillator: "Square Wave".to_string(),
-                built_in_sample: "Piano".to_string(),
-                custom_sample_path: String::new(),
-                modulation_a: "Duty Cycle".to_string(),
-                modulation_b: None,
-            },
-            AudioChannelPreset {
-                oscillator: "Wave Table".to_string(),
-                built_in_sample: "Piano".to_string(),
-                custom_sample_path: String::new(),
-                modulation_a: "None".to_string(),
-                modulation_b: None,
-            },
-            AudioChannelPreset {
-                oscillator: "LFSR Noise".to_string(),
-                built_in_sample: "Piano".to_string(),
-                custom_sample_path: String::new(),
-                modulation_a: "None".to_string(),
-                modulation_b: None,
-            },
-        ],
+fn load_current_audio_preset(storage: &LocalStorage) -> (AudioPreset, Option<String>) {
+    match load_audio_preset(&current_preset_path(storage)) {
+        Ok(preset) => (preset, None),
+        Err(error) => {
+            eprintln!("failed to load audio preset: {error}");
+            (
+                default_audio_preset(),
+                Some(format!("Audio preset could not be loaded: {error}")),
+            )
+        }
     }
 }
 

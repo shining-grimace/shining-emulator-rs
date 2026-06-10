@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::app_assets::{
-    AppAssets, DEFAULT_AUDIO_GRAPH_PATH, HEROES_PATH, ICONS_PATH, MENU_MIDI_PATH,
-    SHINING_EMULATOR_LOGO_PATH, SHINING_GRIMACE_LOGO_PATH, UBUNTU_MONO_FONT_PATH,
+    AppAssets, HEROES_PATH, ICONS_PATH, MENU_MIDI_PATH, SHINING_EMULATOR_LOGO_PATH,
+    SHINING_GRIMACE_LOGO_PATH, UBUNTU_MONO_FONT_PATH,
 };
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
@@ -36,7 +36,6 @@ fn request_assets(
     assets.icons = asset_server.load(ICONS_PATH);
     assets.heroes = asset_server.load(HEROES_PATH);
     assets.menu_midi = asset_server.load(MENU_MIDI_PATH);
-    assets.default_audio_graph = asset_server.load(DEFAULT_AUDIO_GRAPH_PATH);
     assets.theme_background = theme
         .background_asset_path
         .map(|path| asset_server.load(path));
@@ -59,7 +58,6 @@ fn required_assets_loaded(asset_server: &AssetServer, assets: &AppAssets) -> boo
         && asset_server.is_loaded(&assets.icons)
         && asset_server.is_loaded(&assets.heroes)
         && asset_server.is_loaded(&assets.menu_midi)
-        && asset_server.is_loaded_with_dependencies(&assets.default_audio_graph)
         && assets
             .theme_background
             .as_ref()
