@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
 mod audio_unit;
+mod bus;
 mod constants;
 mod cpu;
+mod execution;
 mod gpu;
 mod input;
 mod loader;

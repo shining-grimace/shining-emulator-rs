@@ -168,4 +168,10 @@ impl AudioUnitState {
         self.base_running_speed =
             usize::try_from(clock_frequency_hz).unwrap_or(GB_CLOCK_HZ as usize);
     }
+
+    pub(crate) fn simulate_placeholder(&mut self, ticks: i32) {
+        if let Ok(ticks) = u64::try_from(ticks.max(0)) {
+            self.cumulative_ticks = self.cumulative_ticks.saturating_add(ticks);
+        }
+    }
 }

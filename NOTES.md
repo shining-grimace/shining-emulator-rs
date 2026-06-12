@@ -1,6 +1,6 @@
 
-Done: Step 6 (groundwork)
-Next: Step 6 (simulation)
+Done: Step 6 (simulation)
+Next: Step 6
 
 For theme:
 - Align background images to the same average brightness and the same brightness range

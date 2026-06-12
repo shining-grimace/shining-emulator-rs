@@ -62,8 +62,10 @@ impl Default for GameBoyMemory {
 impl GameBoyMemory {
     pub(crate) fn reset_for_rom_load(&mut self, rom_bytes: &[u8]) -> bool {
         self.rom.fill(0);
+        self.wram.fill(0);
         self.vram.fill(0);
         self.io_ports.fill(0);
+        self.oam.fill(0);
         self.tile_set.fill(0);
 
         let copy_len = rom_bytes.len().min(self.rom.len());
@@ -83,6 +85,50 @@ impl GameBoyMemory {
     pub(crate) fn write_io_port(&mut self, index: usize, value: u8) {
         if let Some(port) = self.io_ports.get_mut(index) {
             *port = value;
+        }
+    }
+
+    pub(crate) fn write_vram(&mut self, vram_bank_offset: u32, address: u16, value: u8) {
+        let relative_address = usize::from(address & 0x1fff);
+        let bank_offset = usize::try_from(vram_bank_offset).unwrap_or_default();
+        let Some(vram_index) = bank_offset.checked_add(relative_address) else {
+            return;
+        };
+        let Some(slot) = self.vram.get_mut(vram_index) else {
+            return;
+        };
+        *slot = value;
+
+        if relative_address < 0x1800 {
+            self.decode_tile_row(bank_offset, relative_address);
+        }
+    }
+
+    fn decode_tile_row(&mut self, bank_offset: usize, relative_address: usize) {
+        let row_address = relative_address & 0x1ffe;
+        let Some(byte1) = self.vram.get(bank_offset + row_address).copied() else {
+            return;
+        };
+        let Some(byte2) = self.vram.get(bank_offset + row_address + 1).copied() else {
+            return;
+        };
+
+        let mut output_address = row_address * 4;
+        if bank_offset != 0 {
+            output_address += 24_576;
+        }
+        let Some(output) = self
+            .tile_set
+            .get_mut(output_address..output_address.saturating_add(8))
+        else {
+            return;
+        };
+
+        for (pixel, slot) in output.iter_mut().enumerate() {
+            let shift = 7_u8.saturating_sub(pixel as u8);
+            let low = (byte1 >> shift) & 0x01;
+            let high = ((byte2 >> shift) & 0x01) << 1;
+            *slot = u32::from(high | low);
         }
     }
 }
@@ -109,5 +155,15 @@ mod tests {
         assert_eq!(memory.io_ports.len(), IO_PORT_BYTES);
         assert_eq!(memory.oam.len(), OAM_BYTES);
         assert_eq!(memory.tile_set.len(), TILE_SET_PIXELS);
+    }
+
+    #[test]
+    fn vram_writes_decode_tile_rows_to_colour_indices() {
+        let mut memory = GameBoyMemory::default();
+
+        memory.write_vram(0, 0, 0b1000_0001);
+        memory.write_vram(0, 1, 0b0100_0001);
+
+        assert_eq!(&memory.tile_set[0..8], &[1, 2, 0, 0, 0, 0, 0, 3]);
     }
 }

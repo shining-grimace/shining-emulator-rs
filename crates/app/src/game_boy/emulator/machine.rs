@@ -81,6 +81,7 @@ impl GameBoyCore {
         self.memory_access.reset_for_rom_load();
         self.video_frame.reset_for_rom_load();
         self.memory.reset_io_ports_for_rom_load();
+        self.palettes.reset_for_rom_load(&self.memory.io_ports);
         self.configure_model_specific_state(&properties);
         self.runtime.reset_for_rom_load();
 
