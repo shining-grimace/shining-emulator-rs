@@ -161,6 +161,18 @@ pub(crate) fn write16(core: &mut GameBoyCore, address: u16, value: u16) {
     write8(core, address.wrapping_add(1), (value >> 8) as u8);
 }
 
+pub(crate) fn run_hblank_dma(core: &mut GameBoyCore) {
+    if core.memory.io_ports[HDMA5_IO_INDEX] >= 0xff {
+        return;
+    }
+    transfer_hdma_block(core, 16);
+    let remaining = core.memory.io_ports[HDMA5_IO_INDEX].wrapping_sub(1);
+    core.memory.write_io_port(
+        HDMA5_IO_INDEX,
+        if remaining < 0x80 { 0xff } else { remaining },
+    );
+}
+
 fn read_sram(core: &GameBoyCore, address: usize) -> u8 {
     if !core.sram.enable_flag {
         return 0x00;
@@ -169,12 +181,7 @@ fn read_sram(core: &GameBoyCore, address: usize) -> u8 {
         let index = usize::try_from(core.sram.timer_mode.saturating_sub(0x08)).unwrap_or_default();
         return core.sram.timer_data.get(index).copied().unwrap_or(0);
     }
-    let bank_offset = usize::try_from(core.sram.bank_offset).unwrap_or_default();
-    core.sram
-        .data
-        .get(bank_offset + (address & 0x1fff))
-        .copied()
-        .unwrap_or(0xff)
+    core.sram.read_data(address)
 }
 
 fn write_sram(core: &mut GameBoyCore, address: usize, mut value: u8) {
@@ -183,18 +190,13 @@ fn write_sram(core: &mut GameBoyCore, address: usize, mut value: u8) {
     }
     if core.sram.has_timer && core.sram.timer_mode > 0 {
         let index = usize::try_from(core.sram.timer_mode.saturating_sub(0x08)).unwrap_or_default();
-        if let Some(slot) = core.sram.timer_data.get_mut(index) {
-            *slot = value;
-        }
+        core.sram.write_timer_data(index, value);
         return;
     }
     if core.rom.properties.mbc == MemoryBankController::Mbc2 {
         value &= 0x0f;
     }
-    let bank_offset = usize::try_from(core.sram.bank_offset).unwrap_or_default();
-    if let Some(slot) = core.sram.data.get_mut(bank_offset + (address & 0x1fff)) {
-        *slot = value;
-    }
+    core.sram.write_data(address, value);
 }
 
 fn write_mbc(core: &mut GameBoyCore, address: u16, mut value: u8) {
@@ -391,6 +393,28 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
 
 fn write_joyp(core: &mut GameBoyCore, value: u8) {
     let select = value & 0x30;
+    if core.rom.properties.sgb_flag {
+        let mut joyp = select;
+        if select == 0x00 {
+            core.sgb.begin_command();
+        } else if select == 0x20 {
+            joyp |= core.runtime.joypad.direction;
+            core.sgb.receive_command_bit(0, &core.memory);
+        } else if select == 0x10 {
+            joyp |= core.runtime.joypad.button;
+            core.sgb.receive_command_bit(1, &core.memory);
+        } else if core.sgb.mult_enabled && !core.sgb.reading_command {
+            if core.memory.io_ports[JOYP_IO_INDEX] < 0x30 {
+                core.sgb.read_joypad_id = core.sgb.read_joypad_id.saturating_sub(1);
+                if core.sgb.read_joypad_id < 0x0c {
+                    core.sgb.read_joypad_id = 0x0f;
+                }
+            }
+        }
+        core.memory.write_io_port(JOYP_IO_INDEX, joyp);
+        return;
+    }
+
     let mut joyp = select;
     if select == 0x20 {
         joyp |= core.runtime.joypad.direction;
@@ -457,9 +481,6 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
 
 fn start_oam_dma(core: &mut GameBoyCore, value: u8) {
     core.memory.write_io_port(DMA_IO_INDEX, value);
-    if value < 0x80 {
-        return;
-    }
     let mut source = u16::from(value) << 8;
     for index in 0..core.memory.oam.len() {
         let byte = read8(core, source);
@@ -500,7 +521,17 @@ fn write_hdma5(core: &mut GameBoyCore, value: u8) {
     if !core.rom.properties.cgb_flag {
         return;
     }
-    core.memory.write_io_port(HDMA5_IO_INDEX, value);
+    if value & 0x80 == 0 {
+        if core.memory.io_ports[HDMA5_IO_INDEX] != 0xff {
+            core.memory.write_io_port(HDMA5_IO_INDEX, value);
+            return;
+        }
+        let blocks = usize::from(value & 0x7f) + 1;
+        transfer_hdma_block(core, blocks * 16);
+        core.memory.write_io_port(HDMA5_IO_INDEX, 0xff);
+    } else {
+        core.memory.write_io_port(HDMA5_IO_INDEX, value);
+    }
 }
 
 fn write_cgb_bg_palette_index(core: &mut GameBoyCore, value: u8) {
@@ -568,12 +599,22 @@ fn write_cgb_obj_palette_data(core: &mut GameBoyCore, value: u8) {
 fn increment_cgb_bg_palette_index(core: &mut GameBoyCore) {
     if core.cgb_palette_registers.bg_increment != 0 {
         core.cgb_palette_registers.bg_index = (core.cgb_palette_registers.bg_index + 1) & 0x3f;
+        core.memory.write_io_port(
+            BCPS_IO_INDEX,
+            (core.memory.io_ports[BCPS_IO_INDEX] & 0x80)
+                | (core.cgb_palette_registers.bg_index as u8),
+        );
     }
 }
 
 fn increment_cgb_obj_palette_index(core: &mut GameBoyCore) {
     if core.cgb_palette_registers.obj_increment != 0 {
         core.cgb_palette_registers.obj_index = (core.cgb_palette_registers.obj_index + 1) & 0x3f;
+        core.memory.write_io_port(
+            OCPS_IO_INDEX,
+            (core.memory.io_ports[OCPS_IO_INDEX] & 0x80)
+                | (core.cgb_palette_registers.obj_index as u8),
+        );
     }
 }
 
@@ -583,6 +624,36 @@ fn remap_555_8888(lo: u8, hi: u8) -> u32 {
     let green = u32::from((value >> 5) & 0x1f) * 255 / 31;
     let blue = u32::from((value >> 10) & 0x1f) * 255 / 31;
     0xff00_0000 | (red << 16) | (green << 8) | blue
+}
+
+fn transfer_hdma_block(core: &mut GameBoyCore, byte_count: usize) {
+    let mut source = hdma_source(core);
+    if !valid_hdma_source(source) {
+        return;
+    }
+    let mut destination = hdma_destination(core);
+    for _ in 0..byte_count {
+        let value = read8(core, source);
+        write8(core, destination, value);
+        source = source.wrapping_add(1);
+        destination = 0x8000 | (destination.wrapping_add(1) & 0x1fff);
+    }
+}
+
+fn hdma_source(core: &GameBoyCore) -> u16 {
+    u16::from(core.memory.io_ports[HDMA1_IO_INDEX]) << 8
+        | u16::from(core.memory.io_ports[HDMA2_IO_INDEX])
+}
+
+fn hdma_destination(core: &GameBoyCore) -> u16 {
+    0x8000
+        | ((u16::from(core.memory.io_ports[HDMA3_IO_INDEX]) << 8
+            | u16::from(core.memory.io_ports[HDMA4_IO_INDEX]))
+            & 0x1fff)
+}
+
+fn valid_hdma_source(source: u16) -> bool {
+    (source & 0xe000) != 0x8000 && source < 0xe000
 }
 
 #[cfg(test)]
@@ -623,5 +694,80 @@ mod tests {
 
         assert!(core.cpu_timing.timer_running);
         assert_eq!(core.cpu_timing.timer_inc_time, 16);
+    }
+
+    #[test]
+    fn cgb_general_hdma_copies_to_vram() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.memory_access.vram = true;
+        core.memory.io_ports[HDMA5_IO_INDEX] = 0xff;
+        core.memory.rom[0x0200] = 0x80;
+        core.memory.rom[0x0201] = 0x40;
+        write8(&mut core, 0xff51, 0x02);
+        write8(&mut core, 0xff52, 0x00);
+        write8(&mut core, 0xff53, 0x00);
+        write8(&mut core, 0xff54, 0x00);
+
+        write8(&mut core, 0xff55, 0x00);
+
+        assert_eq!(core.memory.vram[0], 0x80);
+        assert_eq!(core.memory.vram[1], 0x40);
+        assert_eq!(&core.memory.tile_set[0..2], &[1, 2]);
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0xff);
+    }
+
+    #[test]
+    fn hblank_hdma_copies_one_block_and_completes() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.memory_access.vram = true;
+        core.memory.rom[0x0200] = 0x55;
+        write8(&mut core, 0xff51, 0x02);
+        write8(&mut core, 0xff52, 0x00);
+        write8(&mut core, 0xff53, 0x00);
+        write8(&mut core, 0xff54, 0x00);
+        write8(&mut core, 0xff55, 0x80);
+
+        run_hblank_dma(&mut core);
+
+        assert_eq!(core.memory.vram[0], 0x55);
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0xff);
+    }
+
+    #[test]
+    fn oam_dma_copies_from_rom_source_pages() {
+        let mut core = GameBoyCore::default();
+        core.memory_access.oam = true;
+        core.memory.rom[0x0200] = 0x12;
+        core.memory.rom[0x0201] = 0x34;
+
+        write8(&mut core, 0xff46, 0x02);
+
+        assert_eq!(core.memory.oam[0], 0x12);
+        assert_eq!(core.memory.oam[1], 0x34);
+        assert_eq!(core.memory.io_ports[DMA_IO_INDEX], 0x02);
+    }
+
+    #[test]
+    fn sgb_joypad_packet_enables_multiplayer_mode() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.sgb_flag = true;
+        let mut packet = [0_u8; 16];
+        packet[0] = (0x11 << 3) | 0x01;
+        packet[1] = 0x01;
+
+        write8(&mut core, 0xff00, 0x00);
+        for byte in packet {
+            for bit in 0..8 {
+                let select = if byte & (1 << bit) != 0 { 0x10 } else { 0x20 };
+                write8(&mut core, 0xff00, select);
+            }
+        }
+        write8(&mut core, 0xff00, 0x20);
+
+        assert!(core.sgb.mult_enabled);
+        assert_eq!(core.sgb.player_count, 2);
+        assert_eq!(core.sgb.read_joypad_id, 0x0f);
     }
 }

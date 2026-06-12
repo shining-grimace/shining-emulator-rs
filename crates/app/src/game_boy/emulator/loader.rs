@@ -153,7 +153,7 @@ pub(crate) fn finish_game_boy_rom_load(
         return;
     };
 
-    let clock_frequency_hz = match load_rom_into_emulator(&loaded, &mut emulator) {
+    let clock_frequency_hz = match load_rom_into_emulator(&loaded, &mut emulator, &storage) {
         Ok(clock_frequency_hz) => clock_frequency_hz,
         Err(error) => {
             emulator.runtime.is_running = false;
@@ -170,6 +170,7 @@ pub(crate) fn finish_game_boy_rom_load(
 fn load_rom_into_emulator(
     loaded: &LoadedRomBytes,
     emulator: &mut GameBoyCore,
+    storage: &LocalStorage,
 ) -> Result<i64, GameBoyLoadError> {
     let properties = parse_rom_properties(&loaded.bytes)?;
     if usize::try_from(properties.size_bytes)
@@ -183,10 +184,25 @@ fn load_rom_into_emulator(
         )));
     }
 
-    if !emulator.reset_for_rom_load(properties, loaded.opened_file_name.clone(), &loaded.bytes) {
+    if !emulator.reset_for_rom_load(
+        properties,
+        loaded.rom_id.clone(),
+        loaded.opened_file_name.clone(),
+        &loaded.bytes,
+    ) {
         return Err(GameBoyLoadError::Unknown(
             "emulated ROM memory is unavailable".to_string(),
         ));
+    }
+    if let Some(size_bytes) = emulator.sram.persistence_len() {
+        let saved_data = storage
+            .load_sram(&loaded.rom_id, size_bytes)
+            .map_err(|error| {
+                GameBoyLoadError::Unknown(format!(
+                    "battery-backed SRAM could not be loaded: {error}"
+                ))
+            })?;
+        emulator.sram.load_save_data(&saved_data);
     }
 
     Ok(emulator.cpu_timing.clock_frequency_hz)

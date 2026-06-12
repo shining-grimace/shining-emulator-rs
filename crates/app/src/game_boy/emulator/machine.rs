@@ -61,6 +61,7 @@ impl GameBoyCore {
     pub(crate) fn reset_for_rom_load(
         &mut self,
         properties: RomProperties,
+        rom_id: String,
         opened_file_name: String,
         rom_bytes: &[u8],
     ) -> bool {
@@ -68,7 +69,8 @@ impl GameBoyCore {
             return false;
         }
 
-        self.rom.reset_for_rom_load(properties, opened_file_name);
+        self.rom
+            .reset_for_rom_load(properties, rom_id, opened_file_name);
         self.sram.reset_for_rom_load(&properties, rom_bytes);
         self.sgb.reset_for_rom_load();
         self.cgb_palette_registers.reset_for_rom_load();

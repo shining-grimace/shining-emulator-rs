@@ -257,6 +257,36 @@ impl LocalStorage {
         self.rom_dir(rom_id).join("sram.dat")
     }
 
+    pub(crate) fn load_sram(
+        &self,
+        rom_id: &str,
+        size_bytes: usize,
+    ) -> Result<Vec<u8>, StorageError> {
+        let path = self.sram_path(rom_id);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut data = vec![0; size_bytes];
+        if path.is_file() {
+            let saved_data = fs::read(path)?;
+            let copy_len = saved_data.len().min(data.len());
+            data[..copy_len].copy_from_slice(&saved_data[..copy_len]);
+        } else {
+            fs::write(path, &data)?;
+        }
+        Ok(data)
+    }
+
+    pub(crate) fn save_sram(&self, rom_id: &str, data: &[u8]) -> Result<(), StorageError> {
+        let path = self.sram_path(rom_id);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, data)?;
+        Ok(())
+    }
+
     pub fn oscillator_path(&self, rom_id: &str) -> PathBuf {
         self.rom_dir(rom_id).join("oscillator.dat")
     }
@@ -433,5 +463,35 @@ mod tests {
             .iter()
             .map(|rom| rom.file_name.clone())
             .collect()
+    }
+
+    #[test]
+    fn sram_storage_creates_loads_and_saves_file() {
+        let root = std::env::temp_dir().join(format!(
+            "shining-emulator-sram-storage-test-{}",
+            std::process::id()
+        ));
+        let storage = LocalStorage {
+            paths: StoragePaths::from_root(root.clone()),
+            data: LocalStorageData::default(),
+        };
+
+        let loaded = storage
+            .load_sram("rom-id", 16)
+            .expect("SRAM file should be created");
+        assert_eq!(loaded, vec![0; 16]);
+
+        let mut saved = vec![0; 16];
+        saved[3] = 0x7c;
+        storage
+            .save_sram("rom-id", &saved)
+            .expect("SRAM file should be saved");
+
+        let reloaded = storage
+            .load_sram("rom-id", 16)
+            .expect("SRAM file should be loaded");
+        assert_eq!(reloaded[3], 0x7c);
+
+        let _ = fs::remove_dir_all(root);
     }
 }

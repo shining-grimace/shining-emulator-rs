@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_boy::emulator::bus::write16;
+use crate::game_boy::emulator::bus::{run_hblank_dma, write16};
 use crate::game_boy::emulator::constants::{MAX_ACCUMULATED_CLOCKS, MIN_CLOCKS_TO_EXECUTE};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuTiming};
 use crate::game_boy::emulator::execution::perform_op;
@@ -9,6 +9,7 @@ use crate::game_boy::emulator::memory::GameBoyMemory;
 use crate::game_boy::emulator::runtime::RuntimeControl;
 use crate::game_boy::emulator::{GameBoyCore, GameBoyEmulator};
 use crate::game_boy::frame_buffer::GameBoyFrameRing;
+use crate::storage::LocalStorage;
 
 const JOYP_IO_INDEX: usize = 0x00;
 const SB_IO_INDEX: usize = 0x01;
@@ -57,6 +58,29 @@ pub(crate) fn tick_game_boy_emulator(
         }
 
         execute_accumulated_clocks(emulator, &mut frames);
+    }
+}
+
+pub(crate) fn persist_dirty_sram(
+    storage: Res<LocalStorage>,
+    mut emulators: Query<&mut GameBoyCore, With<GameBoyEmulator>>,
+) {
+    for mut emulator in &mut emulators {
+        if !emulator.sram.is_dirty() {
+            continue;
+        }
+        if emulator.rom.current_rom_id.is_empty() {
+            continue;
+        }
+
+        let rom_id = emulator.rom.current_rom_id.clone();
+        let Some(data) = emulator.sram.save_data() else {
+            continue;
+        };
+        match storage.save_sram(&rom_id, data) {
+            Ok(()) => emulator.sram.clear_dirty(),
+            Err(error) => warn!("failed to persist Game Boy SRAM: {error}"),
+        }
     }
 }
 
@@ -277,16 +301,15 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
             }
             GpuMode::ScanVram => {
                 let line = ly(&emulator.memory);
-                if line < FIRST_VBLANK_LINE {
-                    emulator
-                        .video_frame
-                        .write_gb_line(line, &emulator.memory, &emulator.palettes);
-                }
                 set_gpu_mode(emulator, GpuMode::HBlank);
                 emulator.memory_access.oam = true;
                 emulator.memory_access.vram = true;
                 if io(&emulator.memory, STAT_IO_INDEX) & 0x08 != 0 {
                     request_lcd_stat_interrupt(&mut emulator.memory);
+                }
+                if line < FIRST_VBLANK_LINE {
+                    run_hblank_dma(emulator);
+                    write_visible_line(emulator, line);
                 }
             }
             GpuMode::HBlank => {
@@ -296,6 +319,9 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
                     set_gpu_mode(emulator, GpuMode::VBlank);
                     request_interrupt(&mut emulator.memory, INTERRUPT_VBLANK);
                     if !emulator.sgb.freeze_screen {
+                        if emulator.rom.properties.sgb_flag {
+                            emulator.video_frame.colourise_sgb_frame(&emulator.sgb);
+                        }
                         emulator.video_frame.publish_frame(frames);
                     }
                     emulator.memory_access.oam = true;
@@ -327,6 +353,29 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
                     set_ly(&mut emulator.memory, next_line);
                 }
             }
+        }
+    }
+}
+
+fn write_visible_line(emulator: &mut GameBoyCore, line: u8) {
+    match emulator.line_renderer {
+        crate::game_boy::emulator::gpu::LineRenderer::Gb => {
+            emulator
+                .video_frame
+                .write_gb_line(line, &emulator.memory, &emulator.palettes);
+        }
+        crate::game_boy::emulator::gpu::LineRenderer::Sgb => {
+            emulator.video_frame.write_sgb_line(
+                line,
+                &emulator.memory,
+                &emulator.palettes,
+                &mut emulator.sgb,
+            );
+        }
+        crate::game_boy::emulator::gpu::LineRenderer::Cgb => {
+            emulator
+                .video_frame
+                .write_cgb_line(line, &emulator.memory, &emulator.palettes);
         }
     }
 }
@@ -496,6 +545,35 @@ mod tests {
         assert_eq!(emulator.gpu_mode, GpuMode::VBlank);
         assert_eq!(emulator.memory.io_ports[IF_IO_INDEX], 0x01);
         assert!(frames.latest_written_frame().is_some());
+    }
+
+    #[test]
+    fn hblank_dma_runs_after_vram_access_reopens() {
+        let mut emulator = GameBoyCore {
+            gpu_timing: GpuTiming::default(),
+            gpu_mode: GpuMode::ScanVram,
+            memory_access: MemoryAccess {
+                vram: false,
+                ..Default::default()
+            },
+            memory: GameBoyMemory::default(),
+            ..Default::default()
+        };
+        emulator.rom.properties.cgb_flag = true;
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x91;
+        emulator.memory.io_ports[0x51] = 0x02;
+        emulator.memory.io_ports[0x52] = 0x00;
+        emulator.memory.io_ports[0x53] = 0x00;
+        emulator.memory.io_ports[0x54] = 0x00;
+        emulator.memory.io_ports[0x55] = 0x80;
+        emulator.memory.rom[0x0200] = 0x5a;
+        let mut frames = GameBoyFrameRing::default();
+
+        advance_ppu_timing(SCAN_VRAM_CLOCKS, &mut emulator, &mut frames);
+
+        assert_eq!(emulator.memory.vram[0], 0x5a);
+        assert_eq!(emulator.memory.io_ports[0x55], 0xff);
+        assert!(emulator.memory_access.vram);
     }
 
     #[test]

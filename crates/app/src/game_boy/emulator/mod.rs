@@ -28,7 +28,7 @@ pub(crate) use loader::{
 };
 pub(crate) use machine::GameBoyCore;
 pub(super) use systems::{
-    apply_emulator_control_events, spawn_game_boy_emulator, sync_joypad_input,
+    apply_emulator_control_events, persist_dirty_sram, spawn_game_boy_emulator, sync_joypad_input,
     tick_game_boy_emulator,
 };
 
