@@ -1,11 +1,12 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(not(target_os = "android"))]
 use directories::ProjectDirs;
 
 use crate::storage::errors::StorageError;
+use crate::storage::rom_identifier::rom_identifier;
 
 const APP_STORAGE_DIR_NAME: &str = "shining-emulator";
 const QUALIFIER: &str = "com";
@@ -74,6 +75,18 @@ impl Default for StoragePaths {
     }
 }
 
+pub(crate) fn cache_remote_rom(roms_dir: &Path, file_name: &str, bytes: &[u8]) -> bool {
+    let rom_id = rom_identifier(bytes);
+    let path = roms_dir.join(rom_id).join(file_name);
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return false;
+    }
+    fs::write(path, bytes).is_ok()
+}
+
 #[cfg(not(target_os = "android"))]
 fn app_storage_dir() -> Result<PathBuf, StorageError> {
     ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
@@ -88,4 +101,25 @@ fn app_storage_dir() -> Result<PathBuf, StorageError> {
         .and_then(|app| app.internal_data_path())
         .map(|path| path.join(APP_STORAGE_DIR_NAME))
         .ok_or(StorageError::MissingProjectDirectory)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remote_rom_cache_creates_nested_filename_parent_dirs() {
+        let root = env::temp_dir().join(format!(
+            "shining-emulator-cache-test-{}",
+            std::process::id()
+        ));
+        let bytes = b"cached ROM bytes";
+
+        assert!(cache_remote_rom(&root, "files/test.gb", bytes));
+
+        let rom_id = rom_identifier(bytes);
+        assert!(root.join(rom_id).join("files/test.gb").is_file());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

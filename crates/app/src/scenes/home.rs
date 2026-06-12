@@ -11,6 +11,7 @@ use crate::dimensions::{
     UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
     UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP, UI_SIDEBAR_WIDTH,
 };
+use crate::game_boy::GameBoyRomLoadRequest;
 use crate::input::selection::PrimaryInputDevice;
 use crate::scenes::rom_data::RomDataEditTarget;
 use crate::storage::LocalStorage;
@@ -225,6 +226,7 @@ fn handle_home_activation(
     focused: Query<Entity, With<FocusedUiElement>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     rom_list_data: Res<HomeRomListData>,
+    mut rom_load_request: ResMut<GameBoyRomLoadRequest>,
     mut rom_data_target: ResMut<RomDataEditTarget>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     state: Res<State<AppState>>,
@@ -242,10 +244,22 @@ fn handle_home_activation(
         despawn_choice_popups(&mut commands, &popup_roots);
         match option.option_index {
             0 => {
-                next_state.set(AppState::Gameplay);
+                if let Some(rom_index) = popup_rom_index {
+                    rom_load_request.rom_index = Some(rom_index);
+                    rom_load_request.resume_auto_save = true;
+                    next_state.set(AppState::Gameplay);
+                } else {
+                    set_latest_info_message(&mut messages, "ROM data could not be opened.");
+                }
             }
             1 => {
-                next_state.set(AppState::Gameplay);
+                if let Some(rom_index) = popup_rom_index {
+                    rom_load_request.rom_index = Some(rom_index);
+                    rom_load_request.resume_auto_save = false;
+                    next_state.set(AppState::Gameplay);
+                } else {
+                    set_latest_info_message(&mut messages, "ROM data could not be opened.");
+                }
             }
             2 => {
                 if let Some(rom_index) = popup_rom_index {

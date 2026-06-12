@@ -386,7 +386,7 @@ fn file_stem_label(file_name: &str) -> String {
         .to_string()
 }
 
-fn http_get_bytes(url: &str) -> Result<Vec<u8>, StorageError> {
+pub(crate) fn http_get_bytes(url: &str) -> Result<Vec<u8>, StorageError> {
     let mut response = HTTP_AGENT
         .get(url)
         .call()

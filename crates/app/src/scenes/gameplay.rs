@@ -10,6 +10,7 @@ use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
     GAMEPLAY_ERROR_ICON_SIZE, UI_BODY_FONT_SIZE, UI_CONTENT_GAP, UI_SCREEN_PADDING,
 };
+use crate::game_boy::GameBoyLoadStatus;
 use crate::input::events::MappedInputEvent;
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
@@ -22,6 +23,12 @@ const ERROR_ICON_X: f32 = 0.0;
 const ERROR_ICON_Y: f32 = 8.0;
 const ERROR_ICON_SIZE: f32 = 4.0;
 
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct GameplayErrorOverlay;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct GameplayErrorMessage;
+
 pub struct GameplayScenePlugin;
 
 impl Plugin for GameplayScenePlugin {
@@ -29,7 +36,8 @@ impl Plugin for GameplayScenePlugin {
         app.add_systems(OnEnter(AppState::Gameplay), spawn_gameplay_scene)
             .add_systems(
                 Update,
-                return_home_from_gameplay.run_if(in_state(AppState::Gameplay)),
+                (return_home_from_gameplay, update_gameplay_error_overlay)
+                    .run_if(in_state(AppState::Gameplay)),
             );
     }
 }
@@ -53,6 +61,31 @@ fn return_home_from_gameplay(
         .any(|event| event.state == ButtonState::Pressed && event.action == InputAction::QuitRom)
     {
         next_state.set(AppState::Home);
+    }
+}
+
+fn update_gameplay_error_overlay(
+    status: Res<GameBoyLoadStatus>,
+    mut overlays: Query<&mut Node, With<GameplayErrorOverlay>>,
+    mut messages: Query<&mut Text, With<GameplayErrorMessage>>,
+) {
+    let message = status.overlay_message();
+    let display = if message.is_some() {
+        Display::Flex
+    } else {
+        Display::None
+    };
+
+    for mut node in &mut overlays {
+        node.display = display;
+    }
+    let Some(message) = message else {
+        return;
+    };
+    for mut text in &mut messages {
+        if text.0 != message {
+            text.0 = message.to_string();
+        }
     }
 }
 
@@ -93,6 +126,7 @@ fn gameplay_scene(
                             flex_direction: FlexDirection::Column,
                             row_gap: px(UI_CONTENT_GAP),
                         }
+                        GameplayErrorOverlay
                         Children [
                             (
                                 Node {
@@ -106,7 +140,8 @@ fn gameplay_scene(
                                 }
                             ),
                             (
-                                Text("Not Implemented")
+                                Text("Loading ROM...")
+                                GameplayErrorMessage
                                 TextFont {
                                     font: {FontSourceTemplate::Handle(HandleTemplate::Handle(font))},
                                     font_size: px(UI_BODY_FONT_SIZE),
