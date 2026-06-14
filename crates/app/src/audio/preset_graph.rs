@@ -4,6 +4,7 @@ use std::path::Path;
 use bevy::prelude::*;
 use bevy_midi_graph::{
     GraphAssetLoader, MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource,
+    midi::event::{Event, EventTarget, Message},
     midi::node::ChildConfig,
 };
 use serde::{Deserialize, Serialize};
@@ -109,9 +110,27 @@ pub(crate) fn apply_audio_preset_to_playback(
     let config: ChildConfig =
         serde_json::from_value(graph_json).map_err(|error| error.to_string())?;
     let mut loader = GraphAssetLoader::new(asset_server, midi_assets, sf2_assets, wave_assets);
+
+    let state_snapshot = match audio_context.capture_node_state(MENU_MIDI_NODE_ID) {
+        Some(Ok(snapshot)) => Some(snapshot),
+        Some(Err(error)) => return Err(error.to_string()),
+        None => None,
+    };
+
     audio_context
         .store_new_program(MENU_PROGRAM_NO, &config, &mut loader)
         .map_err(|error| error.to_string())?;
+
+    if let Some(snapshot) = state_snapshot {
+        let sender = audio_context.get_event_sender();
+        sender
+            .send(Message {
+                target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
+                data: Event::StateSnapshot(snapshot),
+            })
+            .map_err(|error| error.to_string())?;
+    }
+
     Ok(())
 }
 

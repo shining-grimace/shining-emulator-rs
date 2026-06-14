@@ -5,7 +5,7 @@ use bevy_midi_graph::{
 };
 
 use crate::app_state::AppState;
-use crate::app_theme::ActiveTheme;
+use crate::app_theme::{ActiveTheme, ActiveThemeChanged};
 use crate::audio::preset_graph::{
     apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
 };
@@ -24,7 +24,8 @@ impl Plugin for AudioPlugin {
             .add_systems(OnEnter(AppState::Splash), start_menu_audio)
             .add_systems(OnExit(AppState::Splash), seek_menu_audio_to_active_theme)
             .add_systems(OnEnter(AppState::Gameplay), stop_menu_audio)
-            .add_systems(OnExit(AppState::Gameplay), restart_menu_audio);
+            .add_systems(OnExit(AppState::Gameplay), restart_menu_audio)
+            .add_observer(seek_menu_audio_on_theme_change);
     }
 }
 
@@ -71,14 +72,30 @@ fn seek_menu_audio_to_active_theme(
     mut audio_context: ResMut<MidiGraphAudioContext>,
     theme: Res<ActiveTheme>,
 ) {
+    seek_menu_audio_to_theme_anchor(&mut audio_context, &theme, "theme seek");
+}
+
+fn seek_menu_audio_on_theme_change(
+    _theme_changed: On<ActiveThemeChanged>,
+    mut audio_context: ResMut<MidiGraphAudioContext>,
+    theme: Res<ActiveTheme>,
+) {
+    seek_menu_audio_to_theme_anchor(&mut audio_context, &theme, "theme change seek");
+}
+
+fn seek_menu_audio_to_theme_anchor(
+    audio_context: &mut MidiGraphAudioContext,
+    theme: &ActiveTheme,
+    description: &'static str,
+) {
     let Some(anchor) = theme.audio_anchor else {
         return;
     };
 
     queue_menu_audio_event(
-        &mut audio_context,
+        audio_context,
         Event::CueData(CueData::SeekWhenIdeal(anchor)),
-        "theme seek",
+        description,
     );
 }
 
@@ -114,7 +131,7 @@ fn queue_menu_audio_event(
     description: &'static str,
 ) {
     let sender = audio_context.get_event_sender();
-    if let Err(error) = sender.try_send(Message {
+    if let Err(error) = sender.send(Message {
         target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
         data: event,
     }) {
