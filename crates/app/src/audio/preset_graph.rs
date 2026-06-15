@@ -14,11 +14,16 @@ use crate::audio::{MENU_MIDI_NODE_ID, MENU_PROGRAM_NO};
 
 const MENU_MIDI_PATH: &str = "audio/audio.mid";
 const MENU_MIDI_TRACK_INDEX: usize = 0;
+pub(crate) const GAME_AUDIO_CHANNEL_NODE_IDS: [u64; 4] = [201, 202, 203, 204];
+const GAME_AUDIO_SOURCE_NODE_IDS: [u64; 4] = [211, 212, 213, 214];
+const WAVETABLE_SAMPLE_RATE: u32 = 4096;
+const WAVETABLE_BASE_NOTE: u8 = 127;
 
 const OSCILLATOR_SQUARE: &str = "Square Wave";
 const OSCILLATOR_TRIANGLE: &str = "Triangle Wave";
 const OSCILLATOR_SAWTOOTH: &str = "Sawtooth Wave";
 const OSCILLATOR_LFSR_NOISE: &str = "LFSR Noise";
+const OSCILLATOR_WAVE_TABLE: &str = "Wave Table";
 const OSCILLATOR_BUILT_IN_SAMPLER: &str = "Built-in Sampler";
 const OSCILLATOR_CUSTOM_SAMPLER: &str = "Custom Sampler";
 
@@ -155,14 +160,18 @@ fn midi_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
 
 fn midi_channel_source_json(preset: &AudioPreset, index: usize) -> Value {
     let channel = preset_channel(preset, index);
-    let source = oscillator_source_json(index, &channel);
+    let channel_node_id = game_audio_channel_node_id(index);
+    let uses_envelope = channel_uses_envelope(&channel);
+    let source_node_id = match uses_envelope {
+        true => game_audio_source_node_id(index),
+        false => channel_node_id,
+    };
+    let source = oscillator_source_json(index, &channel, source_node_id);
 
-    if matches!(
-        channel.oscillator.as_str(),
-        OSCILLATOR_SQUARE | OSCILLATOR_BUILT_IN_SAMPLER | OSCILLATOR_CUSTOM_SAMPLER
-    ) {
+    if uses_envelope {
         json!({
             "type": "AdsrEnvelope",
+            "node_id": channel_node_id,
             "attack_time": 0.01,
             "decay_time": 0.08,
             "sustain_multiplier": 0.4,
@@ -174,6 +183,16 @@ fn midi_channel_source_json(preset: &AudioPreset, index: usize) -> Value {
     }
 }
 
+fn channel_uses_envelope(channel: &AudioChannelPreset) -> bool {
+    matches!(
+        channel.oscillator.as_str(),
+        OSCILLATOR_SQUARE
+            | OSCILLATOR_LFSR_NOISE
+            | OSCILLATOR_BUILT_IN_SAMPLER
+            | OSCILLATOR_CUSTOM_SAMPLER
+    )
+}
+
 fn preset_channel(preset: &AudioPreset, index: usize) -> AudioChannelPreset {
     preset
         .channels
@@ -182,59 +201,108 @@ fn preset_channel(preset: &AudioPreset, index: usize) -> AudioChannelPreset {
         .unwrap_or_else(|| fallback_audio_channel(index))
 }
 
-fn oscillator_source_json(channel_index: usize, preset: &AudioChannelPreset) -> Value {
+fn oscillator_source_json(
+    channel_index: usize,
+    preset: &AudioChannelPreset,
+    node_id: u64,
+) -> Value {
     match preset.oscillator.as_str() {
         OSCILLATOR_TRIANGLE => json!({
             "type": "TriangleWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index)
         }),
         OSCILLATOR_SAWTOOTH => json!({
             "type": "SawtoothWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index)
         }),
         OSCILLATOR_LFSR_NOISE => json!({
             "type": "LfsrNoise",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index) * 0.6,
             "inside_feedback": false
         }),
-        OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample_source_json(preset, channel_index),
-        OSCILLATOR_CUSTOM_SAMPLER => custom_sample_source_json(preset, channel_index),
+        OSCILLATOR_WAVE_TABLE => wavetable_source_json(node_id),
+        OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample_source_json(preset, channel_index, node_id),
+        OSCILLATOR_CUSTOM_SAMPLER => custom_sample_source_json(preset, channel_index, node_id),
         _ => json!({
             "type": "SquareWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index),
             "duty_cycle": square_duty_cycle(preset)
         }),
     }
 }
 
-fn built_in_sample_source_json(preset: &AudioChannelPreset, channel_index: usize) -> Value {
+fn built_in_sample_source_json(
+    preset: &AudioChannelPreset,
+    channel_index: usize,
+    node_id: u64,
+) -> Value {
     match preset.built_in_sample.as_str() {
         "Guitar" => json!({
             "type": "SawtoothWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index)
         }),
         "Bass" => json!({
             "type": "TriangleWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index) * 0.8
         }),
         "Bell" => json!({
             "type": "SquareWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index) * 0.7,
             "duty_cycle": 0.125
         }),
         _ => json!({
             "type": "SquareWave",
+            "node_id": node_id,
+            "balance": "Both",
             "amplitude": channel_amplitude(channel_index),
             "duty_cycle": 0.5
         }),
     }
 }
 
-fn custom_sample_source_json(preset: &AudioChannelPreset, channel_index: usize) -> Value {
+fn custom_sample_source_json(
+    preset: &AudioChannelPreset,
+    channel_index: usize,
+    node_id: u64,
+) -> Value {
     // The current MIDI Graph Bevy loader resolves samples through Bevy's asset server, while this
     // screen stores native file picker paths. Keep applying the preset instead of failing until a
     // local-file asset source is available.
-    built_in_sample_source_json(preset, channel_index)
+    built_in_sample_source_json(preset, channel_index, node_id)
+}
+
+fn wavetable_source_json(node_id: u64) -> Value {
+    let wavetable = [
+        0.0, 0.125, 0.25, 0.375, 0.5, 0.375, 0.25, 0.125, 0.0, -0.125, -0.25, -0.375, -0.5, -0.375,
+        -0.25, -0.125,
+    ];
+    json!({
+        "type": "SampleLoop",
+        "node_id": node_id,
+        "balance": "Both",
+        "source": {
+            "WavetableWithSampleRate": [WAVETABLE_SAMPLE_RATE, wavetable]
+        },
+        "base_note": WAVETABLE_BASE_NOTE,
+        "looping": {
+            "start": 0,
+            "end": wavetable.len()
+        }
+    })
 }
 
 fn channel_amplitude(index: usize) -> f32 {
@@ -251,5 +319,79 @@ fn square_duty_cycle(preset: &AudioChannelPreset) -> f32 {
         0.25
     } else {
         0.5
+    }
+}
+
+fn game_audio_channel_node_id(index: usize) -> u64 {
+    match GAME_AUDIO_CHANNEL_NODE_IDS.get(index) {
+        Some(node_id) => *node_id,
+        None => GAME_AUDIO_CHANNEL_NODE_IDS[GAME_AUDIO_CHANNEL_NODE_IDS.len() - 1],
+    }
+}
+
+fn game_audio_source_node_id(index: usize) -> u64 {
+    match GAME_AUDIO_SOURCE_NODE_IDS.get(index) {
+        Some(node_id) => *node_id,
+        None => GAME_AUDIO_SOURCE_NODE_IDS[GAME_AUDIO_SOURCE_NODE_IDS.len() - 1],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_graph_uses_stable_node_ids_for_game_audio_channels() {
+        let graph = midi_graph_json_from_audio_preset(&default_audio_preset());
+        let channels = &graph["channels"];
+
+        assert_eq!(graph["node_id"], json!(MENU_MIDI_NODE_ID));
+
+        assert_eq!(
+            channels["0"]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[0])
+        );
+        assert_eq!(
+            channels["0"]["source"]["node_id"],
+            json!(GAME_AUDIO_SOURCE_NODE_IDS[0])
+        );
+
+        assert_eq!(
+            channels["1"]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[1])
+        );
+        assert_eq!(
+            channels["1"]["source"]["node_id"],
+            json!(GAME_AUDIO_SOURCE_NODE_IDS[1])
+        );
+
+        assert_eq!(
+            channels["2"]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
+        );
+
+        assert_eq!(
+            channels["3"]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[3])
+        );
+        assert_eq!(
+            channels["3"]["source"]["node_id"],
+            json!(GAME_AUDIO_SOURCE_NODE_IDS[3])
+        );
+    }
+
+    #[test]
+    fn default_wave_table_channel_uses_wavetable_sampler_config() {
+        let graph = midi_graph_json_from_audio_preset(&default_audio_preset());
+        let wavetable_channel = &graph["channels"]["2"];
+
+        assert_eq!(wavetable_channel["type"], json!("SampleLoop"));
+        assert_eq!(
+            wavetable_channel["source"]["WavetableWithSampleRate"][0],
+            json!(WAVETABLE_SAMPLE_RATE)
+        );
+        assert_eq!(wavetable_channel["base_note"], json!(WAVETABLE_BASE_NOTE));
+        assert_eq!(wavetable_channel["looping"]["start"], json!(0));
+        assert_eq!(wavetable_channel["looping"]["end"], json!(16));
     }
 }

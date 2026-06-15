@@ -507,6 +507,7 @@ dependencies = [
 [[package]]
 name = "bevy-midi-graph"
 version = "0.1.0"
+source = "git+https://github.com/shining-grimace/bevy-midi-graph.git?rev=c546ca54da2de352713e640450c06be6ede40dbf#c546ca54da2de352713e640450c06be6ede40dbf"
 dependencies = [
  "bevy",
  "midi-graph",
@@ -3704,6 +3705,7 @@ dependencies = [
 [[package]]
 name = "midi-graph"
 version = "0.1.0"
+source = "git+https://github.com/shining-grimace/midi-graph.git?rev=5137ddc137d2e3e78185b2bb3a9b7cb845a29309#5137ddc137d2e3e78185b2bb3a9b7cb845a29309"
 dependencies = [
  "biquad",
  "byteorder",

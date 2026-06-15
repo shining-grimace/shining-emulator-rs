@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_midi_graph::{
     MidiFileSource, MidiGraphAudioContext, MidiGraphPlugin, Sf2FileSource, WaveFileSource,
-    midi::event::{CueData, Event, EventTarget, Message},
+    midi::event::{CueData, Event, EventTarget, Message, MidiPlaybackState},
 };
 
 use crate::app_state::AppState;
@@ -104,12 +104,12 @@ fn stop_menu_audio(mut audio_context: ResMut<MidiGraphAudioContext>, theme: Res<
         return;
     }
 
-    queue_menu_audio_event(&mut audio_context, Event::Volume(0.0), "stop volume");
     queue_menu_audio_event(
         &mut audio_context,
-        Event::NoteOff { note: 0, vel: 1.0 },
-        "stop notes",
+        Event::MidiPlayback(MidiPlaybackState::Paused),
+        "pause playback",
     );
+    queue_menu_audio_event(&mut audio_context, Event::AllNotesOff, "stop notes");
 }
 
 fn restart_menu_audio(mut audio_context: ResMut<MidiGraphAudioContext>, theme: Res<ActiveTheme>) {
@@ -117,7 +117,11 @@ fn restart_menu_audio(mut audio_context: ResMut<MidiGraphAudioContext>, theme: R
         return;
     };
 
-    queue_menu_audio_event(&mut audio_context, Event::Volume(1.0), "restart volume");
+    queue_menu_audio_event(
+        &mut audio_context,
+        Event::MidiPlayback(MidiPlaybackState::Playing),
+        "restart playback",
+    );
     queue_menu_audio_event(
         &mut audio_context,
         Event::CueData(CueData::SeekWhenIdeal(anchor)),
