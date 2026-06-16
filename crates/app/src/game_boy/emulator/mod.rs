@@ -14,6 +14,7 @@ mod memory;
 mod palettes;
 mod rom;
 mod runtime;
+mod save_state;
 mod sgb;
 mod sram;
 mod systems;
@@ -28,6 +29,7 @@ pub(crate) use loader::{
     finish_game_boy_rom_load, has_pending_game_boy_rom_load,
 };
 pub(crate) use machine::GameBoyCore;
+pub(crate) use save_state::{apply_save_state, encode_save_state};
 pub(super) use systems::{
     apply_emulator_control_events, persist_dirty_sram, spawn_game_boy_emulator, sync_joypad_input,
     tick_game_boy_emulator,

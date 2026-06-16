@@ -5,7 +5,10 @@ use bevy::text::FontSourceTemplate;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{ACTION_HINT_GAP, ACTION_HINT_ICON_SIZE, UI_BODY_FONT_SIZE};
-use crate::input::selection::{PrimaryInputDevice, selected_mapping};
+use crate::input::controller::ConnectedControllers;
+use crate::input::selection::{
+    PrimaryInputDevice, selected_mapping, selected_mapping_has_available_device,
+};
 use crate::storage::LocalStorage;
 use crate::storage::input_mappings::{
     InputAction, InputDeviceMapping, InputDeviceType, InputKeyId,
@@ -79,6 +82,7 @@ pub fn action_hints_for_actions(
             justify_content: JustifyContent::FlexEnd,
             column_gap: px(ACTION_HINT_GAP),
         }
+        ActionHintRoot
         Children [
             action_hint(font.clone(), icons.clone(), theme, first.0, first_key, first.1),
             action_hint(font, icons, theme, second.0, second_key, second.1)
@@ -170,6 +174,9 @@ struct ActionHintIcon {
 }
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct ActionHintRoot;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct ActionHintKeyLabel;
 
 #[derive(Clone)]
@@ -181,12 +188,25 @@ struct ActionKeyHint {
 fn sync_action_hints(
     storage: Option<Res<LocalStorage>>,
     primary_input: Option<Res<PrimaryInputDevice>>,
+    controllers: Option<Res<ConnectedControllers>>,
+    mut roots: Query<&mut Node, (With<ActionHintRoot>, Without<ActionHintKeyLabel>)>,
     mut icons: Query<(&ActionHintIcon, &mut ImageNode, &Children)>,
-    mut labels: Query<(&mut Text, &mut Node), With<ActionHintKeyLabel>>,
+    mut labels: Query<(&mut Text, &mut Node), (With<ActionHintKeyLabel>, Without<ActionHintRoot>)>,
 ) {
-    let (Some(storage), Some(primary_input)) = (storage, primary_input) else {
+    let (Some(storage), Some(primary_input), Some(controllers)) =
+        (storage, primary_input, controllers)
+    else {
         return;
     };
+    let display = if selected_mapping_has_available_device(&primary_input, &storage, &controllers) {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    for mut root in &mut roots {
+        root.display = display;
+    }
+
     let mapping = selected_mapping(&primary_input, &storage);
     for (icon, mut image, children) in &mut icons {
         let key = action_key_hint(mapping, icon.action);
@@ -326,5 +346,19 @@ fn icon_grid_rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
     Rect {
         min: Vec2::new(x * unit, y * unit),
         max: Vec2::new((x + width) * unit, (y + height) * unit),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::*;
+
+    #[test]
+    fn action_hint_system_queries_are_valid() {
+        let mut app = App::new();
+        app.add_plugins(ActionHintPlugin);
+        app.update();
     }
 }

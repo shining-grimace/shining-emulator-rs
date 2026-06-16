@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::input::controller::ConnectedControllers;
 use crate::storage::LocalStorage;
 use crate::storage::input_mappings::{InputDeviceMapping, InputDeviceType};
 
@@ -31,6 +32,28 @@ pub fn selected_mapping<'a>(
         .data
         .input_mappings
         .get(selected_mapping_index(selection, storage))
+}
+
+pub(crate) fn selected_mapping_has_available_device(
+    selection: &PrimaryInputDevice,
+    storage: &LocalStorage,
+    controllers: &ConnectedControllers,
+) -> bool {
+    selected_mapping(selection, storage)
+        .is_some_and(|mapping| mapping_has_available_device(mapping, controllers))
+}
+
+fn mapping_has_available_device(
+    mapping: &InputDeviceMapping,
+    controllers: &ConnectedControllers,
+) -> bool {
+    match mapping.r#type {
+        InputDeviceType::Keyboard => cfg!(not(target_os = "android")),
+        InputDeviceType::Controller => mapping
+            .controller_model_id
+            .as_deref()
+            .is_some_and(|model_id| controllers.contains_model_id(model_id)),
+    }
 }
 
 pub fn mapping_label(mapping: &InputDeviceMapping) -> String {

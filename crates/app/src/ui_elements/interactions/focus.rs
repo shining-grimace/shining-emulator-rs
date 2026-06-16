@@ -88,6 +88,12 @@ pub struct LastFocusedUiElement {
     entity: Option<Entity>,
 }
 
+impl LastFocusedUiElement {
+    pub fn clear(&mut self) {
+        self.entity = None;
+    }
+}
+
 pub(super) fn ensure_initial_focus(
     mut commands: Commands,
     focused: Query<(), With<FocusedUiElement>>,

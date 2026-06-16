@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
 
 use crate::game_boy::emulator::rom::{MemoryBankController, RomProperties};
+use crate::game_boy::emulator::save_state::apply_save_state;
 use crate::game_boy::emulator::{GameBoyCore, GameBoyEmulator};
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
@@ -63,12 +64,16 @@ impl GameBoyLoadStatus {
         self.state = GameBoyLoadState::Loading(message.into());
     }
 
-    fn set_ready(&mut self) {
+    pub(crate) fn set_ready(&mut self) {
         self.state = GameBoyLoadState::Ready;
     }
 
     fn set_error(&mut self, error: GameBoyLoadError) {
         self.state = GameBoyLoadState::Error(error.to_string());
+    }
+
+    pub(crate) fn set_error_message(&mut self, message: impl Into<String>) {
+        self.state = GameBoyLoadState::Error(message.into());
     }
 }
 
@@ -129,6 +134,7 @@ pub(crate) fn has_pending_game_boy_rom_load(task_state: Res<GameBoyRomLoadTaskSt
 pub(crate) fn finish_game_boy_rom_load(
     mut task_state: ResMut<GameBoyRomLoadTaskState>,
     mut status: ResMut<GameBoyLoadStatus>,
+    request: Res<GameBoyRomLoadRequest>,
     mut storage: ResMut<LocalStorage>,
     mut emulators: Query<&mut GameBoyCore, With<GameBoyEmulator>>,
 ) {
@@ -153,14 +159,15 @@ pub(crate) fn finish_game_boy_rom_load(
         return;
     };
 
-    let clock_frequency_hz = match load_rom_into_emulator(&loaded, &mut emulator, &storage) {
-        Ok(clock_frequency_hz) => clock_frequency_hz,
-        Err(error) => {
-            emulator.runtime.is_running = false;
-            status.set_error(error);
-            return;
-        }
-    };
+    let clock_frequency_hz =
+        match load_rom_into_emulator(&loaded, &mut emulator, &storage, request.resume_auto_save) {
+            Ok(clock_frequency_hz) => clock_frequency_hz,
+            Err(error) => {
+                emulator.runtime.is_running = false;
+                status.set_error(error);
+                return;
+            }
+        };
     emulator.audio_unit.reset_for_rom_load(clock_frequency_hz);
 
     update_loaded_rom_storage(&mut storage, result.rom_index, &loaded.rom_id);
@@ -171,6 +178,7 @@ fn load_rom_into_emulator(
     loaded: &LoadedRomBytes,
     emulator: &mut GameBoyCore,
     storage: &LocalStorage,
+    resume_auto_save: bool,
 ) -> Result<i64, GameBoyLoadError> {
     let properties = parse_rom_properties(&loaded.bytes)?;
     if usize::try_from(properties.size_bytes)
@@ -204,8 +212,32 @@ fn load_rom_into_emulator(
             })?;
         emulator.sram.load_save_data(&saved_data);
     }
+    if resume_auto_save {
+        restore_auto_save_if_present(emulator, storage, &loaded.rom_id)?;
+    }
 
     Ok(emulator.cpu_timing.clock_frequency_hz)
+}
+
+fn restore_auto_save_if_present(
+    emulator: &mut GameBoyCore,
+    storage: &LocalStorage,
+    rom_id: &str,
+) -> Result<(), GameBoyLoadError> {
+    let path = storage.auto_save_path(rom_id);
+    if !path.is_file() {
+        return Ok(());
+    }
+
+    let bytes = fs::read(&path).map_err(|source| GameBoyLoadError::OpenFailed {
+        path: path.clone(),
+        source: source.to_string(),
+    })?;
+    apply_save_state(emulator, &bytes).map_err(|error| {
+        GameBoyLoadError::Unknown(format!("auto-save could not be restored: {error}"))
+    })?;
+    emulator.runtime.is_paused = false;
+    Ok(())
 }
 
 fn parse_rom_properties(bytes: &[u8]) -> Result<RomProperties, GameBoyLoadError> {

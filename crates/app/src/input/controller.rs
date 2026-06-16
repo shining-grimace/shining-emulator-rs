@@ -7,13 +7,19 @@ use crate::storage::input_mappings::{
 };
 
 #[derive(Resource, Clone, Debug, Default)]
-pub(super) struct ConnectedControllers {
+pub(crate) struct ConnectedControllers {
     devices: HashMap<Entity, ConnectedController>,
 }
 
 impl ConnectedControllers {
     pub(super) fn controller(&self, entity: Entity) -> Option<&ConnectedController> {
         self.devices.get(&entity)
+    }
+
+    pub(crate) fn contains_model_id(&self, model_id: &str) -> bool {
+        self.devices
+            .values()
+            .any(|controller| controller.model_id == model_id)
     }
 
     pub(super) fn insert(&mut self, controller: ConnectedController) {

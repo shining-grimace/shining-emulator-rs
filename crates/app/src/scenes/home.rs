@@ -805,7 +805,7 @@ fn auto_save_popup_scene(
             ChoicePopupConfig {
                 title: rom.name,
                 width: UI_MULTI_SELECT_WIDTH,
-                options: ["Resume Auto-save", "Cold Boot", "ROM Data", "Cancel"],
+                options: vec!["Resume Auto-save", "Cold Boot", "ROM Data", "Cancel"],
             },
             position,
             rom.rom_index,

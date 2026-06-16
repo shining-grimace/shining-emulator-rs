@@ -133,6 +133,10 @@ impl SramState {
         self.dirty = false;
     }
 
+    pub(crate) fn set_dirty(&mut self, dirty: bool) {
+        self.dirty = dirty;
+    }
+
     pub(crate) fn read_data(&self, address: usize) -> u8 {
         let Some(index) = self.data_index(address) else {
             return 0xff;

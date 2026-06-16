@@ -1,4 +1,5 @@
 use bevy::asset::HandleTemplate;
+use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 use bevy::window::PrimaryWindow;
@@ -8,12 +9,14 @@ use crate::dimensions::UI_BODY_FONT_SIZE;
 use crate::ui_elements::button::button;
 use crate::ui_elements::interactions::tree::contains_entity;
 use crate::ui_elements::interactions::{
-    HoveredUiElement, InitialFocus, ModalUiElement, UiFocusNav, UiPointerClicked,
+    HoveredUiElement, InitialFocus, ModalUiElement, UI_FOCUS_NONE, UiFocusId, UiFocusNav,
+    UiFocusNavIds, UiPointerClicked,
 };
 use crate::ui_elements::styles::{ui_border, ui_padding, ui_radius};
 use crate::ui_elements::theme::{UiThemeBorderColor, UiThemeTextColor};
 
 const CHOICE_POPUP_SCREEN_MARGIN: f32 = 16.0;
+const CHOICE_POPUP_OPTION_FOCUS_BASE: u16 = 60_000;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct ChoicePopupRoot;
@@ -36,7 +39,7 @@ pub struct ChoicePopupContext {
 pub struct ChoicePopupConfig {
     pub title: String,
     pub width: f32,
-    pub options: [&'static str; 4],
+    pub options: Vec<&'static str>,
 }
 
 pub struct ChoicePopupPlugin;
@@ -89,33 +92,47 @@ pub fn choice_popup(
         ChoicePopupRoot
         Children [
             popup_label(font.clone(), theme, config.title),
-            (
-                #Option0
-                button(font.clone(), config.options[0], theme, UiFocusNav::default())
-                ChoicePopupOption { option_index: 0 }
-                InitialFocus { enabled: true }
-                UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #Option1, left: {Entity::PLACEHOLDER} }
-            ),
-            (
-                #Option1
-                button(font.clone(), config.options[1], theme, UiFocusNav::default())
-                ChoicePopupOption { option_index: 1 }
-                UiFocusNav { up: #Option0, right: {Entity::PLACEHOLDER}, down: #Option2, left: {Entity::PLACEHOLDER} }
-            ),
-            (
-                #Option2
-                button(font.clone(), config.options[2], theme, UiFocusNav::default())
-                ChoicePopupOption { option_index: 2 }
-                UiFocusNav { up: #Option1, right: {Entity::PLACEHOLDER}, down: #Option3, left: {Entity::PLACEHOLDER} }
-            ),
-            (
-                #Option3
-                button(font, config.options[3], theme, UiFocusNav::default())
-                ChoicePopupOption { option_index: 3 }
-                UiFocusNav { up: #Option2, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
-            ),
+            {choice_popup_options(font, theme, config.options)}
         ]
     }
+}
+
+fn choice_popup_options(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    options: Vec<&'static str>,
+) -> Vec<Box<dyn SceneList>> {
+    let option_count = options.len();
+    options
+        .into_iter()
+        .enumerate()
+        .map(|(option_index, label)| {
+            let focus_id = choice_popup_option_focus_id(option_index);
+            let up = option_index
+                .checked_sub(1)
+                .map(choice_popup_option_focus_id)
+                .unwrap_or(UI_FOCUS_NONE);
+            let down = if option_index + 1 < option_count {
+                choice_popup_option_focus_id(option_index + 1)
+            } else {
+                UI_FOCUS_NONE
+            };
+            Box::new(bsn_list![(
+                button(font.clone(), label, theme, UiFocusNav::default())
+                UiFocusId { id: {focus_id} }
+                UiFocusNavIds { up: {up}, right: UI_FOCUS_NONE, down: {down}, left: UI_FOCUS_NONE }
+                ChoicePopupOption { option_index }
+                InitialFocus { enabled: {option_index == 0} }
+            )]) as Box<dyn SceneList>
+        })
+        .collect()
+}
+
+fn choice_popup_option_focus_id(option_index: usize) -> u16 {
+    u16::try_from(option_index)
+        .ok()
+        .and_then(|option| CHOICE_POPUP_OPTION_FOCUS_BASE.checked_add(option))
+        .unwrap_or(UI_FOCUS_NONE)
 }
 
 pub fn centered_choice_popup_position(
@@ -155,7 +172,7 @@ pub fn clamp_choice_popup_position(
 
 pub fn despawn_choice_popups(
     commands: &mut Commands,
-    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children), impl QueryFilter>,
 ) {
     for (popup, _, _) in popup_roots {
         commands.entity(popup).try_despawn();
@@ -164,7 +181,7 @@ pub fn despawn_choice_popups(
 
 pub fn inside_choice_popup(
     entity: Entity,
-    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children), impl QueryFilter>,
     child_query: &Query<&Children>,
 ) -> bool {
     popup_roots.iter().any(|(popup, _, children)| {
@@ -174,7 +191,7 @@ pub fn inside_choice_popup(
 
 pub fn choice_popup_context_index(
     option_entity: Entity,
-    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children)>,
+    popup_roots: &Query<(Entity, &ChoicePopupContext, &Children), impl QueryFilter>,
     child_query: &Query<&Children>,
 ) -> Option<usize> {
     popup_roots
@@ -223,7 +240,7 @@ fn dismiss_choice_popups_on_outside_click(
             if !dismiss.armed {
                 continue;
             }
-            commands.entity(popup).despawn();
+            commands.entity(popup).try_despawn();
         }
     }
 }

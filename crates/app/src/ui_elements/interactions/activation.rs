@@ -41,13 +41,15 @@ pub(super) fn activate_controls(
     mut next_state: ResMut<NextState<AppState>>,
 ) {
     let keyboard_activation = input.select;
+    let state_value = *state.get();
+    let back_activation = input.back && back_input_enabled(state_value);
     let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
     if clicked_entities.is_empty() && !input.select && !input.back && !input.quit_app {
         return;
     }
 
-    if input.quit_app || (input.back && *state.get() != AppState::InputMapping) {
-        match back_navigation_target(*state.get()) {
+    if input.quit_app || back_activation {
+        match back_navigation_target(state_value) {
             Some(target) => next_state.set(target),
             None => {
                 app_exit.write(AppExit::Success);
@@ -268,6 +270,10 @@ fn back_navigation_target(state: AppState) -> Option<AppState> {
     }
 }
 
+fn back_input_enabled(state: AppState) -> bool {
+    !matches!(state, AppState::Gameplay | AppState::InputMapping)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,6 +324,11 @@ mod tests {
             back_navigation_target(AppState::Gameplay),
             Some(AppState::Home)
         );
+    }
+
+    #[test]
+    fn back_input_is_disabled_for_gameplay() {
+        assert!(!back_input_enabled(AppState::Gameplay));
     }
 
     #[test]
