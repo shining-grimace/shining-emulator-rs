@@ -1,7 +1,13 @@
+use bevy::prelude::warn;
+
 use crate::game_boy::emulator::GameBoyCore;
 use crate::game_boy::emulator::constants::ROM_BANK_SIZE;
 use crate::game_boy::emulator::cpu::CpuMode;
 use crate::game_boy::emulator::gpu::GpuMode;
+use crate::game_boy::emulator::input::{
+    JOYP_LOW_NIBBLE_MASK, JOYP_SELECT_BUTTONS, JOYP_SELECT_DIRECTIONS, JOYP_SELECT_MASK,
+    JOYP_SELECT_NONE, joypad_low_nibble_falling_edge,
+};
 use crate::game_boy::emulator::rom::MemoryBankController;
 
 const JOYP_IO_INDEX: usize = 0x00;
@@ -21,6 +27,7 @@ const OBP0_IO_INDEX: usize = 0x48;
 const OBP1_IO_INDEX: usize = 0x49;
 const KEY1_IO_INDEX: usize = 0x4d;
 const VBK_IO_INDEX: usize = 0x4f;
+const BOOT_IO_INDEX: usize = 0x50;
 const HDMA1_IO_INDEX: usize = 0x51;
 const HDMA2_IO_INDEX: usize = 0x52;
 const HDMA3_IO_INDEX: usize = 0x53;
@@ -32,6 +39,7 @@ const OCPS_IO_INDEX: usize = 0x6a;
 const OCPD_IO_INDEX: usize = 0x6b;
 const SVBK_IO_INDEX: usize = 0x70;
 
+const INTERRUPT_JOYPAD: u8 = 0x10;
 const INTERRUPT_TIMER: u8 = 0x04;
 const TIMER_RELOAD_DELAY_M_CYCLES: u8 = 1;
 const OAM_DMA_BYTES: u8 = 160;
@@ -61,7 +69,13 @@ pub(crate) fn read8(core: &GameBoyCore, address: u16) -> u8 {
 fn read8_unrestricted(core: &GameBoyCore, address: u16) -> u8 {
     let address = usize::from(address);
     if address < 0x4000 {
-        return core.memory.rom.get(address).copied().unwrap_or(0xff);
+        let bank_offset = usize::try_from(core.rom.fixed_bank_offset).unwrap_or_default();
+        return core
+            .memory
+            .rom
+            .get(bank_offset + address)
+            .copied()
+            .unwrap_or(0xff);
     }
     if address < 0x8000 {
         let bank_offset = usize::try_from(core.rom.bank_offset).unwrap_or_default();
@@ -250,7 +264,7 @@ fn read_sram(core: &GameBoyCore, address: usize) -> u8 {
     }
     if core.sram.has_timer && core.sram.timer_mode > 0 {
         let index = usize::try_from(core.sram.timer_mode.saturating_sub(0x08)).unwrap_or_default();
-        return core.sram.timer_data.get(index).copied().unwrap_or(0);
+        return core.sram.read_timer_data(index);
     }
     core.sram.read_data(address)
 }
@@ -292,35 +306,71 @@ fn write_mbc1(core: &mut GameBoyCore, address: u32, mut value: u8) {
         value &= 0x0f;
         core.sram.enable_flag = value == 0x0a;
     } else if address < 0x4000 {
-        core.rom.bank_offset &= 0xfff8_0000;
+        warn_if_mbc1_write_looks_like_full_width_bank_select(core, address, value);
         value &= 0x1f;
         if value == 0 {
             value = 1;
         }
-        core.rom.bank_offset |= u32::from(value) * ROM_BANK_SIZE;
-        mask_bank_offset(core);
+        core.rom.mbc1_lower_bank = value;
+        update_mbc1_bank_offsets(core);
     } else if address < 0x6000 {
         value &= 0x03;
-        if core.rom.properties.mbc_mode != 0 {
-            core.sram.bank_offset = u32::from(value) * 0x2000;
-        } else {
-            core.rom.bank_offset &= 0xffe7_c000;
-            core.rom.bank_offset |= u32::from(value) * 0x80000;
-            mask_bank_offset(core);
-        }
-    } else if core.sram.size_bytes > 8192 {
-        core.rom.properties.mbc_mode = u32::from(value & 0x01);
+        core.rom.mbc1_upper_bank = value;
+        update_mbc1_bank_offsets(core);
     } else {
-        core.rom.properties.mbc_mode = 0;
+        core.rom.properties.mbc_mode = u32::from(value & 0x01);
+        update_mbc1_bank_offsets(core);
     }
 }
 
+fn warn_if_mbc1_write_looks_like_full_width_bank_select(
+    core: &mut GameBoyCore,
+    address: u32,
+    value: u8,
+) {
+    if core.rom.suspicious_mbc_warning_logged {
+        return;
+    }
+    if core.rom.properties.bank_select_mask <= 0x1f || value & 0xe0 == 0 {
+        return;
+    }
+
+    core.rom.suspicious_mbc_warning_logged = true;
+    warn!(
+        "suspicious Game Boy MBC access: ROM header selects MBC1, but write {value:02x} to {address:04x} includes bank bits ignored by MBC1; this ROM may require a different mapper"
+    );
+}
+
+fn update_mbc1_bank_offsets(core: &mut GameBoyCore) {
+    let lower_bank = u32::from(core.rom.mbc1_lower_bank.max(1));
+    let upper_bank = u32::from(core.rom.mbc1_upper_bank);
+    let bank_mask = core.rom.properties.bank_select_mask;
+
+    let switchable_bank = (upper_bank << 5) | lower_bank;
+    core.rom.bank_offset = (switchable_bank & bank_mask) * ROM_BANK_SIZE;
+
+    let fixed_bank = if core.rom.properties.mbc_mode == 0 {
+        0
+    } else {
+        upper_bank << 5
+    };
+    core.rom.fixed_bank_offset = (fixed_bank & bank_mask) * ROM_BANK_SIZE;
+
+    core.sram.bank_offset = if core.rom.properties.mbc_mode == 0 {
+        0
+    } else {
+        upper_bank * 0x2000
+    };
+}
+
 fn write_mbc2(core: &mut GameBoyCore, address: u32, mut value: u8) {
-    if address < 0x1000 {
+    if address >= 0x4000 {
+        return;
+    }
+    if address & 0x0100 == 0 {
         value &= 0x0f;
         core.sram.enable_flag = value == 0x0a;
-    } else if address < 0x2100 {
-    } else if address < 0x21ff {
+    } else {
         value &= 0x0f;
         value &= core.rom.properties.bank_select_mask as u8;
         if value == 0 {
@@ -342,7 +392,7 @@ fn write_mbc3(core: &mut GameBoyCore, address: u32, mut value: u8) {
         core.rom.bank_offset = u32::from(value) * ROM_BANK_SIZE;
     } else if address < 0x6000 {
         value &= 0x0f;
-        if value < 0x04 {
+        if value < 0x08 {
             core.sram.bank_offset = u32::from(value) * 0x2000;
             core.sram.timer_mode = 0;
         } else if (0x08..0x0d).contains(&value) {
@@ -351,8 +401,7 @@ fn write_mbc3(core: &mut GameBoyCore, address: u32, mut value: u8) {
             core.sram.timer_mode = 0;
         }
     } else {
-        value &= 0x01;
-        core.sram.timer_latch = u32::from(value);
+        core.sram.latch_timer_data(value);
     }
 }
 
@@ -383,18 +432,7 @@ fn mask_bank_offset(core: &mut GameBoyCore) {
 
 fn read_io(core: &GameBoyCore, index: usize) -> u8 {
     match index {
-        JOYP_IO_INDEX => {
-            let select = core.memory.io_ports[JOYP_IO_INDEX] & 0x30;
-            if select == 0x20 {
-                core.runtime.joypad.direction
-            } else if select == 0x10 {
-                core.runtime.joypad.button
-            } else if core.sgb.mult_enabled && select == 0x30 {
-                core.sgb.read_joypad_id as u8
-            } else {
-                0x0f
-            }
-        }
+        JOYP_IO_INDEX => read_joyp(core),
         0x11 | 0x16 => core.memory.io_ports[index] & 0xc0,
         0x13 | 0x18 | 0x1d => 0,
         0x14 | 0x19 | 0x1e | 0x23 => core.memory.io_ports[index] & 0x40,
@@ -411,6 +449,7 @@ fn read_io(core: &GameBoyCore, index: usize) -> u8 {
             .copied()
             .unwrap_or(0),
         BCPD_IO_INDEX | OCPD_IO_INDEX => 0,
+        BOOT_IO_INDEX => core.memory.io_ports[BOOT_IO_INDEX] & 0x01,
         _ => core.memory.io_ports.get(index).copied().unwrap_or(0xff),
     }
 }
@@ -454,6 +493,7 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
         HDMA2_IO_INDEX => core.memory.write_io_port(HDMA2_IO_INDEX, value & 0xf0),
         HDMA3_IO_INDEX => core.memory.write_io_port(HDMA3_IO_INDEX, value & 0x1f),
         HDMA4_IO_INDEX => core.memory.write_io_port(HDMA4_IO_INDEX, value & 0xf0),
+        BOOT_IO_INDEX => write_boot_lock(core, value),
         HDMA5_IO_INDEX => write_hdma5(core, value),
         BCPS_IO_INDEX => write_cgb_bg_palette_index(core, value),
         BCPD_IO_INDEX => write_cgb_bg_palette_data(core, value),
@@ -465,36 +505,68 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
 }
 
 fn write_joyp(core: &mut GameBoyCore, value: u8) {
-    let select = value & 0x30;
+    let old_joyp = core.memory.io_ports[JOYP_IO_INDEX];
+    let old_select = old_joyp & JOYP_SELECT_MASK;
+    let select = value & JOYP_SELECT_MASK;
     if core.rom.properties.sgb_flag {
-        let mut joyp = select;
         if select == 0x00 {
             core.sgb.begin_command();
-        } else if select == 0x20 {
-            joyp |= core.runtime.joypad.direction;
-            core.sgb.receive_command_bit(0, &core.memory);
-        } else if select == 0x10 {
-            joyp |= core.runtime.joypad.button;
-            core.sgb.receive_command_bit(1, &core.memory);
-        } else if core.sgb.mult_enabled && !core.sgb.reading_command {
-            if core.memory.io_ports[JOYP_IO_INDEX] < 0x30 {
+        } else if select == JOYP_SELECT_DIRECTIONS && old_select != select {
+            core.sgb.receive_command_bit(0);
+        } else if select == JOYP_SELECT_BUTTONS && old_select != select {
+            core.sgb.receive_command_bit(1);
+        } else if select == JOYP_SELECT_NONE {
+            if core.sgb.reading_command {
+                core.sgb.finish_packet_if_ready(&core.memory);
+            } else if core.sgb.mult_enabled && old_select < JOYP_SELECT_NONE {
                 core.sgb.read_joypad_id = core.sgb.read_joypad_id.saturating_sub(1);
                 if core.sgb.read_joypad_id < 0x0c {
                     core.sgb.read_joypad_id = 0x0f;
                 }
             }
         }
-        core.memory.write_io_port(JOYP_IO_INDEX, joyp);
+        let new_joyp = joyp_value(core, select);
+        core.memory.write_io_port(JOYP_IO_INDEX, new_joyp);
+        request_joypad_interrupt_on_falling_edge(core, old_joyp, new_joyp);
         return;
     }
 
-    let mut joyp = select;
-    if select == 0x20 {
-        joyp |= core.runtime.joypad.direction;
-    } else if select == 0x10 {
-        joyp |= core.runtime.joypad.button;
+    let new_joyp = joyp_value(core, select);
+    core.memory.write_io_port(JOYP_IO_INDEX, new_joyp);
+    request_joypad_interrupt_on_falling_edge(core, old_joyp, new_joyp);
+}
+
+fn read_joyp(core: &GameBoyCore) -> u8 {
+    let select = core.memory.io_ports[JOYP_IO_INDEX] & JOYP_SELECT_MASK;
+    if core.rom.properties.sgb_flag && core.sgb.mult_enabled && select == JOYP_SELECT_NONE {
+        return (core.sgb.read_joypad_id as u8) & JOYP_LOW_NIBBLE_MASK;
     }
-    core.memory.write_io_port(JOYP_IO_INDEX, joyp);
+
+    joyp_value(core, select)
+}
+
+fn joyp_value(core: &GameBoyCore, select: u8) -> u8 {
+    0xc0 | (select & JOYP_SELECT_MASK) | joyp_low_nibble(core, select)
+}
+
+fn joyp_low_nibble(core: &GameBoyCore, select: u8) -> u8 {
+    core.runtime.joypad.low_nibble_for_select(select)
+}
+
+fn request_joypad_interrupt_on_falling_edge(core: &mut GameBoyCore, old_joyp: u8, new_joyp: u8) {
+    if !joypad_low_nibble_falling_edge(old_joyp, new_joyp) {
+        return;
+    }
+
+    let interrupt_flags = core.memory.io_ports[IF_IO_INDEX] | INTERRUPT_JOYPAD;
+    core.memory.write_io_port(IF_IO_INDEX, interrupt_flags);
+}
+
+fn write_boot_lock(core: &mut GameBoyCore, value: u8) {
+    let boot_off = core.memory.io_ports[BOOT_IO_INDEX] & 0x01 != 0;
+    if !boot_off && value & 0x01 != 0 {
+        core.memory.write_io_port(BOOT_IO_INDEX, 0x01);
+    }
 }
 
 fn write_serial_control(core: &mut GameBoyCore, value: u8) {
@@ -625,7 +697,7 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
         core.gpu_timing.blanked_screen = false;
         core.gpu_timing.time_in_mode = 0;
         core.gpu_timing.line_scan_vram_clocks = 172;
-        core.gpu_mode = GpuMode::ScanOam;
+        core.gpu_mode = GpuMode::HBlank;
         core.memory
             .write_io_port(STAT_IO_INDEX, core.memory.io_ports[STAT_IO_INDEX] & 0xfc);
         core.memory.write_io_port(LY_IO_INDEX, 0);
@@ -865,6 +937,7 @@ fn oam_dma_blocks_cpu_access(core: &GameBoyCore, address: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game_boy::emulator::input::JoypadInputNibbles;
     use crate::game_boy::emulator::rom::{MemoryBankController, RomProperties};
 
     #[test]
@@ -890,6 +963,136 @@ mod tests {
         write8(&mut core, 0x2000, 0x03);
 
         assert_eq!(core.rom.bank_offset, 0x0000_c000);
+    }
+
+    #[test]
+    fn mbc1_rom_banking_mode_combines_upper_and_lower_bank_bits() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc1,
+            bank_select_mask: 0x3f,
+            ..Default::default()
+        };
+        core.memory.rom[0x0000] = 0xa0;
+        core.memory.rom[0x21 * 0x4000] = 0xc1;
+
+        write8(&mut core, 0x2000, 0x01);
+        write8(&mut core, 0x4000, 0x01);
+
+        assert_eq!(core.rom.fixed_bank_offset, 0);
+        assert_eq!(core.rom.bank_offset, 0x21 * ROM_BANK_SIZE);
+        assert_eq!(read8(&core, 0x0000), 0xa0);
+        assert_eq!(read8(&core, 0x4000), 0xc1);
+    }
+
+    #[test]
+    fn mbc1_ram_banking_mode_maps_upper_bits_into_fixed_bank_area() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc1,
+            bank_select_mask: 0x3f,
+            ..Default::default()
+        };
+        core.memory.rom[0x0000] = 0xa0;
+        core.memory.rom[0x0021 * 0x4000] = 0xc1;
+        core.memory.rom[0x0020 * 0x4000] = 0xd0;
+
+        write8(&mut core, 0x2000, 0x01);
+        write8(&mut core, 0x4000, 0x01);
+        write8(&mut core, 0x6000, 0x01);
+
+        assert_eq!(core.rom.fixed_bank_offset, 0x20 * ROM_BANK_SIZE);
+        assert_eq!(core.rom.bank_offset, 0x21 * ROM_BANK_SIZE);
+        assert_eq!(core.sram.bank_offset, 0x2000);
+        assert_eq!(read8(&core, 0x0000), 0xd0);
+        assert_eq!(read8(&core, 0x4000), 0xc1);
+    }
+
+    #[test]
+    fn mbc1_full_width_bank_write_logs_suspicious_mapper_warning_once() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc1,
+            bank_select_mask: 0x3f,
+            ..Default::default()
+        };
+
+        write8(&mut core, 0x2100, 0x21);
+
+        assert_eq!(core.rom.properties.mbc, MemoryBankController::Mbc1);
+        assert!(core.rom.suspicious_mbc_warning_logged);
+
+        core.rom.suspicious_mbc_warning_logged = false;
+        write8(&mut core, 0x2100, 0x01);
+
+        assert!(!core.rom.suspicious_mbc_warning_logged);
+    }
+
+    #[test]
+    fn mbc2_uses_address_bit_eight_for_ram_enable_and_rom_bank() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc2,
+            bank_select_mask: 0x0f,
+            ..Default::default()
+        };
+
+        write8(&mut core, 0x0000, 0x0a);
+        assert!(core.sram.enable_flag);
+
+        write8(&mut core, 0x0100, 0x03);
+        assert_eq!(core.rom.bank_offset, 0x03 * ROM_BANK_SIZE);
+        assert!(core.sram.enable_flag);
+
+        write8(&mut core, 0x2000, 0x00);
+        assert!(!core.sram.enable_flag);
+
+        write8(&mut core, 0x2100, 0x00);
+        assert_eq!(core.rom.bank_offset, ROM_BANK_SIZE);
+
+        write8(&mut core, 0x4000, 0x0a);
+        assert!(!core.sram.enable_flag);
+    }
+
+    #[test]
+    fn mbc3_selects_ram_banks_zero_through_seven() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc3,
+            ..Default::default()
+        };
+        core.sram.enable_flag = true;
+        core.sram.size_bytes = 65_536;
+
+        write8(&mut core, 0x4000, 0x07);
+        write8(&mut core, 0xa000, 0x5a);
+
+        assert_eq!(core.sram.bank_offset, 7 * 0x2000);
+        assert_eq!(read8(&core, 0xa000), 0x5a);
+    }
+
+    #[test]
+    fn mbc3_rtc_registers_latch_on_zero_to_one_write() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties = RomProperties {
+            mbc: MemoryBankController::Mbc3,
+            ..Default::default()
+        };
+        core.sram.has_timer = true;
+
+        write8(&mut core, 0x0000, 0x0a);
+        write8(&mut core, 0x4000, 0x08);
+        write8(&mut core, 0xa000, 0x22);
+        write8(&mut core, 0x6000, 0x00);
+        write8(&mut core, 0x6000, 0x01);
+        write8(&mut core, 0xa000, 0x33);
+
+        assert_eq!(read8(&core, 0xa000), 0x22);
+
+        write8(&mut core, 0x6000, 0x00);
+        write8(&mut core, 0x6000, 0x01);
+
+        assert_eq!(read8(&core, 0xa000), 0x33);
     }
 
     #[test]
@@ -942,6 +1145,75 @@ mod tests {
     }
 
     #[test]
+    fn joyp_reads_include_select_bits_and_selected_low_nibble() {
+        let mut core = GameBoyCore::default();
+        core.runtime.joypad = JoypadInputNibbles {
+            button: 0x0e,
+            direction: 0x0d,
+        };
+
+        write8(&mut core, 0xff00, JOYP_SELECT_DIRECTIONS);
+        assert_eq!(read8(&core, 0xff00), 0xed);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_BUTTONS);
+        assert_eq!(read8(&core, 0xff00), 0xde);
+
+        write8(&mut core, 0xff00, 0x00);
+        assert_eq!(read8(&core, 0xff00), 0xcc);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_NONE);
+        assert_eq!(read8(&core, 0xff00), 0xff);
+    }
+
+    #[test]
+    fn joyp_write_requests_interrupt_when_selected_bits_fall() {
+        let mut core = GameBoyCore::default();
+        core.memory.io_ports[JOYP_IO_INDEX] = 0xc0 | JOYP_SELECT_NONE | 0x0f;
+        core.runtime.joypad = JoypadInputNibbles {
+            button: 0x0e,
+            direction: 0x0f,
+        };
+
+        write8(&mut core, 0xff00, JOYP_SELECT_BUTTONS);
+
+        assert_eq!(core.memory.io_ports[JOYP_IO_INDEX], 0xde);
+        assert_eq!(
+            core.memory.io_ports[IF_IO_INDEX] & INTERRUPT_JOYPAD,
+            INTERRUPT_JOYPAD
+        );
+    }
+
+    #[test]
+    fn joyp_write_does_not_interrupt_without_low_nibble_falling_edge() {
+        let mut core = GameBoyCore::default();
+        core.memory.io_ports[JOYP_IO_INDEX] = 0xc0 | JOYP_SELECT_BUTTONS | 0x0e;
+        core.runtime.joypad = JoypadInputNibbles {
+            button: 0x0f,
+            direction: 0x0f,
+        };
+
+        write8(&mut core, 0xff00, JOYP_SELECT_BUTTONS);
+
+        assert_eq!(core.memory.io_ports[JOYP_IO_INDEX], 0xdf);
+        assert_eq!(core.memory.io_ports[IF_IO_INDEX] & INTERRUPT_JOYPAD, 0);
+    }
+
+    #[test]
+    fn boot_lock_only_transitions_from_mapped_to_unmapped() {
+        let mut core = GameBoyCore::default();
+        core.memory.io_ports[BOOT_IO_INDEX] = 0x00;
+
+        write8(&mut core, 0xff50, 0x00);
+        assert_eq!(read8(&core, 0xff50), 0x00);
+
+        write8(&mut core, 0xff50, 0x01);
+        assert_eq!(read8(&core, 0xff50), 0x01);
+
+        write8(&mut core, 0xff50, 0x00);
+        assert_eq!(read8(&core, 0xff50), 0x01);
+    }
+
+    #[test]
     fn lcd_enable_starts_line_zero_oam_scan() {
         let mut core = GameBoyCore::default();
         core.memory_access.oam = true;
@@ -959,6 +1231,25 @@ mod tests {
         assert_eq!(core.memory.io_ports[STAT_IO_INDEX] & 0x03, 0x02);
         assert_eq!(core.memory.io_ports[LY_IO_INDEX], 0);
         assert!(!core.memory_access.oam);
+        assert!(core.memory_access.vram);
+    }
+
+    #[test]
+    fn lcd_disable_enters_hblank_stat_mode() {
+        let mut core = GameBoyCore::default();
+        core.memory_access.oam = false;
+        core.memory_access.vram = false;
+        core.gpu_mode = GpuMode::ScanVram;
+        core.memory.io_ports[LCDC_IO_INDEX] = 0x80;
+        core.memory.io_ports[STAT_IO_INDEX] = 0x83;
+        core.memory.io_ports[LY_IO_INDEX] = 42;
+
+        write8(&mut core, 0xff40, 0x00);
+
+        assert_eq!(core.gpu_mode, GpuMode::HBlank);
+        assert_eq!(core.memory.io_ports[STAT_IO_INDEX] & 0x03, 0x00);
+        assert_eq!(core.memory.io_ports[LY_IO_INDEX], 0);
+        assert!(core.memory_access.oam);
         assert!(core.memory_access.vram);
     }
 
@@ -1121,17 +1412,95 @@ mod tests {
         packet[0] = (0x11 << 3) | 0x01;
         packet[1] = 0x01;
 
-        write8(&mut core, 0xff00, 0x00);
-        for byte in packet {
-            for bit in 0..8 {
-                let select = if byte & (1 << bit) != 0 { 0x10 } else { 0x20 };
-                write8(&mut core, 0xff00, select);
-            }
-        }
-        write8(&mut core, 0xff00, 0x20);
+        write_sgb_packet(&mut core, packet);
 
         assert!(core.sgb.mult_enabled);
         assert_eq!(core.sgb.player_count, 2);
         assert_eq!(core.sgb.read_joypad_id, 0x0f);
+        assert_eq!(core.sgb.completed_commands, 1);
+        assert_eq!(core.sgb.last_command, 0x11);
+        assert!(!core.sgb.reading_command);
+    }
+
+    #[test]
+    fn sgb_joypad_packet_ignores_repeated_select_writes() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.sgb_flag = true;
+        let mut packet = [0_u8; 16];
+        packet[0] = (0x11 << 3) | 0x01;
+        packet[1] = 0x01;
+
+        write8(&mut core, 0xff00, 0x00);
+        for byte in packet {
+            for bit in 0..8 {
+                let select = if byte & (1 << bit) != 0 {
+                    JOYP_SELECT_BUTTONS
+                } else {
+                    JOYP_SELECT_DIRECTIONS
+                };
+                write8(&mut core, 0xff00, select);
+                write8(&mut core, 0xff00, select);
+                write8(&mut core, 0xff00, JOYP_SELECT_NONE);
+            }
+        }
+
+        assert!(core.sgb.mult_enabled);
+        assert_eq!(core.sgb.packet_errors, 0);
+    }
+
+    #[test]
+    fn sgb_multiplayer_probe_reads_and_cycles_controller_id() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.sgb_flag = true;
+        let mut packet = [0_u8; 16];
+        packet[0] = (0x11 << 3) | 0x01;
+        packet[1] = 0x01;
+        write_sgb_packet(&mut core, packet);
+
+        assert_eq!(read8(&core, 0xff00), 0x0f);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_DIRECTIONS);
+        write8(&mut core, 0xff00, JOYP_SELECT_NONE);
+
+        assert_eq!(read8(&core, 0xff00), 0x0e);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_BUTTONS);
+        write8(&mut core, 0xff00, JOYP_SELECT_NONE);
+
+        assert_eq!(read8(&core, 0xff00), 0x0d);
+    }
+
+    #[test]
+    fn sgb_multiplayer_probe_does_not_cycle_on_repeated_selected_row() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.sgb_flag = true;
+        let mut packet = [0_u8; 16];
+        packet[0] = (0x11 << 3) | 0x01;
+        packet[1] = 0x01;
+        write_sgb_packet(&mut core, packet);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_DIRECTIONS);
+        write8(&mut core, 0xff00, JOYP_SELECT_DIRECTIONS);
+
+        assert_eq!(core.sgb.read_joypad_id, 0x0f);
+
+        write8(&mut core, 0xff00, JOYP_SELECT_NONE);
+
+        assert_eq!(core.sgb.read_joypad_id, 0x0e);
+    }
+
+    fn write_sgb_packet(core: &mut GameBoyCore, packet: [u8; 16]) {
+        write8(core, 0xff00, 0x00);
+        for byte in packet {
+            for bit in 0..8 {
+                let select = if byte & (1 << bit) != 0 {
+                    JOYP_SELECT_BUTTONS
+                } else {
+                    JOYP_SELECT_DIRECTIONS
+                };
+                write8(core, 0xff00, select);
+                write8(core, 0xff00, JOYP_SELECT_NONE);
+            }
+        }
     }
 }

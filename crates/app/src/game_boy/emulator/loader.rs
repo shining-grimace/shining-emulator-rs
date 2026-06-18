@@ -340,7 +340,7 @@ fn apply_rom_size(size_enum: u8, properties: &mut RomProperties) -> Result<(), G
 
 fn apply_ram_size(size_enum: u8, properties: &mut RomProperties) -> Result<(), GameBoyLoadError> {
     match size_enum {
-        0x00 | 0x01 | 0x02 | 0x03 => Ok(()),
+        0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x05 => Ok(()),
         _ => Err(GameBoyLoadError::InvalidHeader(format!(
             "unsupported RAM size code 0x{size_enum:02x}"
         ))),
@@ -560,6 +560,15 @@ mod tests {
         let error = parse_rom_properties(&rom).expect_err("cartridge type should fail");
 
         assert!(matches!(error, GameBoyLoadError::InvalidHeader(_)));
+    }
+
+    #[test]
+    fn large_ram_size_header_codes_are_valid() {
+        let ram_128k = minimal_rom(0x1a, 0x00, 0x04);
+        let ram_64k = minimal_rom(0x1a, 0x00, 0x05);
+
+        assert!(parse_rom_properties(&ram_128k).is_ok());
+        assert!(parse_rom_properties(&ram_64k).is_ok());
     }
 
     fn minimal_rom(cart_type: u8, rom_size: u8, ram_size: u8) -> Vec<u8> {

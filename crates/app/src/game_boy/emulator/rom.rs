@@ -32,7 +32,11 @@ pub(crate) struct RomProperties {
 #[derive(Debug)]
 pub(crate) struct RomState {
     pub(crate) properties: RomProperties,
+    pub(crate) fixed_bank_offset: u32,
     pub(crate) bank_offset: u32,
+    pub(crate) mbc1_lower_bank: u8,
+    pub(crate) mbc1_upper_bank: u8,
+    pub(crate) suspicious_mbc_warning_logged: bool,
     pub(crate) current_rom_id: String,
     pub(crate) current_opened_file: String,
 }
@@ -41,7 +45,11 @@ impl Default for RomState {
     fn default() -> Self {
         Self {
             properties: RomProperties::default(),
+            fixed_bank_offset: 0,
             bank_offset: INITIAL_ROM_BANK_OFFSET,
+            mbc1_lower_bank: 1,
+            mbc1_upper_bank: 0,
+            suspicious_mbc_warning_logged: false,
             current_rom_id: String::new(),
             current_opened_file: String::new(),
         }
@@ -56,7 +64,11 @@ impl RomState {
         current_opened_file: String,
     ) {
         self.properties = properties;
+        self.fixed_bank_offset = 0;
         self.bank_offset = INITIAL_ROM_BANK_OFFSET;
+        self.mbc1_lower_bank = 1;
+        self.mbc1_upper_bank = 0;
+        self.suspicious_mbc_warning_logged = false;
         self.current_rom_id = current_rom_id;
         self.current_opened_file = current_opened_file;
     }

@@ -20,6 +20,12 @@ const LCDC_WINDOW_ENABLE: u8 = 0x20;
 const LCDC_WINDOW_TILE_MAP: u8 = 0x40;
 const LCDC_DISPLAY_ENABLE: u8 = 0x80;
 
+const OBJECT_COUNT: usize = 40;
+const MAX_OBJECTS_PER_LINE: usize = 10;
+const OBJECT_WIDTH: usize = 8;
+const OBJECT_X_OFFSET: usize = 8;
+const OBJECT_Y_OFFSET: usize = 16;
+
 #[derive(Debug)]
 pub(crate) struct VideoFrameAssembler {
     pixels: Box<[u8]>,
@@ -59,13 +65,14 @@ impl VideoFrameAssembler {
         }
 
         let lcd_control = io(memory, 0x40);
-        if lcd_control & LCDC_DISPLAY_ENABLE == 0 || lcd_control & 0x23 == 0 {
+        if lcd_control & LCDC_DISPLAY_ENABLE == 0 {
             self.fill_line(line_no, BLACK_RGB);
             return;
         }
 
         let mut bg_colour_numbers = [0_u32; GAME_BOY_SCREEN_WIDTH];
-        if lcd_control & LCDC_BG_ENABLE != 0 {
+        let bg_window_enabled = lcd_control & LCDC_BG_ENABLE != 0;
+        if bg_window_enabled {
             self.draw_gb_background_line(
                 line_no,
                 lcd_control,
@@ -77,7 +84,7 @@ impl VideoFrameAssembler {
             self.fill_line(line_no, BLACK_RGB);
         }
 
-        if lcd_control & LCDC_WINDOW_ENABLE != 0 {
+        if bg_window_enabled && lcd_control & LCDC_WINDOW_ENABLE != 0 {
             self.draw_gb_window_line(
                 line_no,
                 lcd_control,
@@ -107,25 +114,21 @@ impl VideoFrameAssembler {
         }
 
         let lcd_control = io(memory, 0x40);
-        if lcd_control & LCDC_DISPLAY_ENABLE == 0 || lcd_control & 0x23 == 0 {
+        if lcd_control & LCDC_DISPLAY_ENABLE == 0 {
             self.fill_line(line_no, BLACK_RGB);
             return;
         }
 
         let mut bg_colour_numbers = [0_u32; GAME_BOY_SCREEN_WIDTH];
         let mut bg_display_priorities = [false; GAME_BOY_SCREEN_WIDTH];
-        if lcd_control & LCDC_BG_ENABLE != 0 {
-            self.draw_cgb_background_line(
-                line_no,
-                lcd_control,
-                memory,
-                palettes,
-                &mut bg_colour_numbers,
-                &mut bg_display_priorities,
-            );
-        } else {
-            self.fill_line(line_no, BLACK_RGB);
-        }
+        self.draw_cgb_background_line(
+            line_no,
+            lcd_control,
+            memory,
+            palettes,
+            &mut bg_colour_numbers,
+            &mut bg_display_priorities,
+        );
 
         if lcd_control & LCDC_WINDOW_ENABLE != 0 {
             self.draw_cgb_window_line(
@@ -163,18 +166,19 @@ impl VideoFrameAssembler {
         }
 
         let lcd_control = io(memory, 0x40);
-        if lcd_control & LCDC_DISPLAY_ENABLE == 0 || lcd_control & 0x23 == 0 {
+        if lcd_control & LCDC_DISPLAY_ENABLE == 0 {
             fill_sgb_mono_line(sgb, line_no, 0);
             return;
         }
 
-        if lcd_control & LCDC_BG_ENABLE != 0 {
+        let bg_window_enabled = lcd_control & LCDC_BG_ENABLE != 0;
+        if bg_window_enabled {
             draw_sgb_background_line(line_no, lcd_control, memory, palettes, sgb);
         } else {
             fill_sgb_mono_line(sgb, line_no, 0);
         }
 
-        if lcd_control & LCDC_WINDOW_ENABLE != 0 {
+        if bg_window_enabled && lcd_control & LCDC_WINDOW_ENABLE != 0 {
             draw_sgb_window_line(line_no, lcd_control, memory, palettes, sgb);
         }
 
@@ -311,77 +315,25 @@ impl VideoFrameAssembler {
         palettes: &PaletteState,
         bg_colour_numbers: &[u32; GAME_BOY_SCREEN_WIDTH],
     ) {
-        let large_sprites = lcd_control & LCDC_OBJ_SIZE != 0;
-        let sprite_height = if large_sprites { 16 } else { 8 };
+        let objects = select_objects_for_line(memory, lcd_control, line_no);
+        let priority_objects = dmg_priority_objects(&objects);
 
-        for sprite_index in (0..40).rev() {
-            let offset = sprite_index * 4;
-            let sprite_y = usize::from(memory.oam[offset]);
-            let sprite_x = usize::from(memory.oam[offset + 1]);
-            if sprite_y == 0 || sprite_y > 159 || sprite_x == 0 || sprite_x > 167 {
+        for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
+            let Some(pixel) = priority_objects.iter().find_map(|&object| {
+                object_pixel(memory, lcd_control, object, line_no, screen_x, false)
+            }) else {
                 continue;
-            }
-            if line_no + 16 < sprite_y || line_no >= sprite_y {
-                continue;
-            }
-
-            let mut tile_no = usize::from(memory.oam[offset + 2]);
-            let sprite_flags = memory.oam[offset + 3];
-            let line_in_sprite = line_no + 16 - sprite_y;
-            if large_sprites {
-                if line_in_sprite >= 8 {
-                    tile_no |= 0x01;
-                } else {
-                    tile_no &= 0xfe;
-                }
-            } else if line_in_sprite >= sprite_height {
-                continue;
-            }
-
-            let mut pixel_y = line_in_sprite % 8;
-            if sprite_flags & 0x40 != 0 {
-                pixel_y = 7 - pixel_y;
-                if large_sprites {
-                    tile_no ^= 0x01;
-                }
-            }
-
-            let palette_offset = if sprite_flags & 0x10 != 0 { 4 } else { 0 };
-            let bg_priority = sprite_flags & 0x80 != 0;
-            let screen_start_x = sprite_x.saturating_sub(8);
-            let first_pixel_x = if sprite_x < 8 { 8 - sprite_x } else { 0 };
-            let pixel_count = if sprite_x < 8 {
-                sprite_x
-            } else if sprite_x > GAME_BOY_SCREEN_WIDTH {
-                168 - sprite_x
-            } else {
-                8
             };
-
-            for drawn_pixel in 0..pixel_count {
-                let screen_x = screen_start_x + drawn_pixel;
-                if screen_x >= GAME_BOY_SCREEN_WIDTH {
-                    continue;
-                }
-                let source_x = first_pixel_x + drawn_pixel;
-                let pixel_x = if sprite_flags & 0x20 != 0 {
-                    7 - source_x
-                } else {
-                    source_x
-                };
-                let colour_index = tile_pixel(memory, tile_no, pixel_x, pixel_y);
-                if colour_index == 0 {
-                    continue;
-                }
-                if bg_priority && bg_colour_numbers[screen_x] != 0 {
-                    continue;
-                }
-                self.write_pixel(
-                    line_no,
-                    screen_x,
-                    palettes.translated_obj[palette_offset + colour_index as usize],
-                );
+            if pixel.flags & 0x80 != 0 && bg_colour_numbers[screen_x] != 0 {
+                continue;
             }
+
+            let palette_offset = if pixel.flags & 0x10 != 0 { 4 } else { 0 };
+            self.write_pixel(
+                line_no,
+                screen_x,
+                palettes.translated_obj[palette_offset + pixel.colour_index as usize],
+            );
         }
     }
 
@@ -461,82 +413,30 @@ impl VideoFrameAssembler {
         bg_colour_numbers: &[u32; GAME_BOY_SCREEN_WIDTH],
         bg_display_priorities: &[bool; GAME_BOY_SCREEN_WIDTH],
     ) {
-        let large_sprites = lcd_control & LCDC_OBJ_SIZE != 0;
-        let sprite_height = if large_sprites { 16 } else { 8 };
+        let objects = select_objects_for_line(memory, lcd_control, line_no);
+        let priority_objects = cgb_priority_objects(&objects);
 
-        for sprite_index in (0..40).rev() {
-            let offset = sprite_index * 4;
-            let sprite_y = usize::from(memory.oam[offset]);
-            let sprite_x = usize::from(memory.oam[offset + 1]);
-            if sprite_y == 0 || sprite_y > 159 || sprite_x == 0 || sprite_x > 167 {
+        for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
+            let Some(pixel) = priority_objects.iter().find_map(|&object| {
+                object_pixel(memory, lcd_control, object, line_no, screen_x, true)
+            }) else {
                 continue;
-            }
-            if line_no + 16 < sprite_y || line_no >= sprite_y {
-                continue;
-            }
-
-            let mut tile_no = usize::from(memory.oam[offset + 2]);
-            let sprite_flags = memory.oam[offset + 3];
-            let line_in_sprite = line_no + 16 - sprite_y;
-            if large_sprites {
-                if line_in_sprite >= 8 {
-                    tile_no |= 0x01;
-                } else {
-                    tile_no &= 0xfe;
-                }
-            } else if line_in_sprite >= sprite_height {
-                continue;
-            }
-            if sprite_flags & 0x08 != 0 {
-                tile_no += 384;
-            }
-
-            let mut pixel_y = line_in_sprite % 8;
-            if sprite_flags & 0x40 != 0 {
-                pixel_y = 7 - pixel_y;
-                if large_sprites {
-                    tile_no ^= 0x01;
-                }
-            }
-
-            let palette_offset = usize::from(sprite_flags & 0x07) * 4;
-            let bg_priority = sprite_flags & 0x80 != 0;
-            let screen_start_x = sprite_x.saturating_sub(8);
-            let first_pixel_x = if sprite_x < 8 { 8 - sprite_x } else { 0 };
-            let pixel_count = if sprite_x < 8 {
-                sprite_x
-            } else if sprite_x > GAME_BOY_SCREEN_WIDTH {
-                168 - sprite_x
-            } else {
-                8
             };
-
-            for drawn_pixel in 0..pixel_count {
-                let screen_x = screen_start_x + drawn_pixel;
-                if screen_x >= GAME_BOY_SCREEN_WIDTH {
-                    continue;
-                }
-                let source_x = first_pixel_x + drawn_pixel;
-                let pixel_x = if sprite_flags & 0x20 != 0 {
-                    7 - source_x
-                } else {
-                    source_x
-                };
-                let colour_index = tile_pixel(memory, tile_no, pixel_x, pixel_y);
-                if colour_index == 0 {
-                    continue;
-                }
-                if (bg_display_priorities[screen_x] || bg_priority)
-                    && bg_colour_numbers[screen_x] != 0
-                {
-                    continue;
-                }
-                self.write_pixel(
-                    line_no,
-                    screen_x,
-                    palettes.cgb_obj[palette_offset + colour_index as usize],
-                );
+            if cgb_bg_has_priority(
+                lcd_control,
+                bg_colour_numbers[screen_x],
+                bg_display_priorities[screen_x],
+                pixel.flags,
+            ) {
+                continue;
             }
+
+            let palette_offset = usize::from(pixel.flags & 0x07) * 4;
+            self.write_pixel(
+                line_no,
+                screen_x,
+                palettes.cgb_obj[palette_offset + pixel.colour_index as usize],
+            );
         }
     }
 
@@ -560,6 +460,152 @@ impl VideoFrameAssembler {
         pixel[1] = ((colour >> 8) & 0xff) as u8;
         pixel[2] = (colour & 0xff) as u8;
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SelectedObject {
+    pub(crate) index: usize,
+    pub(crate) screen_x: i32,
+    pub(crate) oam_x: u8,
+    oam_y: u8,
+    tile_no: u8,
+    flags: u8,
+}
+
+impl SelectedObject {
+    fn is_horizontally_visible(self) -> bool {
+        self.oam_x != 0 && self.oam_x < 168
+    }
+}
+
+pub(crate) fn select_objects_for_line(
+    memory: &GameBoyMemory,
+    lcd_control: u8,
+    line_no: usize,
+) -> Vec<SelectedObject> {
+    let sprite_height = sprite_height(lcd_control);
+    let line = i32::try_from(line_no).unwrap_or_default();
+    let mut objects = Vec::with_capacity(MAX_OBJECTS_PER_LINE);
+
+    for index in 0..OBJECT_COUNT {
+        let offset = index * 4;
+        let oam_y = memory.oam[offset];
+        let sprite_top = i32::from(oam_y) - OBJECT_Y_OFFSET as i32;
+        if line < sprite_top || line >= sprite_top + sprite_height as i32 {
+            continue;
+        }
+
+        let oam_x = memory.oam[offset + 1];
+        objects.push(SelectedObject {
+            index,
+            screen_x: i32::from(oam_x) - OBJECT_X_OFFSET as i32,
+            oam_x,
+            oam_y,
+            tile_no: memory.oam[offset + 2],
+            flags: memory.oam[offset + 3],
+        });
+        if objects.len() >= MAX_OBJECTS_PER_LINE {
+            break;
+        }
+    }
+
+    objects
+}
+
+fn sprite_height(lcd_control: u8) -> usize {
+    if lcd_control & LCDC_OBJ_SIZE != 0 {
+        16
+    } else {
+        8
+    }
+}
+
+fn dmg_priority_objects(objects: &[SelectedObject]) -> Vec<SelectedObject> {
+    let mut priority_objects: Vec<_> = objects
+        .iter()
+        .copied()
+        .filter(|object| object.is_horizontally_visible())
+        .collect();
+    priority_objects.sort_by_key(|object| (object.oam_x, object.index));
+    priority_objects
+}
+
+fn cgb_priority_objects(objects: &[SelectedObject]) -> Vec<SelectedObject> {
+    objects
+        .iter()
+        .copied()
+        .filter(|object| object.is_horizontally_visible())
+        .collect()
+}
+
+fn cgb_bg_has_priority(
+    lcd_control: u8,
+    bg_colour_number: u32,
+    bg_priority: bool,
+    object_flags: u8,
+) -> bool {
+    bg_colour_number != 0
+        && lcd_control & LCDC_BG_ENABLE != 0
+        && (bg_priority || object_flags & 0x80 != 0)
+}
+
+fn object_pixel(
+    memory: &GameBoyMemory,
+    lcd_control: u8,
+    object: SelectedObject,
+    line_no: usize,
+    screen_x: usize,
+    cgb_mode: bool,
+) -> Option<ObjectPixel> {
+    let source_x = i32::try_from(screen_x)
+        .ok()?
+        .saturating_sub(object.screen_x);
+    if !(0..OBJECT_WIDTH as i32).contains(&source_x) {
+        return None;
+    }
+
+    let mut tile_no = usize::from(object.tile_no);
+    let line_in_object = line_no + OBJECT_Y_OFFSET - usize::from(object.oam_y);
+    if lcd_control & LCDC_OBJ_SIZE != 0 {
+        tile_no &= 0xfe;
+        if line_in_object >= 8 {
+            tile_no |= 0x01;
+        }
+    }
+
+    let mut pixel_y = line_in_object % 8;
+    if object.flags & 0x40 != 0 {
+        pixel_y = 7 - pixel_y;
+        if lcd_control & LCDC_OBJ_SIZE != 0 {
+            tile_no ^= 0x01;
+        }
+    }
+
+    if cgb_mode && object.flags & 0x08 != 0 {
+        tile_no += 384;
+    }
+
+    let source_x = usize::try_from(source_x).ok()?;
+    let pixel_x = if object.flags & 0x20 != 0 {
+        7 - source_x
+    } else {
+        source_x
+    };
+    let colour_index = tile_pixel(memory, tile_no, pixel_x, pixel_y);
+    if colour_index == 0 {
+        return None;
+    }
+
+    Some(ObjectPixel {
+        colour_index,
+        flags: object.flags,
+    })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ObjectPixel {
+    colour_index: u32,
+    flags: u8,
 }
 
 fn gb_bg_colour_index(
@@ -719,83 +765,30 @@ fn draw_sgb_sprite_line(
     palettes: &PaletteState,
     sgb: &mut SgbState,
 ) {
-    let large_sprites = lcd_control & LCDC_OBJ_SIZE != 0;
-    let sprite_height = if large_sprites { 16 } else { 8 };
+    let objects = select_objects_for_line(memory, lcd_control, line_no);
+    let priority_objects = dmg_priority_objects(&objects);
 
-    for sprite_index in (0..40).rev() {
-        let offset = sprite_index * 4;
-        let sprite_y = usize::from(memory.oam[offset]);
-        let sprite_x = usize::from(memory.oam[offset + 1]);
-        if sprite_y == 0 || sprite_y > 159 || sprite_x == 0 || sprite_x > 167 {
+    for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
+        let Some(pixel) = priority_objects.iter().find_map(|&object| {
+            object_pixel(memory, lcd_control, object, line_no, screen_x, false)
+        }) else {
             continue;
-        }
-        if line_no + 16 < sprite_y || line_no >= sprite_y {
-            continue;
-        }
-
-        let mut tile_no = usize::from(memory.oam[offset + 2]);
-        let sprite_flags = memory.oam[offset + 3];
-        let line_in_sprite = line_no + 16 - sprite_y;
-        if large_sprites {
-            if line_in_sprite >= 8 {
-                tile_no |= 0x01;
-            } else {
-                tile_no &= 0xfe;
-            }
-        } else if line_in_sprite >= sprite_height {
-            continue;
-        }
-
-        let mut pixel_y = line_in_sprite % 8;
-        if sprite_flags & 0x40 != 0 {
-            pixel_y = 7 - pixel_y;
-            if large_sprites {
-                tile_no ^= 0x01;
-            }
-        }
-
-        let palette_offset = if sprite_flags & 0x10 != 0 { 4 } else { 0 };
-        let bg_priority = sprite_flags & 0x80 != 0;
-        let screen_start_x = sprite_x.saturating_sub(8);
-        let first_pixel_x = if sprite_x < 8 { 8 - sprite_x } else { 0 };
-        let pixel_count = if sprite_x < 8 {
-            sprite_x
-        } else if sprite_x > GAME_BOY_SCREEN_WIDTH {
-            168 - sprite_x
-        } else {
-            8
         };
-
-        for drawn_pixel in 0..pixel_count {
-            let screen_x = screen_start_x + drawn_pixel;
-            if screen_x >= GAME_BOY_SCREEN_WIDTH {
-                continue;
-            }
-            let source_x = first_pixel_x + drawn_pixel;
-            let pixel_x = if sprite_flags & 0x20 != 0 {
-                7 - source_x
-            } else {
-                source_x
-            };
-            let colour_index = tile_pixel(memory, tile_no, pixel_x, pixel_y);
-            if colour_index == 0 {
-                continue;
-            }
-            let mono_index = sgb
-                .mono_data
-                .get(line_no * GAME_BOY_SCREEN_WIDTH + screen_x)
-                .copied()
-                .unwrap_or(0);
-            if bg_priority && mono_index != palettes.sgb_translation_bg[0] {
-                continue;
-            }
-            write_sgb_mono_pixel(
-                sgb,
-                line_no,
-                screen_x,
-                palettes.sgb_translation_obj[palette_offset + colour_index as usize],
-            );
+        let mono_index = sgb
+            .mono_data
+            .get(line_no * GAME_BOY_SCREEN_WIDTH + screen_x)
+            .copied()
+            .unwrap_or(0);
+        if pixel.flags & 0x80 != 0 && mono_index != palettes.sgb_translation_bg[0] {
+            continue;
         }
+        let palette_offset = if pixel.flags & 0x10 != 0 { 4 } else { 0 };
+        write_sgb_mono_pixel(
+            sgb,
+            line_no,
+            screen_x,
+            palettes.sgb_translation_obj[palette_offset + pixel.colour_index as usize],
+        );
     }
 }
 
@@ -829,6 +822,34 @@ fn io(memory: &GameBoyMemory, index: usize) -> u8 {
 mod tests {
     use super::*;
 
+    const RED: u32 = 0xffaa_0000;
+    const GREEN: u32 = 0xff00_aa00;
+    const BLUE: u32 = 0xff00_00aa;
+
+    fn set_object(memory: &mut GameBoyMemory, index: usize, y: u8, x: u8, tile: u8, flags: u8) {
+        let offset = index * 4;
+        memory.oam[offset] = y;
+        memory.oam[offset + 1] = x;
+        memory.oam[offset + 2] = tile;
+        memory.oam[offset + 3] = flags;
+    }
+
+    fn fill_tile_row(memory: &mut GameBoyMemory, tile: usize, colour_index: u32) {
+        let start = tile * 64;
+        for pixel in 0..8 {
+            memory.tile_set[start + pixel] = colour_index;
+        }
+    }
+
+    fn rendered_pixel(assembler: &VideoFrameAssembler, x: usize) -> [u8; 3] {
+        let start = x * GAME_BOY_RGB_CHANNELS;
+        [
+            assembler.pixels[start],
+            assembler.pixels[start + 1],
+            assembler.pixels[start + 2],
+        ]
+    }
+
     #[test]
     fn gb_line_renderer_reads_decoded_background_tiles() {
         let mut assembler = VideoFrameAssembler::default();
@@ -843,6 +864,172 @@ mod tests {
         assembler.write_gb_line(0, &memory, &palettes);
 
         assert_eq!(&assembler.pixels[0..3], &[0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn object_selection_keeps_first_ten_y_overlapping_oam_entries() {
+        let mut memory = GameBoyMemory::default();
+        let lcd_control = LCDC_DISPLAY_ENABLE | LCDC_OBJ_ENABLE;
+        for index in 0..11 {
+            set_object(&mut memory, index, 16, 8 + index as u8, index as u8, 0);
+        }
+        memory.oam[1] = 0;
+
+        let objects = select_objects_for_line(&memory, lcd_control, 0);
+
+        assert_eq!(objects.len(), 10);
+        assert_eq!(objects[0].index, 0);
+        assert_eq!(objects[0].oam_x, 0);
+        assert_eq!(objects[9].index, 9);
+    }
+
+    #[test]
+    fn objects_after_first_ten_are_not_rendered() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] = LCDC_DISPLAY_ENABLE | LCDC_OBJ_ENABLE;
+        palettes.translated_obj[1] = RED;
+        for index in 0..10 {
+            set_object(&mut memory, index, 16, 0, 0, 0);
+        }
+        set_object(&mut memory, 10, 16, 8, 1, 0);
+        fill_tile_row(&mut memory, 1, 1);
+
+        assembler.write_gb_line(0, &memory, &palettes);
+
+        assert_ne!(rendered_pixel(&assembler, 0), [0xaa, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn dmg_objects_prioritize_lower_x_before_oam_order() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] = LCDC_DISPLAY_ENABLE | LCDC_OBJ_ENABLE;
+        palettes.translated_obj[1] = RED;
+        palettes.translated_obj[5] = BLUE;
+        set_object(&mut memory, 0, 16, 12, 1, 0);
+        set_object(&mut memory, 1, 16, 8, 2, 0x10);
+        fill_tile_row(&mut memory, 1, 1);
+        fill_tile_row(&mut memory, 2, 1);
+
+        assembler.write_gb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 4), [0x00, 0x00, 0xaa]);
+    }
+
+    #[test]
+    fn cgb_objects_prioritize_oam_order_before_x() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] = LCDC_DISPLAY_ENABLE | LCDC_OBJ_ENABLE;
+        palettes.cgb_obj[1] = RED;
+        palettes.cgb_obj[5] = BLUE;
+        set_object(&mut memory, 0, 16, 12, 1, 0);
+        set_object(&mut memory, 1, 16, 8, 2, 0x01);
+        fill_tile_row(&mut memory, 1, 1);
+        fill_tile_row(&mut memory, 2, 1);
+
+        assembler.write_cgb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 4), [0xaa, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn bg_priority_masks_highest_priority_object_without_showing_lower_object() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] =
+            LCDC_DISPLAY_ENABLE | LCDC_BG_ENABLE | LCDC_OBJ_ENABLE | LCDC_TILE_DATA;
+        memory.vram[0x1800] = 3;
+        palettes.translated_bg[1] = GREEN;
+        palettes.translated_obj[1] = RED;
+        palettes.translated_obj[5] = BLUE;
+        fill_tile_row(&mut memory, 3, 1);
+        set_object(&mut memory, 0, 16, 8, 1, 0x80);
+        set_object(&mut memory, 1, 16, 8, 2, 0x10);
+        fill_tile_row(&mut memory, 1, 1);
+        fill_tile_row(&mut memory, 2, 1);
+
+        assembler.write_gb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 0), [0x00, 0xaa, 0x00]);
+    }
+
+    #[test]
+    fn cgb_lcdc_bit_zero_does_not_disable_background_pixels() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] = LCDC_DISPLAY_ENABLE | LCDC_TILE_DATA;
+        memory.vram[0x1800] = 1;
+        fill_tile_row(&mut memory, 1, 1);
+        palettes.cgb_bg[1] = RED;
+
+        assembler.write_cgb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 0), [0xaa, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn cgb_lcdc_bit_zero_disables_bg_priority_not_bg_pixels() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] = LCDC_DISPLAY_ENABLE | LCDC_OBJ_ENABLE | LCDC_TILE_DATA;
+        memory.vram[0x1800] = 1;
+        memory.vram[0x2000 + 0x1800] = 0x80;
+        fill_tile_row(&mut memory, 1, 1);
+        fill_tile_row(&mut memory, 2, 1);
+        palettes.cgb_bg[1] = GREEN;
+        palettes.cgb_obj[1] = RED;
+        set_object(&mut memory, 0, 16, 8, 2, 0);
+
+        assembler.write_cgb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 0), [0xaa, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn cgb_lcdc_bit_zero_does_not_disable_window_pixels() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] =
+            LCDC_DISPLAY_ENABLE | LCDC_WINDOW_ENABLE | LCDC_WINDOW_TILE_MAP | LCDC_TILE_DATA;
+        memory.io_ports[0x4a] = 0;
+        memory.io_ports[0x4b] = 7;
+        memory.vram[0x1800] = 1;
+        memory.vram[0x1c00] = 2;
+        fill_tile_row(&mut memory, 1, 1);
+        fill_tile_row(&mut memory, 2, 2);
+        palettes.cgb_bg[1] = BLUE;
+        palettes.cgb_bg[2] = RED;
+
+        assembler.write_cgb_line(0, &memory, &palettes);
+
+        assert_eq!(rendered_pixel(&assembler, 0), [0xaa, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn dmg_lcdc_bit_zero_disables_window_pixels() {
+        let mut assembler = VideoFrameAssembler::default();
+        let mut memory = GameBoyMemory::default();
+        let mut palettes = PaletteState::default();
+        memory.io_ports[0x40] =
+            LCDC_DISPLAY_ENABLE | LCDC_WINDOW_ENABLE | LCDC_WINDOW_TILE_MAP | LCDC_TILE_DATA;
+        memory.io_ports[0x4a] = 0;
+        memory.io_ports[0x4b] = 7;
+        memory.vram[0x1c00] = 1;
+        fill_tile_row(&mut memory, 1, 1);
+        palettes.translated_bg[1] = RED;
+
+        assembler.write_gb_line(0, &memory, &palettes);
+
+        assert_ne!(rendered_pixel(&assembler, 0), [0xaa, 0x00, 0x00]);
     }
 
     #[test]
@@ -872,6 +1059,16 @@ mod tests {
         assembler.colourise_sgb_frame(&sgb);
 
         assert_eq!(&assembler.pixels[0..3], &[0x44, 0x55, 0x66]);
+    }
+
+    #[test]
+    fn sgb_colourise_has_visible_default_palette_before_commands() {
+        let mut assembler = VideoFrameAssembler::default();
+        let sgb = SgbState::default();
+
+        assembler.colourise_sgb_frame(&sgb);
+
+        assert_ne!(&assembler.pixels[0..3], &[0x00, 0x00, 0x00]);
     }
 
     #[test]

@@ -16,6 +16,8 @@ const SGBCOM_PAL_TRN: u32 = 0x0b;
 const SGBCOM_MLT_REQ: u32 = 0x11;
 const SGBCOM_MASK_EN: u32 = 0x17;
 
+const DEFAULT_SGB_PALETTE: [u32; 4] = [0xffff_ffff, 0xff88_b0b0, 0xff50_7878, 0xff00_0000];
+
 #[derive(Debug)]
 pub(crate) struct SgbState {
     pub(crate) reading_command: bool,
@@ -30,6 +32,9 @@ pub(crate) struct SgbState {
     pub(crate) player_count: u32,
     pub(crate) packets_sent: u32,
     pub(crate) packets_to_send: u32,
+    pub(crate) completed_commands: u32,
+    pub(crate) last_command: u32,
+    pub(crate) packet_errors: u32,
     pub(crate) read_joypad_id: u32,
     pub(crate) mono_data: Box<[u32]>,
     pub(crate) transfer_vram: Box<[u8]>,
@@ -40,7 +45,7 @@ pub(crate) struct SgbState {
 
 impl Default for SgbState {
     fn default() -> Self {
-        Self {
+        let mut state = Self {
             reading_command: false,
             command_bytes: [[0; 16]; 7],
             command_bits: [0; 8],
@@ -53,13 +58,18 @@ impl Default for SgbState {
             player_count: 0,
             packets_sent: 0,
             packets_to_send: 0,
+            completed_commands: 0,
+            last_command: 0,
+            packet_errors: 0,
             read_joypad_id: 0,
             mono_data: zeroed_u32s(SGB_MONO_PIXELS),
             transfer_vram: zeroed_bytes(SGB_TRANSFER_VRAM_BYTES),
             palettes: zeroed_u32s(SGB_PALETTE_COLORS),
             system_palettes: zeroed_u32s(SGB_SYSTEM_PALETTE_COLORS),
             character_palettes: zeroed_u32s(SGB_CHARACTER_PALETTE_ENTRIES),
-        }
+        };
+        state.reset_display_palettes();
+        state
     }
 }
 
@@ -77,12 +87,21 @@ impl SgbState {
         self.player_count = 0;
         self.packets_sent = 0;
         self.packets_to_send = 0;
+        self.completed_commands = 0;
+        self.last_command = 0;
+        self.packet_errors = 0;
         self.read_joypad_id = 0;
         self.mono_data.fill(0);
         self.transfer_vram.fill(0);
-        self.palettes.fill(0);
+        self.reset_display_palettes();
         self.system_palettes.fill(0);
         self.character_palettes.fill(0);
+    }
+
+    fn reset_display_palettes(&mut self) {
+        for palette in self.palettes.chunks_exact_mut(DEFAULT_SGB_PALETTE.len()) {
+            palette.copy_from_slice(&DEFAULT_SGB_PALETTE);
+        }
     }
 
     pub(crate) fn begin_command(&mut self) {
@@ -96,22 +115,14 @@ impl SgbState {
         self.packets_to_send = 1;
     }
 
-    pub(crate) fn receive_command_bit(&mut self, bit: u8, memory: &GameBoyMemory) {
+    pub(crate) fn receive_command_bit(&mut self, bit: u8) {
         if !self.reading_command {
             return;
         }
 
         if self.read_command_bytes >= 16 {
-            if bit != 0 {
-                self.reading_command = false;
-                return;
-            }
-            self.packets_sent = self.packets_sent.saturating_add(1);
-            self.read_command_bytes = 0;
-            if self.packets_sent >= self.packets_to_send {
-                self.check_packets(memory);
-                self.reading_command = false;
-            }
+            self.packet_errors = self.packet_errors.saturating_add(1);
+            self.reading_command = false;
             return;
         }
 
@@ -123,6 +134,14 @@ impl SgbState {
         if self.read_command_bits >= 8 {
             self.check_byte();
         }
+    }
+
+    pub(crate) fn finish_packet_if_ready(&mut self, memory: &GameBoyMemory) {
+        if !self.reading_command || self.read_command_bits != 0 || self.read_command_bytes < 16 {
+            return;
+        }
+
+        self.finish_packet(memory);
     }
 
     fn check_byte(&mut self) {
@@ -145,7 +164,19 @@ impl SgbState {
         }
     }
 
+    fn finish_packet(&mut self, memory: &GameBoyMemory) {
+        self.packets_sent = self.packets_sent.saturating_add(1);
+        self.read_command_bytes = 0;
+        self.read_command_bits = 0;
+        if self.packets_sent >= self.packets_to_send {
+            self.check_packets(memory);
+            self.reading_command = false;
+        }
+    }
+
     fn check_packets(&mut self, memory: &GameBoyMemory) {
+        self.completed_commands = self.completed_commands.saturating_add(1);
+        self.last_command = self.command;
         match self.command {
             SGBCOM_PAL01 => {
                 self.set_common_colour();
@@ -473,5 +504,19 @@ mod tests {
             state.character_palettes.len(),
             SGB_CHARACTER_PALETTE_ENTRIES
         );
+    }
+
+    #[test]
+    fn default_display_palettes_are_visible_before_sgb_commands() {
+        let mut state = SgbState::default();
+
+        assert_eq!(&state.palettes[0..4], DEFAULT_SGB_PALETTE);
+        assert_eq!(&state.palettes[4..8], DEFAULT_SGB_PALETTE);
+
+        state.palettes.fill(0);
+        state.reset_for_rom_load();
+
+        assert_eq!(&state.palettes[0..4], DEFAULT_SGB_PALETTE);
+        assert_eq!(&state.palettes[12..16], DEFAULT_SGB_PALETTE);
     }
 }

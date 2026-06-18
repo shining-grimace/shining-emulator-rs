@@ -1,14 +1,27 @@
-use crate::game_boy::emulator::constants::SRAM_CAPACITY_BYTES;
+use crate::game_boy::emulator::constants::{GB_CLOCK_HZ, SRAM_CAPACITY_BYTES};
 use crate::game_boy::emulator::rom::{MemoryBankController, RomProperties};
 
 const RAM_SIZE_INDEX: usize = 0x0149;
+const RTC_REGISTER_COUNT: usize = 5;
+const RTC_SECONDS_INDEX: usize = 0;
+const RTC_MINUTES_INDEX: usize = 1;
+const RTC_HOURS_INDEX: usize = 2;
+const RTC_DAY_LOW_INDEX: usize = 3;
+const RTC_DAY_HIGH_INDEX: usize = 4;
+const RTC_DAY_HIGH_DAY_BIT: u8 = 0x01;
+const RTC_DAY_HIGH_HALT: u8 = 0x40;
+const RTC_DAY_HIGH_CARRY: u8 = 0x80;
+const RTC_SECOND_CLOCKS: u32 = GB_CLOCK_HZ as u32;
 
 #[derive(Debug)]
 pub(crate) struct SramState {
     pub(crate) data: Box<[u8]>,
     pub(crate) has_battery: bool,
     pub(crate) has_timer: bool,
-    pub(crate) timer_data: [u8; 5],
+    pub(crate) timer_data: [u8; RTC_REGISTER_COUNT],
+    latched_timer_data: [u8; RTC_REGISTER_COUNT],
+    timer_latched: bool,
+    timer_clock_accumulator: u32,
     pub(crate) timer_mode: u32,
     pub(crate) timer_latch: u32,
     pub(crate) bank_offset: u32,
@@ -25,7 +38,10 @@ impl Default for SramState {
             data: vec![0; SRAM_CAPACITY_BYTES].into_boxed_slice(),
             has_battery: false,
             has_timer: false,
-            timer_data: [0; 5],
+            timer_data: [0; RTC_REGISTER_COUNT],
+            latched_timer_data: [0; RTC_REGISTER_COUNT],
+            timer_latched: false,
+            timer_clock_accumulator: 0,
             timer_mode: 0,
             timer_latch: 0,
             bank_offset: 0,
@@ -43,7 +59,10 @@ impl SramState {
         self.data.fill(0);
         self.has_battery = false;
         self.has_timer = false;
-        self.timer_data = [0; 5];
+        self.timer_data = [0; RTC_REGISTER_COUNT];
+        self.latched_timer_data = [0; RTC_REGISTER_COUNT];
+        self.timer_latched = false;
+        self.timer_clock_accumulator = 0;
         self.timer_mode = 0;
         self.timer_latch = 0;
         self.bank_offset = 0;
@@ -67,6 +86,15 @@ impl SramState {
             0x01 => 2_048,
             0x02 => 8_192,
             0x03 => 32_768,
+            0x04 => 131_072,
+            0x05 => 65_536,
+            _ => 0,
+        };
+        self.bank_select_mask = match self.size_bytes {
+            0..=8_192 => 0,
+            32_768 => 0x03,
+            65_536 => 0x07,
+            131_072 => 0x0f,
             _ => 0,
         };
         if self.data.len() != SRAM_CAPACITY_BYTES {
@@ -109,7 +137,12 @@ impl SramState {
         let Some(index) = self.data_index(address) else {
             return 0xff;
         };
-        self.data.get(index).copied().unwrap_or(0xff)
+        let value = self.data.get(index).copied().unwrap_or(0xff);
+        if self.size_bytes == 512 {
+            0xf0 | (value & 0x0f)
+        } else {
+            value
+        }
     }
 
     pub(crate) fn write_data(&mut self, address: usize, value: u8) {
@@ -120,15 +153,89 @@ impl SramState {
             if *slot == value {
                 return;
             }
+            let value = if self.size_bytes == 512 {
+                value & 0x0f
+            } else {
+                value
+            };
             *slot = value;
             self.dirty |= self.has_battery;
         }
     }
 
+    pub(crate) fn read_timer_data(&self, timer_index: usize) -> u8 {
+        let data = if self.timer_latched {
+            &self.latched_timer_data
+        } else {
+            &self.timer_data
+        };
+        data.get(timer_index).copied().unwrap_or(0xff)
+    }
+
     pub(crate) fn write_timer_data(&mut self, timer_index: usize, value: u8) {
         if let Some(slot) = self.timer_data.get_mut(timer_index) {
-            *slot = value;
+            *slot = masked_timer_value(timer_index, value);
         }
+    }
+
+    pub(crate) fn latch_timer_data(&mut self, value: u8) {
+        let latch = u32::from(value & 0x01);
+        if self.timer_latch == 0 && latch == 1 {
+            self.latched_timer_data = self.timer_data;
+            self.timer_latched = true;
+        }
+        self.timer_latch = latch;
+    }
+
+    pub(crate) fn advance_rtc(&mut self, clocks: u32) {
+        if !self.has_timer || self.timer_data[RTC_DAY_HIGH_INDEX] & RTC_DAY_HIGH_HALT != 0 {
+            return;
+        }
+
+        self.timer_clock_accumulator = self.timer_clock_accumulator.saturating_add(clocks);
+        while self.timer_clock_accumulator >= RTC_SECOND_CLOCKS {
+            self.timer_clock_accumulator -= RTC_SECOND_CLOCKS;
+            self.increment_rtc_second();
+        }
+    }
+
+    fn increment_rtc_second(&mut self) {
+        self.timer_data[RTC_SECONDS_INDEX] = self.timer_data[RTC_SECONDS_INDEX].saturating_add(1);
+        if self.timer_data[RTC_SECONDS_INDEX] < 60 {
+            return;
+        }
+
+        self.timer_data[RTC_SECONDS_INDEX] = 0;
+        self.timer_data[RTC_MINUTES_INDEX] = self.timer_data[RTC_MINUTES_INDEX].saturating_add(1);
+        if self.timer_data[RTC_MINUTES_INDEX] < 60 {
+            return;
+        }
+
+        self.timer_data[RTC_MINUTES_INDEX] = 0;
+        self.timer_data[RTC_HOURS_INDEX] = self.timer_data[RTC_HOURS_INDEX].saturating_add(1);
+        if self.timer_data[RTC_HOURS_INDEX] < 24 {
+            return;
+        }
+
+        self.timer_data[RTC_HOURS_INDEX] = 0;
+        self.increment_rtc_day();
+    }
+
+    fn increment_rtc_day(&mut self) {
+        let day_high = self.timer_data[RTC_DAY_HIGH_INDEX];
+        let mut day = u16::from(self.timer_data[RTC_DAY_LOW_INDEX])
+            | (u16::from(day_high & RTC_DAY_HIGH_DAY_BIT) << 8);
+
+        if day == 0x01ff {
+            day = 0;
+            self.timer_data[RTC_DAY_HIGH_INDEX] = (day_high | RTC_DAY_HIGH_CARRY) & 0xc0;
+        } else {
+            day += 1;
+            self.timer_data[RTC_DAY_HIGH_INDEX] = (day_high
+                & (RTC_DAY_HIGH_HALT | RTC_DAY_HIGH_CARRY))
+                | (((day >> 8) as u8) & RTC_DAY_HIGH_DAY_BIT);
+        }
+        self.timer_data[RTC_DAY_LOW_INDEX] = day as u8;
     }
 
     fn data_index(&self, address: usize) -> Option<usize> {
@@ -141,6 +248,18 @@ impl SramState {
         bank_offset
             .checked_add(offset)
             .filter(|index| *index < size)
+    }
+}
+
+fn masked_timer_value(timer_index: usize, value: u8) -> u8 {
+    match timer_index {
+        RTC_SECONDS_INDEX | RTC_MINUTES_INDEX => value & 0x3f,
+        RTC_HOURS_INDEX => value & 0x1f,
+        RTC_DAY_LOW_INDEX => value,
+        RTC_DAY_HIGH_INDEX => {
+            value & (RTC_DAY_HIGH_DAY_BIT | RTC_DAY_HIGH_HALT | RTC_DAY_HIGH_CARRY)
+        }
+        _ => 0xff,
     }
 }
 
@@ -167,6 +286,90 @@ mod tests {
         assert_eq!(
             sram.save_data().and_then(|data| data.get(0x0123)),
             Some(&0x99)
+        );
+    }
+
+    #[test]
+    fn large_header_ram_sizes_are_backed_by_sram() {
+        let mut rom = vec![0; 0x150];
+        rom[RAM_SIZE_INDEX] = 0x04;
+        let mut sram = SramState::default();
+
+        sram.reset_for_rom_load(
+            &RomProperties {
+                mbc: MemoryBankController::Mbc5,
+                ..Default::default()
+            },
+            &rom,
+        );
+
+        assert_eq!(sram.size_bytes, 131_072);
+        assert_eq!(sram.bank_select_mask, 0x0f);
+
+        rom[RAM_SIZE_INDEX] = 0x05;
+        sram.reset_for_rom_load(
+            &RomProperties {
+                mbc: MemoryBankController::Mbc5,
+                ..Default::default()
+            },
+            &rom,
+        );
+
+        assert_eq!(sram.size_bytes, 65_536);
+        assert_eq!(sram.bank_select_mask, 0x07);
+    }
+
+    #[test]
+    fn mbc2_ram_uses_nibbles_and_echoes_bottom_nine_address_bits() {
+        let mut sram = SramState {
+            size_bytes: 512,
+            ..Default::default()
+        };
+
+        sram.write_data(0xa000, 0xab);
+
+        assert_eq!(sram.read_data(0xa000), 0xfb);
+        assert_eq!(sram.read_data(0xa200), 0xfb);
+    }
+
+    #[test]
+    fn mbc3_rtc_ticks_latches_halts_and_carries_days() {
+        let mut sram = SramState {
+            has_timer: true,
+            ..Default::default()
+        };
+
+        sram.write_timer_data(RTC_SECONDS_INDEX, 58);
+        sram.advance_rtc(RTC_SECOND_CLOCKS);
+        assert_eq!(sram.read_timer_data(RTC_SECONDS_INDEX), 59);
+
+        sram.latch_timer_data(0);
+        sram.latch_timer_data(1);
+        sram.advance_rtc(RTC_SECOND_CLOCKS);
+        assert_eq!(sram.read_timer_data(RTC_SECONDS_INDEX), 59);
+        assert_eq!(sram.timer_data[RTC_SECONDS_INDEX], 0);
+        assert_eq!(sram.timer_data[RTC_MINUTES_INDEX], 1);
+
+        sram.latch_timer_data(0);
+        sram.latch_timer_data(1);
+        assert_eq!(sram.read_timer_data(RTC_SECONDS_INDEX), 0);
+        assert_eq!(sram.read_timer_data(RTC_MINUTES_INDEX), 1);
+
+        sram.write_timer_data(RTC_DAY_HIGH_INDEX, RTC_DAY_HIGH_HALT);
+        sram.advance_rtc(RTC_SECOND_CLOCKS);
+        assert_eq!(sram.timer_data[RTC_SECONDS_INDEX], 0);
+
+        sram.write_timer_data(RTC_DAY_LOW_INDEX, 0xff);
+        sram.write_timer_data(RTC_DAY_HIGH_INDEX, RTC_DAY_HIGH_DAY_BIT);
+        sram.write_timer_data(RTC_HOURS_INDEX, 23);
+        sram.write_timer_data(RTC_MINUTES_INDEX, 59);
+        sram.write_timer_data(RTC_SECONDS_INDEX, 59);
+        sram.advance_rtc(RTC_SECOND_CLOCKS);
+
+        assert_eq!(sram.timer_data[RTC_DAY_LOW_INDEX], 0);
+        assert_eq!(
+            sram.timer_data[RTC_DAY_HIGH_INDEX] & RTC_DAY_HIGH_CARRY,
+            RTC_DAY_HIGH_CARRY
         );
     }
 }

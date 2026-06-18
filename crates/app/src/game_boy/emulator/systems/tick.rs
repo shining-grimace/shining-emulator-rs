@@ -7,8 +7,12 @@ use crate::game_boy::emulator::constants::{MAX_ACCUMULATED_CLOCKS, MIN_CLOCKS_TO
 use crate::game_boy::emulator::cpu::{CpuMode, CpuTiming};
 use crate::game_boy::emulator::execution::perform_op;
 use crate::game_boy::emulator::gpu::GpuMode;
+use crate::game_boy::emulator::input::{
+    JOYP_LOW_NIBBLE_MASK, JOYP_SELECT_MASK, JOYP_SELECT_NONE, joypad_low_nibble_falling_edge,
+};
 use crate::game_boy::emulator::memory::GameBoyMemory;
 use crate::game_boy::emulator::runtime::RuntimeControl;
+use crate::game_boy::emulator::video::select_objects_for_line;
 use crate::game_boy::emulator::{GameBoyCore, GameBoyEmulator};
 use crate::game_boy::frame_buffer::GameBoyFrameRing;
 use crate::storage::LocalStorage;
@@ -29,8 +33,8 @@ const WY_IO_INDEX: usize = 0x4a;
 const WX_IO_INDEX: usize = 0x4b;
 const IE_IO_INDEX: usize = 0xff;
 
+const LCDC_BG_ENABLE: u8 = 0x01;
 const LCDC_OBJ_ENABLE: u8 = 0x02;
-const LCDC_OBJ_SIZE: u8 = 0x04;
 const LCDC_WINDOW_ENABLE: u8 = 0x20;
 
 const INTERRUPT_VBLANK: u8 = 0x01;
@@ -201,6 +205,7 @@ fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing)
     if emulator.cpu_mode != CpuMode::Stopped {
         step_system_counter(emulator, MACHINE_CYCLE_CLOCKS as u16);
     }
+    advance_cartridge_rtc(emulator);
     step_oam_dma(emulator);
     emulator
         .audio_unit
@@ -214,6 +219,12 @@ fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing)
     } else {
         handle_lcd_disabled(emulator, frames);
     }
+}
+
+fn advance_cartridge_rtc(emulator: &mut GameBoyCore) {
+    let clock_factor = emulator.gpu_timing.clock_factor.max(1);
+    let normal_speed_clocks = (MACHINE_CYCLE_CLOCKS / clock_factor).max(1);
+    emulator.sram.advance_rtc(normal_speed_clocks as u32);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -421,54 +432,40 @@ fn scan_vram_clocks(emulator: &GameBoyCore) -> i32 {
     let line = ly(memory);
     let mut clocks = SCAN_VRAM_CLOCKS + i32::from(io(memory, SCX_IO_INDEX) & 0x07);
 
-    if window_visible_on_line(memory, lcd_control, line) {
+    if window_visible_on_line(memory, lcd_control, line, emulator.rom.properties.cgb_flag) {
         clocks += 6;
     }
 
     if lcd_control & LCDC_OBJ_ENABLE != 0 {
-        clocks += object_penalty_clocks(memory, lcd_control, line);
+        clocks +=
+            object_penalty_clocks(memory, lcd_control, line, emulator.rom.properties.cgb_flag);
     }
 
     clocks.min(MAX_SCAN_VRAM_CLOCKS)
 }
 
-fn window_visible_on_line(memory: &GameBoyMemory, lcd_control: u8, line: u8) -> bool {
-    lcd_control & LCDC_WINDOW_ENABLE != 0
+fn window_visible_on_line(
+    memory: &GameBoyMemory,
+    lcd_control: u8,
+    line: u8,
+    cgb_mode: bool,
+) -> bool {
+    let bg_window_enabled = cgb_mode || lcd_control & LCDC_BG_ENABLE != 0;
+    bg_window_enabled
+        && lcd_control & LCDC_WINDOW_ENABLE != 0
         && io(memory, WY_IO_INDEX) <= line
         && io(memory, WX_IO_INDEX) < 167
 }
 
-fn object_penalty_clocks(memory: &GameBoyMemory, lcd_control: u8, line: u8) -> i32 {
-    let sprite_height = if lcd_control & LCDC_OBJ_SIZE != 0 {
-        16
-    } else {
-        8
-    };
-    let line = i32::from(line);
-    let mut objects = Vec::with_capacity(10);
-
-    for sprite_index in 0..40 {
-        let offset = sprite_index * 4;
-        let sprite_y = i32::from(memory.oam[offset]);
-        let sprite_x = i32::from(memory.oam[offset + 1]);
-        let sprite_top = sprite_y - 16;
-        if line < sprite_top || line >= sprite_top + sprite_height {
-            continue;
-        }
-        if sprite_x > 167 {
-            continue;
-        }
-
-        objects.push((sprite_x - 8, sprite_index, sprite_x));
-        if objects.len() >= 10 {
-            break;
-        }
-    }
-
-    objects.sort_by_key(|&(left, index, _)| (left, index));
+fn object_penalty_clocks(memory: &GameBoyMemory, lcd_control: u8, line: u8, cgb_mode: bool) -> i32 {
+    let mut objects: Vec<_> = select_objects_for_line(memory, lcd_control, usize::from(line))
+        .into_iter()
+        .filter(|object| object.oam_x < 168)
+        .collect();
+    objects.sort_by_key(|object| (object.screen_x, object.index));
 
     let scroll_x = i32::from(io(memory, SCX_IO_INDEX));
-    let window_start_x = if window_visible_on_line(memory, io(memory, LCDC_IO_INDEX), line as u8) {
+    let window_start_x = if window_visible_on_line(memory, lcd_control, line, cgb_mode) {
         Some(i32::from(io(memory, WX_IO_INDEX)).saturating_sub(7))
     } else {
         None
@@ -476,13 +473,13 @@ fn object_penalty_clocks(memory: &GameBoyMemory, lcd_control: u8, line: u8) -> i
     let mut considered_tiles = Vec::with_capacity(10);
     let mut penalty = 0;
 
-    for (left, _, sprite_x) in objects {
-        if sprite_x == 0 {
+    for object in objects {
+        if object.oam_x == 0 {
             penalty += 11;
             continue;
         }
 
-        let (tile_key, tile_pixel) = object_penalty_tile(left, scroll_x, window_start_x);
+        let (tile_key, tile_pixel) = object_penalty_tile(object.screen_x, scroll_x, window_start_x);
         if !considered_tiles.contains(&tile_key) {
             considered_tiles.push(tile_key);
             penalty += (5 - tile_pixel).max(0);
@@ -537,7 +534,7 @@ fn handle_lcd_disabled(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing
     emulator.memory_access.vram = true;
     set_ly(emulator, 0, false);
     emulator.gpu_timing.time_in_mode = 0;
-    emulator.gpu_mode = GpuMode::ScanOam;
+    emulator.gpu_mode = GpuMode::HBlank;
     let stat = io(&emulator.memory, STAT_IO_INDEX);
     write_io(&mut emulator.memory, STAT_IO_INDEX, stat & 0xfc);
     emulator.gpu_timing.blanked_screen = true;
@@ -551,27 +548,33 @@ fn apply_joypad_state_change(emulator: &mut GameBoyCore) {
         return;
     }
 
-    let Some(joyp) = emulator.memory.io_ports.get_mut(JOYP_IO_INDEX) else {
-        warn!("Game Boy IO ports are unavailable while applying joypad state");
-        return;
+    let (old_joyp, new_joyp) = {
+        let Some(joyp) = emulator.memory.io_ports.get_mut(JOYP_IO_INDEX) else {
+            warn!("Game Boy IO ports are unavailable while applying joypad state");
+            return;
+        };
+
+        let old_joyp = *joyp;
+        let select = old_joyp & JOYP_SELECT_MASK;
+        let low_nibble = if emulator.rom.properties.sgb_flag
+            && emulator.sgb.mult_enabled
+            && select == JOYP_SELECT_NONE
+        {
+            emulator.sgb.read_joypad_id as u8 & JOYP_LOW_NIBBLE_MASK
+        } else {
+            emulator.runtime.joypad.low_nibble_for_select(select)
+        };
+        let new_joyp = 0xc0 | select | low_nibble;
+        *joyp = new_joyp;
+        (old_joyp, new_joyp)
     };
 
-    match *joyp & 0x30 {
-        0x20 => {
-            *joyp &= 0xf0;
-            *joyp |= emulator.runtime.joypad.direction;
+    if joypad_low_nibble_falling_edge(old_joyp, new_joyp) {
+        if let Some(interrupt_flags) = emulator.memory.io_ports.get_mut(IF_IO_INDEX) {
+            *interrupt_flags |= INTERRUPT_JOYPAD;
+        } else {
+            warn!("Game Boy interrupt flags are unavailable while applying joypad state");
         }
-        0x10 => {
-            *joyp &= 0xf0;
-            *joyp |= emulator.runtime.joypad.button;
-        }
-        _ => {}
-    }
-
-    if let Some(interrupt_flags) = emulator.memory.io_ports.get_mut(IF_IO_INDEX) {
-        *interrupt_flags |= INTERRUPT_JOYPAD;
-    } else {
-        warn!("Game Boy interrupt flags are unavailable while applying joypad state");
     }
 
     emulator.runtime.joypad_state_changed = false;
@@ -637,22 +640,62 @@ mod tests {
     use crate::game_boy::emulator::input::JoypadInputNibbles;
 
     #[test]
-    fn joypad_changes_update_the_selected_input_nibble_and_request_interrupt() {
+    fn joypad_press_updates_selected_nibble_and_requests_interrupt() {
         let mut emulator = GameBoyCore::default();
         emulator.runtime = RuntimeControl {
             joypad: JoypadInputNibbles {
-                button: 0x0e,
+                button: 0x0f,
                 direction: 0x0d,
             },
             joypad_state_changed: true,
             ..Default::default()
         };
-        emulator.memory.io_ports[JOYP_IO_INDEX] = 0x20;
+        emulator.memory.io_ports[JOYP_IO_INDEX] = 0xef;
 
         apply_joypad_state_change(&mut emulator);
 
-        assert_eq!(emulator.memory.io_ports[JOYP_IO_INDEX], 0x2d);
+        assert_eq!(emulator.memory.io_ports[JOYP_IO_INDEX], 0xed);
         assert_eq!(emulator.memory.io_ports[IF_IO_INDEX], 0x10);
+        assert!(!emulator.runtime.joypad_state_changed);
+    }
+
+    #[test]
+    fn joypad_release_updates_selected_nibble_without_interrupt() {
+        let mut emulator = GameBoyCore::default();
+        emulator.runtime = RuntimeControl {
+            joypad: JoypadInputNibbles {
+                button: 0x0f,
+                direction: 0x0f,
+            },
+            joypad_state_changed: true,
+            ..Default::default()
+        };
+        emulator.memory.io_ports[JOYP_IO_INDEX] = 0xed;
+
+        apply_joypad_state_change(&mut emulator);
+
+        assert_eq!(emulator.memory.io_ports[JOYP_IO_INDEX], 0xef);
+        assert_eq!(emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_JOYPAD, 0);
+        assert!(!emulator.runtime.joypad_state_changed);
+    }
+
+    #[test]
+    fn joypad_unselected_row_change_does_not_request_interrupt() {
+        let mut emulator = GameBoyCore::default();
+        emulator.runtime = RuntimeControl {
+            joypad: JoypadInputNibbles {
+                button: 0x0e,
+                direction: 0x0f,
+            },
+            joypad_state_changed: true,
+            ..Default::default()
+        };
+        emulator.memory.io_ports[JOYP_IO_INDEX] = 0xef;
+
+        apply_joypad_state_change(&mut emulator);
+
+        assert_eq!(emulator.memory.io_ports[JOYP_IO_INDEX], 0xef);
+        assert_eq!(emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_JOYPAD, 0);
         assert!(!emulator.runtime.joypad_state_changed);
     }
 
@@ -879,6 +922,27 @@ mod tests {
         emulator.memory.oam[1] = 8;
 
         assert_eq!(scan_vram_clocks(&emulator), 196);
+    }
+
+    #[test]
+    fn cgb_lcdc_bit_zero_keeps_window_mode_three_penalty() {
+        let mut emulator = GameBoyCore::default();
+        emulator.rom.properties.cgb_flag = true;
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x80 | LCDC_WINDOW_ENABLE;
+        emulator.memory.io_ports[WY_IO_INDEX] = 0;
+        emulator.memory.io_ports[WX_IO_INDEX] = 7;
+
+        assert_eq!(scan_vram_clocks(&emulator), SCAN_VRAM_CLOCKS + 6);
+    }
+
+    #[test]
+    fn dmg_lcdc_bit_zero_suppresses_window_mode_three_penalty() {
+        let mut emulator = GameBoyCore::default();
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x80 | LCDC_WINDOW_ENABLE;
+        emulator.memory.io_ports[WY_IO_INDEX] = 0;
+        emulator.memory.io_ports[WX_IO_INDEX] = 7;
+
+        assert_eq!(scan_vram_clocks(&emulator), SCAN_VRAM_CLOCKS);
     }
 
     #[test]

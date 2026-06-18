@@ -1,5 +1,11 @@
 use crate::input::game_boy::GameBoyInputState;
 
+pub(crate) const JOYP_LOW_NIBBLE_MASK: u8 = 0x0f;
+pub(crate) const JOYP_SELECT_MASK: u8 = 0x30;
+pub(crate) const JOYP_SELECT_BUTTONS: u8 = 0x10;
+pub(crate) const JOYP_SELECT_DIRECTIONS: u8 = 0x20;
+pub(crate) const JOYP_SELECT_NONE: u8 = 0x30;
+
 const INPUT_IDLE_NIBBLE: u8 = 0x0f;
 const RIGHT_MASK: u8 = 0x0e;
 const LEFT_MASK: u8 = 0x0d;
@@ -23,6 +29,21 @@ impl Default for JoypadInputNibbles {
             direction: INPUT_IDLE_NIBBLE,
         }
     }
+}
+
+impl JoypadInputNibbles {
+    pub(crate) fn low_nibble_for_select(self, select: u8) -> u8 {
+        (match select & JOYP_SELECT_MASK {
+            JOYP_SELECT_BUTTONS => self.button,
+            JOYP_SELECT_DIRECTIONS => self.direction,
+            0x00 => self.button & self.direction,
+            _ => INPUT_IDLE_NIBBLE,
+        }) & JOYP_LOW_NIBBLE_MASK
+    }
+}
+
+pub(crate) fn joypad_low_nibble_falling_edge(old_joyp: u8, new_joyp: u8) -> bool {
+    old_joyp & !new_joyp & JOYP_LOW_NIBBLE_MASK != 0
 }
 
 impl From<&GameBoyInputState> for JoypadInputNibbles {
@@ -86,5 +107,25 @@ mod tests {
 
         assert_eq!(nibbles.direction, 0x09);
         assert_eq!(nibbles.button, 0x06);
+    }
+
+    #[test]
+    fn selected_joypad_nibble_follows_active_low_selection_bits() {
+        let nibbles = JoypadInputNibbles {
+            button: 0x0e,
+            direction: 0x0d,
+        };
+
+        assert_eq!(nibbles.low_nibble_for_select(JOYP_SELECT_BUTTONS), 0x0e);
+        assert_eq!(nibbles.low_nibble_for_select(JOYP_SELECT_DIRECTIONS), 0x0d);
+        assert_eq!(nibbles.low_nibble_for_select(0x00), 0x0c);
+        assert_eq!(nibbles.low_nibble_for_select(JOYP_SELECT_NONE), 0x0f);
+    }
+
+    #[test]
+    fn joypad_interrupt_edges_are_low_nibble_high_to_low_transitions() {
+        assert!(joypad_low_nibble_falling_edge(0x2f, 0x2e));
+        assert!(!joypad_low_nibble_falling_edge(0x2e, 0x2f));
+        assert!(!joypad_low_nibble_falling_edge(0x1f, 0x2f));
     }
 }

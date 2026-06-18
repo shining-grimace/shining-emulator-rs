@@ -19,7 +19,7 @@ pub(super) const VRAM_BYTES: usize = 2 * 8_192;
 pub(super) const IO_PORT_BYTES: usize = 256;
 pub(super) const OAM_BYTES: usize = 160;
 pub(super) const TILE_SET_PIXELS: usize = 2 * 384 * 8 * 8;
-pub(super) const SRAM_CAPACITY_BYTES: usize = 8 * 4_096;
+pub(super) const SRAM_CAPACITY_BYTES: usize = 16 * 8_192;
 
 pub(super) const SGB_MONO_PIXELS: usize = 160 * 152;
 pub(super) const SGB_TRANSFER_VRAM_BYTES: usize = 4_096;
