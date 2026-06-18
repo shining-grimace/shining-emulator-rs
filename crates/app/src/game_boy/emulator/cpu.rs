@@ -24,6 +24,8 @@ pub(crate) struct CpuRegisters {
     pub(crate) h: u8,
     pub(crate) l: u8,
     pub(crate) ime: bool,
+    pub(crate) ime_enable_delay: u8,
+    pub(crate) halt_bug: bool,
 }
 
 impl CpuRegisters {
@@ -38,6 +40,8 @@ impl CpuRegisters {
         self.h = 0x01;
         self.l = 0x4d;
         self.ime = false;
+        self.ime_enable_delay = 0;
+        self.halt_bug = false;
     }
 }
 
@@ -45,10 +49,8 @@ impl CpuRegisters {
 pub(crate) struct CpuTiming {
     pub(crate) clocks_acc: i32,
     pub(crate) clock_frequency_hz: i64,
-    pub(crate) divider_count: u32,
-    pub(crate) timer_count: u32,
-    pub(crate) timer_inc_time: u32,
-    pub(crate) timer_running: bool,
+    pub(crate) system_counter: u16,
+    pub(crate) tima_reload_delay: u8,
 }
 
 impl Default for CpuTiming {
@@ -56,10 +58,8 @@ impl Default for CpuTiming {
         Self {
             clocks_acc: 0,
             clock_frequency_hz: 1,
-            divider_count: 1,
-            timer_count: 0,
-            timer_inc_time: 0,
-            timer_running: false,
+            system_counter: 0,
+            tima_reload_delay: 0,
         }
     }
 }
@@ -67,10 +67,8 @@ impl Default for CpuTiming {
 impl CpuTiming {
     pub(crate) fn reset_for_rom_load(&mut self) {
         self.clocks_acc = 0;
-        self.divider_count = 0;
-        self.timer_count = 0;
-        self.timer_inc_time = 1_024;
-        self.timer_running = false;
+        self.system_counter = 0;
+        self.tima_reload_delay = 0;
     }
 }
 

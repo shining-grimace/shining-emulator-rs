@@ -4,6 +4,7 @@ mod audio_unit;
 mod bus;
 mod constants;
 mod cpu;
+mod dma;
 mod execution;
 mod gpu;
 mod input;
@@ -46,8 +47,8 @@ impl GameBoyEmulatorBundle {
         let mut bundle = Self::default();
         bundle.core.runtime.is_running = true;
         bundle.core.cpu_timing.clock_frequency_hz = constants::GB_CLOCK_HZ;
-        bundle.core.cpu_timing.divider_count = 0;
-        bundle.core.cpu_timing.timer_inc_time = 1_024;
+        bundle.core.cpu_timing.system_counter = 0;
+        bundle.core.cpu_timing.tima_reload_delay = 0;
         bundle.core.gpu_mode = GpuMode::ScanOam;
         bundle.core.memory_access.oam = false;
         bundle.core.memory_access.vram = true;

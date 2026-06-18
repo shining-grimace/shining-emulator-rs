@@ -1,5 +1,7 @@
 use crate::game_boy::emulator::constants::{INITIAL_VRAM_BANK_OFFSET, INITIAL_WRAM_BANK_OFFSET};
 
+const DEFAULT_SCAN_VRAM_CLOCKS: i32 = 172;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GpuMode {
     HBlank,
@@ -37,6 +39,7 @@ impl Default for LineRenderer {
 pub(crate) struct GpuTiming {
     pub(crate) clock_factor: i32,
     pub(crate) time_in_mode: i32,
+    pub(crate) line_scan_vram_clocks: i32,
     pub(crate) last_ly_compare: u32,
     pub(crate) blanked_screen: bool,
     pub(crate) need_clear: bool,
@@ -47,6 +50,7 @@ impl Default for GpuTiming {
         Self {
             clock_factor: 1,
             time_in_mode: 0,
+            line_scan_vram_clocks: DEFAULT_SCAN_VRAM_CLOCKS,
             last_ly_compare: 0,
             blanked_screen: false,
             need_clear: true,
@@ -58,6 +62,7 @@ impl GpuTiming {
     pub(crate) fn reset_for_rom_load(&mut self) {
         self.clock_factor = 1;
         self.time_in_mode = 0;
+        self.line_scan_vram_clocks = DEFAULT_SCAN_VRAM_CLOCKS;
         self.last_ly_compare = 1;
         self.blanked_screen = false;
         self.need_clear = false;

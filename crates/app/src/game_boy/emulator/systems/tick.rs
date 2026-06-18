@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::game_boy::emulator::bus::{run_hblank_dma, write16};
+use crate::game_boy::emulator::bus::{
+    begin_deferred_oam_dma, run_hblank_dma, step_oam_dma, step_system_counter, write16,
+};
 use crate::game_boy::emulator::constants::{MAX_ACCUMULATED_CLOCKS, MIN_CLOCKS_TO_EXECUTE};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuTiming};
 use crate::game_boy::emulator::execution::perform_op;
@@ -14,15 +16,22 @@ use crate::storage::LocalStorage;
 const JOYP_IO_INDEX: usize = 0x00;
 const SB_IO_INDEX: usize = 0x01;
 const SC_IO_INDEX: usize = 0x02;
-const DIV_IO_INDEX: usize = 0x04;
 const TIMA_IO_INDEX: usize = 0x05;
 const TMA_IO_INDEX: usize = 0x06;
+const TAC_IO_INDEX: usize = 0x07;
 const IF_IO_INDEX: usize = 0x0f;
 const LCDC_IO_INDEX: usize = 0x40;
 const STAT_IO_INDEX: usize = 0x41;
+const SCX_IO_INDEX: usize = 0x43;
 const LY_IO_INDEX: usize = 0x44;
 const LYC_IO_INDEX: usize = 0x45;
+const WY_IO_INDEX: usize = 0x4a;
+const WX_IO_INDEX: usize = 0x4b;
 const IE_IO_INDEX: usize = 0xff;
+
+const LCDC_OBJ_ENABLE: u8 = 0x02;
+const LCDC_OBJ_SIZE: u8 = 0x04;
+const LCDC_WINDOW_ENABLE: u8 = 0x20;
 
 const INTERRUPT_VBLANK: u8 = 0x01;
 const INTERRUPT_LCD_STAT: u8 = 0x02;
@@ -30,10 +39,14 @@ const INTERRUPT_TIMER: u8 = 0x04;
 const INTERRUPT_SERIAL: u8 = 0x08;
 const INTERRUPT_JOYPAD: u8 = 0x10;
 
+const MACHINE_CYCLE_CLOCKS: i32 = 4;
+const INTERRUPT_ACK_MACHINE_CYCLES: i32 = 5;
+const STOP_SPEED_SWITCH_CLOCKS: i32 = 131_072;
 const SCAN_OAM_CLOCKS: i32 = 80;
 const SCAN_VRAM_CLOCKS: i32 = 172;
-const HBLANK_CLOCKS: i32 = 204;
-const VBLANK_LINE_CLOCKS: i32 = 456;
+const MAX_SCAN_VRAM_CLOCKS: i32 = 289;
+const SCANLINE_CLOCKS: i32 = 456;
+const VBLANK_LINE_CLOCKS: i32 = SCANLINE_CLOCKS;
 const FIRST_VBLANK_LINE: u8 = 144;
 const FRAME_LINE_COUNT: u8 = 154;
 
@@ -120,51 +133,112 @@ fn execute_accumulated_clocks(emulator: &mut GameBoyCore, frames: &mut GameBoyFr
     apply_joypad_state_change(emulator);
 
     while emulator.cpu_timing.clocks_acc > 0 {
-        let clocks_passed = perform_op(emulator);
-        emulator.cpu_registers.pc &= 0xffff;
-        emulator.cpu_timing.clocks_acc =
-            emulator.cpu_timing.clocks_acc.saturating_sub(clocks_passed);
-
-        handle_interrupts(emulator);
+        if emulator.dma.vram.cpu_halt_m_cycles > 0 {
+            emulator.dma.vram.cpu_halt_m_cycles -= 1;
+            step_machine_cycle(emulator, frames);
+            continue;
+        }
 
         if emulator.cpu_mode == CpuMode::Stopped {
             if switch_running_speed(emulator) {
-                emulator.cpu_timing.clocks_acc =
-                    emulator.cpu_timing.clocks_acc.saturating_sub(131_072);
+                step_machine_cycles(
+                    emulator,
+                    frames,
+                    machine_cycles_for_clocks(STOP_SPEED_SWITCH_CLOCKS),
+                );
                 emulator.cpu_mode = CpuMode::Running;
+            } else {
+                step_machine_cycle(emulator, frames);
             }
             continue;
         }
 
-        let display_enabled = display_enabled(&emulator.memory);
-        update_ly_compare(emulator, display_enabled);
-        update_timers(emulator, clocks_passed);
-        emulator
-            .audio_unit
-            .simulate_placeholder(clocks_passed / emulator.gpu_timing.clock_factor.max(1));
-        update_serial(emulator, clocks_passed);
-
-        if display_enabled {
-            emulator.gpu_timing.blanked_screen = false;
-            let gpu_clocks = clocks_passed / emulator.gpu_timing.clock_factor.max(1);
-            advance_ppu_timing(gpu_clocks, emulator, frames);
-        } else {
-            handle_lcd_disabled(emulator, frames);
+        match handle_interrupts(emulator) {
+            InterruptAction::None => {}
+            InterruptAction::WakeHalt => {
+                step_machine_cycle(emulator, frames);
+                continue;
+            }
+            InterruptAction::Service => {
+                step_machine_cycles(emulator, frames, INTERRUPT_ACK_MACHINE_CYCLES);
+                continue;
+            }
         }
+
+        let clocks_passed = perform_op(emulator);
+        emulator.cpu_registers.pc &= 0xffff;
+        step_machine_cycles(emulator, frames, machine_cycles_for_clocks(clocks_passed));
+        begin_deferred_oam_dma(emulator);
+        finish_instruction_interrupt_state(emulator);
     }
 }
 
-fn handle_interrupts(emulator: &mut GameBoyCore) {
-    let cpu_halted = emulator.cpu_mode == CpuMode::Halted;
-    if !emulator.cpu_registers.ime && !cpu_halted {
-        return;
-    }
+fn machine_cycles_for_clocks(clocks: i32) -> i32 {
+    clocks
+        .max(MACHINE_CYCLE_CLOCKS)
+        .saturating_add(MACHINE_CYCLE_CLOCKS - 1)
+        / MACHINE_CYCLE_CLOCKS
+}
 
+fn step_machine_cycles(
+    emulator: &mut GameBoyCore,
+    frames: &mut GameBoyFrameRing,
+    machine_cycles: i32,
+) {
+    for _ in 0..machine_cycles.max(1) {
+        step_machine_cycle(emulator, frames);
+    }
+}
+
+fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) {
+    emulator.cpu_timing.clocks_acc = emulator
+        .cpu_timing
+        .clocks_acc
+        .saturating_sub(MACHINE_CYCLE_CLOCKS);
+
+    let display_enabled = display_enabled(&emulator.memory);
+    update_ly_compare(emulator, display_enabled);
+    if emulator.cpu_mode != CpuMode::Stopped {
+        step_system_counter(emulator, MACHINE_CYCLE_CLOCKS as u16);
+    }
+    step_oam_dma(emulator);
+    emulator
+        .audio_unit
+        .simulate_placeholder(MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1));
+    update_serial(emulator, MACHINE_CYCLE_CLOCKS);
+
+    if display_enabled {
+        emulator.gpu_timing.blanked_screen = false;
+        let gpu_clocks = MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1);
+        advance_ppu_timing(gpu_clocks, emulator, frames);
+    } else {
+        handle_lcd_disabled(emulator, frames);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InterruptAction {
+    None,
+    WakeHalt,
+    Service,
+}
+
+fn handle_interrupts(emulator: &mut GameBoyCore) -> InterruptAction {
+    let cpu_halted = emulator.cpu_mode == CpuMode::Halted;
     let enabled = io(&emulator.memory, IE_IO_INDEX);
     let requested = io(&emulator.memory, IF_IO_INDEX);
     let triggered = enabled & requested & 0x1f;
     if triggered == 0 {
-        return;
+        return InterruptAction::None;
+    }
+
+    if cpu_halted {
+        emulator.cpu_mode = CpuMode::Running;
+        if !emulator.cpu_registers.ime {
+            return InterruptAction::WakeHalt;
+        }
+    } else if !emulator.cpu_registers.ime {
+        return InterruptAction::None;
     }
 
     let (mask, target) = if triggered & INTERRUPT_VBLANK != 0 {
@@ -179,16 +253,25 @@ fn handle_interrupts(emulator: &mut GameBoyCore) {
         (0x0f, 0x0060)
     };
     write_io(&mut emulator.memory, IF_IO_INDEX, requested & mask);
-
-    if !cpu_halted || emulator.cpu_registers.ime {
-        emulator.cpu_registers.sp = emulator.cpu_registers.sp.wrapping_sub(2) & 0xffff;
-        let stack_pointer = emulator.cpu_registers.sp as u16;
-        let program_counter = emulator.cpu_registers.pc as u16;
-        write16(emulator, stack_pointer, program_counter);
-        emulator.cpu_registers.pc = target;
-    }
-    emulator.cpu_mode = CpuMode::Running;
+    emulator.cpu_registers.sp = emulator.cpu_registers.sp.wrapping_sub(2) & 0xffff;
+    let stack_pointer = emulator.cpu_registers.sp as u16;
+    let program_counter = emulator.cpu_registers.pc as u16;
+    write16(emulator, stack_pointer, program_counter);
+    emulator.cpu_registers.pc = target;
     emulator.cpu_registers.ime = false;
+    emulator.cpu_registers.ime_enable_delay = 0;
+    InterruptAction::Service
+}
+
+fn finish_instruction_interrupt_state(emulator: &mut GameBoyCore) {
+    if emulator.cpu_registers.ime_enable_delay == 0 {
+        return;
+    }
+
+    emulator.cpu_registers.ime_enable_delay -= 1;
+    if emulator.cpu_registers.ime_enable_delay == 0 {
+        emulator.cpu_registers.ime = true;
+    }
 }
 
 fn switch_running_speed(emulator: &mut GameBoyCore) -> bool {
@@ -223,38 +306,6 @@ fn update_ly_compare(emulator: &mut GameBoyCore, display_enabled: bool) {
     }
 }
 
-fn update_timers(emulator: &mut GameBoyCore, clocks_passed: i32) {
-    emulator.cpu_timing.divider_count = emulator
-        .cpu_timing
-        .divider_count
-        .saturating_add(clocks_passed.max(0) as u32);
-    while emulator.cpu_timing.divider_count >= 256 {
-        emulator.cpu_timing.divider_count -= 256;
-        let divider = io(&emulator.memory, DIV_IO_INDEX).wrapping_add(1);
-        write_io(&mut emulator.memory, DIV_IO_INDEX, divider);
-    }
-
-    if !emulator.cpu_timing.timer_running {
-        return;
-    }
-
-    emulator.cpu_timing.timer_count = emulator
-        .cpu_timing
-        .timer_count
-        .saturating_add(clocks_passed.max(0) as u32);
-    while emulator.cpu_timing.timer_count >= emulator.cpu_timing.timer_inc_time.max(1) {
-        emulator.cpu_timing.timer_count -= emulator.cpu_timing.timer_inc_time.max(1);
-        let next_timer = io(&emulator.memory, TIMA_IO_INDEX).wrapping_add(1);
-        if next_timer == 0 {
-            let modulo = io(&emulator.memory, TMA_IO_INDEX);
-            write_io(&mut emulator.memory, TIMA_IO_INDEX, modulo);
-            request_interrupt(&mut emulator.memory, INTERRUPT_TIMER);
-        } else {
-            write_io(&mut emulator.memory, TIMA_IO_INDEX, next_timer);
-        }
-    }
-}
-
 fn update_serial(emulator: &mut GameBoyCore, clocks_passed: i32) {
     if !emulator.serial.is_transferring {
         return;
@@ -281,12 +332,7 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
         .saturating_add(clocks.max(0));
 
     loop {
-        let mode_clock_target = match emulator.gpu_mode {
-            GpuMode::ScanOam => SCAN_OAM_CLOCKS,
-            GpuMode::ScanVram => SCAN_VRAM_CLOCKS,
-            GpuMode::HBlank => HBLANK_CLOCKS,
-            GpuMode::VBlank => VBLANK_LINE_CLOCKS,
-        };
+        let mode_clock_target = mode_clock_target(emulator);
 
         if emulator.gpu_timing.time_in_mode < mode_clock_target {
             break;
@@ -295,6 +341,7 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
         emulator.gpu_timing.time_in_mode -= mode_clock_target;
         match emulator.gpu_mode {
             GpuMode::ScanOam => {
+                emulator.gpu_timing.line_scan_vram_clocks = scan_vram_clocks(emulator);
                 set_gpu_mode(emulator, GpuMode::ScanVram);
                 emulator.memory_access.oam = false;
                 emulator.memory_access.vram = false;
@@ -314,7 +361,7 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
             }
             GpuMode::HBlank => {
                 let next_line = ly(&emulator.memory).saturating_add(1);
-                set_ly(&mut emulator.memory, next_line);
+                set_ly(emulator, next_line, true);
                 if next_line == FIRST_VBLANK_LINE {
                     set_gpu_mode(emulator, GpuMode::VBlank);
                     request_interrupt(&mut emulator.memory, INTERRUPT_VBLANK);
@@ -341,7 +388,7 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
             GpuMode::VBlank => {
                 let next_line = ly(&emulator.memory).saturating_add(1);
                 if next_line >= FRAME_LINE_COUNT {
-                    set_ly(&mut emulator.memory, 0);
+                    set_ly(emulator, 0, true);
                     set_gpu_mode(emulator, GpuMode::ScanOam);
                     emulator.memory_access.oam = false;
                     emulator.memory_access.vram = true;
@@ -350,11 +397,112 @@ fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut Game
                         request_lcd_stat_interrupt(&mut emulator.memory);
                     }
                 } else {
-                    set_ly(&mut emulator.memory, next_line);
+                    set_ly(emulator, next_line, true);
                 }
             }
         }
     }
+}
+
+fn mode_clock_target(emulator: &GameBoyCore) -> i32 {
+    match emulator.gpu_mode {
+        GpuMode::ScanOam => SCAN_OAM_CLOCKS,
+        GpuMode::ScanVram => emulator.gpu_timing.line_scan_vram_clocks,
+        GpuMode::HBlank => SCANLINE_CLOCKS
+            .saturating_sub(SCAN_OAM_CLOCKS)
+            .saturating_sub(emulator.gpu_timing.line_scan_vram_clocks),
+        GpuMode::VBlank => VBLANK_LINE_CLOCKS,
+    }
+}
+
+fn scan_vram_clocks(emulator: &GameBoyCore) -> i32 {
+    let memory = &emulator.memory;
+    let lcd_control = io(memory, LCDC_IO_INDEX);
+    let line = ly(memory);
+    let mut clocks = SCAN_VRAM_CLOCKS + i32::from(io(memory, SCX_IO_INDEX) & 0x07);
+
+    if window_visible_on_line(memory, lcd_control, line) {
+        clocks += 6;
+    }
+
+    if lcd_control & LCDC_OBJ_ENABLE != 0 {
+        clocks += object_penalty_clocks(memory, lcd_control, line);
+    }
+
+    clocks.min(MAX_SCAN_VRAM_CLOCKS)
+}
+
+fn window_visible_on_line(memory: &GameBoyMemory, lcd_control: u8, line: u8) -> bool {
+    lcd_control & LCDC_WINDOW_ENABLE != 0
+        && io(memory, WY_IO_INDEX) <= line
+        && io(memory, WX_IO_INDEX) < 167
+}
+
+fn object_penalty_clocks(memory: &GameBoyMemory, lcd_control: u8, line: u8) -> i32 {
+    let sprite_height = if lcd_control & LCDC_OBJ_SIZE != 0 {
+        16
+    } else {
+        8
+    };
+    let line = i32::from(line);
+    let mut objects = Vec::with_capacity(10);
+
+    for sprite_index in 0..40 {
+        let offset = sprite_index * 4;
+        let sprite_y = i32::from(memory.oam[offset]);
+        let sprite_x = i32::from(memory.oam[offset + 1]);
+        let sprite_top = sprite_y - 16;
+        if line < sprite_top || line >= sprite_top + sprite_height {
+            continue;
+        }
+        if sprite_x > 167 {
+            continue;
+        }
+
+        objects.push((sprite_x - 8, sprite_index, sprite_x));
+        if objects.len() >= 10 {
+            break;
+        }
+    }
+
+    objects.sort_by_key(|&(left, index, _)| (left, index));
+
+    let scroll_x = i32::from(io(memory, SCX_IO_INDEX));
+    let window_start_x = if window_visible_on_line(memory, io(memory, LCDC_IO_INDEX), line as u8) {
+        Some(i32::from(io(memory, WX_IO_INDEX)).saturating_sub(7))
+    } else {
+        None
+    };
+    let mut considered_tiles = Vec::with_capacity(10);
+    let mut penalty = 0;
+
+    for (left, _, sprite_x) in objects {
+        if sprite_x == 0 {
+            penalty += 11;
+            continue;
+        }
+
+        let (tile_key, tile_pixel) = object_penalty_tile(left, scroll_x, window_start_x);
+        if !considered_tiles.contains(&tile_key) {
+            considered_tiles.push(tile_key);
+            penalty += (5 - tile_pixel).max(0);
+        }
+        penalty += 6;
+    }
+
+    penalty
+}
+
+fn object_penalty_tile(screen_x: i32, scroll_x: i32, window_start_x: Option<i32>) -> (i32, i32) {
+    if let Some(window_start_x) = window_start_x {
+        if screen_x >= window_start_x {
+            let window_x = screen_x - window_start_x;
+            return (1_000 + window_x.div_euclid(8), window_x.rem_euclid(8));
+        }
+    }
+
+    let background_x = screen_x + scroll_x;
+    (background_x.div_euclid(8), background_x.rem_euclid(8))
 }
 
 fn write_visible_line(emulator: &mut GameBoyCore, line: u8) {
@@ -387,7 +535,7 @@ fn handle_lcd_disabled(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing
 
     emulator.memory_access.oam = true;
     emulator.memory_access.vram = true;
-    set_ly(&mut emulator.memory, 0);
+    set_ly(emulator, 0, false);
     emulator.gpu_timing.time_in_mode = 0;
     emulator.gpu_mode = GpuMode::ScanOam;
     let stat = io(&emulator.memory, STAT_IO_INDEX);
@@ -433,12 +581,13 @@ fn ly(memory: &GameBoyMemory) -> u8 {
     memory.io_ports.get(LY_IO_INDEX).copied().unwrap_or(0)
 }
 
-fn set_ly(memory: &mut GameBoyMemory, line: u8) {
-    if let Some(ly) = memory.io_ports.get_mut(LY_IO_INDEX) {
+fn set_ly(emulator: &mut GameBoyCore, line: u8, display_enabled: bool) {
+    if let Some(ly) = emulator.memory.io_ports.get_mut(LY_IO_INDEX) {
         *ly = line;
     } else {
         warn!("Game Boy LY register is unavailable");
     }
+    update_ly_compare(emulator, display_enabled);
 }
 
 fn set_gpu_mode(emulator: &mut GameBoyCore, mode: GpuMode) {
@@ -524,6 +673,177 @@ mod tests {
     }
 
     #[test]
+    fn machine_cycle_step_drains_four_clocks_and_advances_timer() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_timing.clocks_acc = 8;
+        emulator.cpu_timing.system_counter = 0x000c;
+        emulator.memory.io_ports[TAC_IO_INDEX] = 0x05;
+        let mut frames = GameBoyFrameRing::default();
+
+        step_machine_cycle(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_timing.clocks_acc, 4);
+        assert_eq!(emulator.cpu_timing.system_counter, 0x0010);
+        assert_eq!(emulator.memory.io_ports[TIMA_IO_INDEX], 1);
+    }
+
+    #[test]
+    fn stopped_machine_cycle_does_not_advance_system_counter() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_mode = CpuMode::Stopped;
+        emulator.cpu_timing.clocks_acc = 4;
+        emulator.cpu_timing.system_counter = 0x000c;
+        emulator.memory.io_ports[TAC_IO_INDEX] = 0x05;
+        let mut frames = GameBoyFrameRing::default();
+
+        step_machine_cycle(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_timing.clocks_acc, 0);
+        assert_eq!(emulator.cpu_timing.system_counter, 0x000c);
+        assert_eq!(emulator.memory.io_ports[TIMA_IO_INDEX], 0);
+    }
+
+    #[test]
+    fn interrupt_service_path_consumes_five_machine_cycles() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.ime = true;
+        emulator.cpu_registers.pc = 0x1234;
+        emulator.cpu_registers.sp = 0xfffe;
+        emulator.cpu_timing.clocks_acc = INTERRUPT_ACK_MACHINE_CYCLES * MACHINE_CYCLE_CLOCKS;
+        emulator.memory.io_ports[IE_IO_INDEX] = INTERRUPT_VBLANK;
+        emulator.memory.io_ports[IF_IO_INDEX] = INTERRUPT_VBLANK;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_timing.clocks_acc, 0);
+        assert_eq!(emulator.cpu_registers.pc, 0x0040);
+        assert_eq!(emulator.cpu_registers.sp, 0xfffc);
+        assert_eq!(emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_VBLANK, 0);
+    }
+
+    #[test]
+    fn vram_dma_halt_cycles_drain_without_executing_cpu_opcodes() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.pc = 0x0100;
+        emulator.cpu_timing.clocks_acc = 2 * MACHINE_CYCLE_CLOCKS;
+        emulator.dma.vram.cpu_halt_m_cycles = 2;
+        emulator.memory.rom[0x0100] = 0x04;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.dma.vram.cpu_halt_m_cycles, 0);
+        assert_eq!(emulator.cpu_timing.clocks_acc, 0);
+        assert_eq!(emulator.cpu_registers.b, 0);
+        assert_eq!(emulator.cpu_registers.pc, 0x0100);
+    }
+
+    #[test]
+    fn ei_enables_interrupts_after_the_following_instruction() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.pc = 0x0100;
+        emulator.cpu_timing.clocks_acc = MACHINE_CYCLE_CLOCKS;
+        emulator.memory.rom[0x0100] = 0xfb;
+        emulator.memory.rom[0x0101] = 0x00;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert!(!emulator.cpu_registers.ime);
+        assert_eq!(emulator.cpu_registers.ime_enable_delay, 1);
+
+        emulator.cpu_timing.clocks_acc = MACHINE_CYCLE_CLOCKS;
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert!(emulator.cpu_registers.ime);
+        assert_eq!(emulator.cpu_registers.ime_enable_delay, 0);
+        assert_eq!(emulator.cpu_registers.pc, 0x0102);
+    }
+
+    #[test]
+    fn pending_interrupt_after_ei_waits_until_after_next_instruction() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.pc = 0x0100;
+        emulator.cpu_registers.sp = 0xfffe;
+        emulator.cpu_timing.clocks_acc =
+            (2 * MACHINE_CYCLE_CLOCKS) + (INTERRUPT_ACK_MACHINE_CYCLES * MACHINE_CYCLE_CLOCKS);
+        emulator.memory.rom[0x0100] = 0xfb;
+        emulator.memory.rom[0x0101] = 0x00;
+        emulator.memory.io_ports[IE_IO_INDEX] = INTERRUPT_VBLANK;
+        emulator.memory.io_ports[IF_IO_INDEX] = INTERRUPT_VBLANK;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_registers.pc, 0x0040);
+        assert_eq!(emulator.cpu_registers.sp, 0xfffc);
+        assert_eq!(emulator.memory.io_ports[0xfc], 0x02);
+        assert_eq!(emulator.memory.io_ports[0xfd], 0x01);
+    }
+
+    #[test]
+    fn di_cancels_delayed_ei() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.pc = 0x0100;
+        emulator.cpu_timing.clocks_acc = 3 * MACHINE_CYCLE_CLOCKS;
+        emulator.memory.rom[0x0100] = 0xfb;
+        emulator.memory.rom[0x0101] = 0xf3;
+        emulator.memory.rom[0x0102] = 0x00;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert!(!emulator.cpu_registers.ime);
+        assert_eq!(emulator.cpu_registers.ime_enable_delay, 0);
+        assert_eq!(emulator.cpu_registers.pc, 0x0103);
+    }
+
+    #[test]
+    fn halted_cpu_wakes_without_servicing_when_ime_is_disabled() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_mode = CpuMode::Halted;
+        emulator.cpu_registers.pc = 0x0101;
+        emulator.cpu_registers.sp = 0xfffe;
+        emulator.cpu_timing.clocks_acc = MACHINE_CYCLE_CLOCKS;
+        emulator.memory.io_ports[IE_IO_INDEX] = INTERRUPT_TIMER;
+        emulator.memory.io_ports[IF_IO_INDEX] = INTERRUPT_TIMER;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_mode, CpuMode::Running);
+        assert_eq!(emulator.cpu_registers.pc, 0x0101);
+        assert_eq!(emulator.cpu_registers.sp, 0xfffe);
+        assert_eq!(
+            emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_TIMER,
+            INTERRUPT_TIMER
+        );
+    }
+
+    #[test]
+    fn halt_bug_repeats_next_single_byte_instruction() {
+        let mut emulator = GameBoyCore::default();
+        emulator.cpu_registers.pc = 0x0100;
+        emulator.cpu_timing.clocks_acc = 3 * MACHINE_CYCLE_CLOCKS;
+        emulator.memory.rom[0x0100] = 0x76;
+        emulator.memory.rom[0x0101] = 0x04;
+        emulator.memory.rom[0x0102] = 0x00;
+        emulator.memory.io_ports[IE_IO_INDEX] = INTERRUPT_TIMER;
+        emulator.memory.io_ports[IF_IO_INDEX] = INTERRUPT_TIMER;
+        let mut frames = GameBoyFrameRing::default();
+
+        execute_accumulated_clocks(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.cpu_registers.b, 2);
+        assert_eq!(emulator.cpu_registers.pc, 0x0102);
+        assert_eq!(
+            emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_TIMER,
+            INTERRUPT_TIMER
+        );
+    }
+
+    #[test]
     fn ppu_timing_writes_visible_lines_and_publishes_on_vblank() {
         let mut emulator = GameBoyCore {
             gpu_timing: GpuTiming::default(),
@@ -548,6 +868,99 @@ mod tests {
     }
 
     #[test]
+    fn mode_three_timing_includes_scroll_window_and_object_penalties() {
+        let mut emulator = GameBoyCore::default();
+        emulator.memory.io_ports[LCDC_IO_INDEX] =
+            0x80 | LCDC_OBJ_ENABLE | LCDC_WINDOW_ENABLE | 0x01;
+        emulator.memory.io_ports[SCX_IO_INDEX] = 7;
+        emulator.memory.io_ports[WY_IO_INDEX] = 0;
+        emulator.memory.io_ports[WX_IO_INDEX] = 7;
+        emulator.memory.oam[0] = 16;
+        emulator.memory.oam[1] = 8;
+
+        assert_eq!(scan_vram_clocks(&emulator), 196);
+    }
+
+    #[test]
+    fn mode_three_uses_dynamic_duration_before_entering_hblank() {
+        let mut emulator = GameBoyCore {
+            gpu_timing: GpuTiming::default(),
+            gpu_mode: GpuMode::ScanVram,
+            memory_access: MemoryAccess {
+                oam: false,
+                vram: false,
+                ..Default::default()
+            },
+            memory: GameBoyMemory::default(),
+            ..Default::default()
+        };
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x91;
+        emulator.memory.io_ports[SCX_IO_INDEX] = 7;
+        emulator.gpu_timing.line_scan_vram_clocks = scan_vram_clocks(&emulator);
+        let mut frames = GameBoyFrameRing::default();
+
+        advance_ppu_timing(178, &mut emulator, &mut frames);
+
+        assert_eq!(emulator.gpu_mode, GpuMode::ScanVram);
+        assert!(!emulator.memory_access.vram);
+
+        advance_ppu_timing(1, &mut emulator, &mut frames);
+
+        assert_eq!(emulator.gpu_mode, GpuMode::HBlank);
+        assert_eq!(emulator.gpu_timing.time_in_mode, 0);
+        assert!(emulator.memory_access.vram);
+        assert!(emulator.memory_access.oam);
+    }
+
+    #[test]
+    fn hblank_uses_scanline_remainder_after_dynamic_mode_three() {
+        let mut emulator = GameBoyCore {
+            gpu_timing: GpuTiming::default(),
+            gpu_mode: GpuMode::HBlank,
+            memory: GameBoyMemory::default(),
+            ..Default::default()
+        };
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x91;
+        emulator.memory.io_ports[SCX_IO_INDEX] = 7;
+        emulator.gpu_timing.line_scan_vram_clocks = scan_vram_clocks(&emulator);
+        let mut frames = GameBoyFrameRing::default();
+
+        advance_ppu_timing(196, &mut emulator, &mut frames);
+
+        assert_eq!(ly(&emulator.memory), 0);
+        assert_eq!(emulator.gpu_mode, GpuMode::HBlank);
+
+        advance_ppu_timing(1, &mut emulator, &mut frames);
+
+        assert_eq!(ly(&emulator.memory), 1);
+        assert_eq!(emulator.gpu_mode, GpuMode::ScanOam);
+        assert_eq!(emulator.gpu_timing.time_in_mode, 0);
+    }
+
+    #[test]
+    fn lyc_compare_updates_immediately_when_hblank_advances_line() {
+        let mut emulator = GameBoyCore {
+            gpu_timing: GpuTiming::default(),
+            gpu_mode: GpuMode::HBlank,
+            memory: GameBoyMemory::default(),
+            ..Default::default()
+        };
+        emulator.memory.io_ports[LCDC_IO_INDEX] = 0x91;
+        emulator.memory.io_ports[LYC_IO_INDEX] = 1;
+        emulator.memory.io_ports[STAT_IO_INDEX] = 0x40;
+        let mut frames = GameBoyFrameRing::default();
+
+        advance_ppu_timing(204, &mut emulator, &mut frames);
+
+        assert_eq!(ly(&emulator.memory), 1);
+        assert_eq!(emulator.memory.io_ports[STAT_IO_INDEX] & 0x04, 0x04);
+        assert_eq!(
+            emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_LCD_STAT,
+            INTERRUPT_LCD_STAT
+        );
+    }
+
+    #[test]
     fn hblank_dma_runs_after_vram_access_reopens() {
         let mut emulator = GameBoyCore {
             gpu_timing: GpuTiming::default(),
@@ -565,7 +978,7 @@ mod tests {
         emulator.memory.io_ports[0x52] = 0x00;
         emulator.memory.io_ports[0x53] = 0x00;
         emulator.memory.io_ports[0x54] = 0x00;
-        emulator.memory.io_ports[0x55] = 0x80;
+        emulator.memory.io_ports[0x55] = 0x00;
         emulator.memory.rom[0x0200] = 0x5a;
         let mut frames = GameBoyFrameRing::default();
 
@@ -573,19 +986,27 @@ mod tests {
 
         assert_eq!(emulator.memory.vram[0], 0x5a);
         assert_eq!(emulator.memory.io_ports[0x55], 0xff);
+        assert_eq!(emulator.dma.vram.cpu_halt_m_cycles, 8);
         assert!(emulator.memory_access.vram);
     }
 
     #[test]
     fn timer_overflow_reloads_modulo_and_requests_interrupt() {
         let mut emulator = GameBoyCore::default();
-        emulator.cpu_timing.timer_running = true;
-        emulator.cpu_timing.timer_inc_time = 16;
-        emulator.cpu_timing.timer_count = 12;
+        emulator.cpu_timing.clocks_acc = 2 * MACHINE_CYCLE_CLOCKS;
+        emulator.cpu_timing.system_counter = 0x000c;
         emulator.memory.io_ports[TIMA_IO_INDEX] = 0xff;
         emulator.memory.io_ports[TMA_IO_INDEX] = 0x42;
+        emulator.memory.io_ports[TAC_IO_INDEX] = 0x05;
+        let mut frames = GameBoyFrameRing::default();
 
-        update_timers(&mut emulator, 4);
+        step_machine_cycle(&mut emulator, &mut frames);
+
+        assert_eq!(emulator.memory.io_ports[TIMA_IO_INDEX], 0x00);
+        assert_eq!(emulator.cpu_timing.tima_reload_delay, 1);
+        assert_eq!(emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_TIMER, 0);
+
+        step_machine_cycle(&mut emulator, &mut frames);
 
         assert_eq!(emulator.memory.io_ports[TIMA_IO_INDEX], 0x42);
         assert_eq!(

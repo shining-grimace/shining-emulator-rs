@@ -1,5 +1,6 @@
 use crate::game_boy::emulator::GameBoyCore;
 use crate::game_boy::emulator::constants::ROM_BANK_SIZE;
+use crate::game_boy::emulator::cpu::CpuMode;
 use crate::game_boy::emulator::gpu::GpuMode;
 use crate::game_boy::emulator::rom::MemoryBankController;
 
@@ -7,7 +8,10 @@ const JOYP_IO_INDEX: usize = 0x00;
 const SB_IO_INDEX: usize = 0x01;
 const SC_IO_INDEX: usize = 0x02;
 const DIV_IO_INDEX: usize = 0x04;
+const TIMA_IO_INDEX: usize = 0x05;
+const TMA_IO_INDEX: usize = 0x06;
 const TAC_IO_INDEX: usize = 0x07;
+const IF_IO_INDEX: usize = 0x0f;
 const LCDC_IO_INDEX: usize = 0x40;
 const STAT_IO_INDEX: usize = 0x41;
 const LY_IO_INDEX: usize = 0x44;
@@ -28,7 +32,33 @@ const OCPS_IO_INDEX: usize = 0x6a;
 const OCPD_IO_INDEX: usize = 0x6b;
 const SVBK_IO_INDEX: usize = 0x70;
 
+const INTERRUPT_TIMER: u8 = 0x04;
+const TIMER_RELOAD_DELAY_M_CYCLES: u8 = 1;
+const OAM_DMA_BYTES: u8 = 160;
+const HDMA_BLOCK_BYTES: usize = 16;
+const HDMA_BLOCK_M_CYCLES: i32 = 8;
+
+pub(crate) fn step_system_counter(core: &mut GameBoyCore, clocks: u16) {
+    let machine_cycles = clocks / 4;
+    let remainder = clocks % 4;
+
+    for _ in 0..machine_cycles {
+        finish_pending_timer_reload(core);
+        advance_system_counter(core, 4);
+    }
+    if remainder != 0 {
+        advance_system_counter(core, remainder);
+    }
+}
+
 pub(crate) fn read8(core: &GameBoyCore, address: u16) -> u8 {
+    if oam_dma_blocks_cpu_access(core, address) {
+        return 0xff;
+    }
+    read8_unrestricted(core, address)
+}
+
+fn read8_unrestricted(core: &GameBoyCore, address: u16) -> u8 {
     let address = usize::from(address);
     if address < 0x4000 {
         return core.memory.rom.get(address).copied().unwrap_or(0xff);
@@ -116,6 +146,13 @@ pub(crate) fn read16(core: &GameBoyCore, address: u16) -> u16 {
 }
 
 pub(crate) fn write8(core: &mut GameBoyCore, address: u16, value: u8) {
+    if oam_dma_blocks_cpu_access(core, address) {
+        return;
+    }
+    write8_unrestricted(core, address, value);
+}
+
+fn write8_unrestricted(core: &mut GameBoyCore, address: u16, value: u8) {
     let address_usize = usize::from(address);
     if address_usize < 0x8000 {
         write_mbc(core, address, value);
@@ -162,15 +199,49 @@ pub(crate) fn write16(core: &mut GameBoyCore, address: u16, value: u16) {
 }
 
 pub(crate) fn run_hblank_dma(core: &mut GameBoyCore) {
-    if core.memory.io_ports[HDMA5_IO_INDEX] >= 0xff {
+    if core.cpu_mode == CpuMode::Halted {
         return;
     }
-    transfer_hdma_block(core, 16);
-    let remaining = core.memory.io_ports[HDMA5_IO_INDEX].wrapping_sub(1);
-    core.memory.write_io_port(
-        HDMA5_IO_INDEX,
-        if remaining < 0x80 { 0xff } else { remaining },
-    );
+    if !hblank_dma_active(core) {
+        return;
+    }
+
+    let remaining = core.memory.io_ports[HDMA5_IO_INDEX] & 0x7f;
+    transfer_hdma_block(core, HDMA_BLOCK_BYTES);
+    add_vram_dma_cpu_halt(core, 1);
+    if remaining == 0 {
+        core.memory.write_io_port(HDMA5_IO_INDEX, 0xff);
+    } else {
+        core.memory.write_io_port(HDMA5_IO_INDEX, remaining - 1);
+    }
+}
+
+pub(crate) fn begin_deferred_oam_dma(core: &mut GameBoyCore) {
+    let Some(source_high) = core.dma.oam.pending_source_high.take() else {
+        return;
+    };
+
+    core.dma.oam.source_high = source_high;
+    core.dma.oam.next_index = 0;
+    core.dma.oam.active = true;
+}
+
+pub(crate) fn step_oam_dma(core: &mut GameBoyCore) {
+    if !core.dma.oam.active {
+        return;
+    }
+
+    let index = core.dma.oam.next_index;
+    let source = (u16::from(core.dma.oam.source_high) << 8) | u16::from(index);
+    let byte = read8_unrestricted(core, source);
+    if let Some(slot) = core.memory.oam.get_mut(usize::from(index)) {
+        *slot = byte;
+    }
+
+    core.dma.oam.next_index = core.dma.oam.next_index.saturating_add(1);
+    if core.dma.oam.next_index >= OAM_DMA_BYTES {
+        core.dma.oam.active = false;
+    }
 }
 
 fn read_sram(core: &GameBoyCore, address: usize) -> u8 {
@@ -353,7 +424,9 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
             }
         }
         SC_IO_INDEX => write_serial_control(core, value),
-        DIV_IO_INDEX => core.memory.write_io_port(DIV_IO_INDEX, 0),
+        DIV_IO_INDEX => write_divider(core),
+        TIMA_IO_INDEX => write_timer_counter(core, value),
+        TMA_IO_INDEX => write_timer_modulo(core, value),
         TAC_IO_INDEX => write_timer_control(core, value),
         LCDC_IO_INDEX => write_lcd_control(core, value),
         STAT_IO_INDEX => {
@@ -448,15 +521,98 @@ fn write_serial_control(core: &mut GameBoyCore, value: u8) {
     }
 }
 
+fn write_divider(core: &mut GameBoyCore) {
+    let old_signal = timer_edge_signal(core, core.memory.io_ports[TAC_IO_INDEX]);
+    core.cpu_timing.system_counter = 0;
+    core.memory.write_io_port(DIV_IO_INDEX, 0);
+    tick_timer_on_falling_edge(core, old_signal);
+}
+
+fn write_timer_counter(core: &mut GameBoyCore, value: u8) {
+    core.cpu_timing.tima_reload_delay = 0;
+    core.memory.write_io_port(TIMA_IO_INDEX, value);
+}
+
+fn write_timer_modulo(core: &mut GameBoyCore, value: u8) {
+    core.memory.write_io_port(TMA_IO_INDEX, value);
+}
+
 fn write_timer_control(core: &mut GameBoyCore, value: u8) {
-    core.cpu_timing.timer_running = value & 0x04 != 0;
-    core.cpu_timing.timer_inc_time = match value & 0x03 {
-        0 => 1024,
-        1 => 16,
-        2 => 64,
-        _ => 256,
-    };
+    let old_tac = core.memory.io_ports[TAC_IO_INDEX];
+    let should_tick = tac_write_triggers_timer_tick(core, old_tac, value & 0x07);
     core.memory.write_io_port(TAC_IO_INDEX, value & 0x07);
+    if should_tick {
+        increment_timer_counter(core);
+    }
+}
+
+fn advance_system_counter(core: &mut GameBoyCore, clocks: u16) {
+    let tac = core.memory.io_ports[TAC_IO_INDEX];
+    let old_signal = timer_edge_signal(core, tac);
+    core.cpu_timing.system_counter = core.cpu_timing.system_counter.wrapping_add(clocks);
+    core.memory
+        .write_io_port(DIV_IO_INDEX, (core.cpu_timing.system_counter >> 8) as u8);
+    tick_timer_on_falling_edge(core, old_signal);
+}
+
+fn tac_write_triggers_timer_tick(core: &GameBoyCore, old_tac: u8, new_tac: u8) -> bool {
+    if core.rom.properties.cgb_flag {
+        return selected_timer_bit(core, old_tac)
+            && !selected_timer_bit(core, new_tac)
+            && new_tac & 0x04 != 0;
+    }
+
+    timer_edge_signal(core, old_tac) && !timer_edge_signal(core, new_tac)
+}
+
+fn timer_edge_signal(core: &GameBoyCore, tac: u8) -> bool {
+    tac & 0x04 != 0 && selected_timer_bit(core, tac)
+}
+
+fn selected_timer_bit(core: &GameBoyCore, tac: u8) -> bool {
+    let bit = match tac & 0x03 {
+        0 => 9,
+        1 => 3,
+        2 => 5,
+        _ => 7,
+    };
+    core.cpu_timing.system_counter & (1_u16 << bit) != 0
+}
+
+fn tick_timer_on_falling_edge(core: &mut GameBoyCore, old_signal: bool) {
+    let new_signal = timer_edge_signal(core, core.memory.io_ports[TAC_IO_INDEX]);
+    if old_signal && !new_signal {
+        increment_timer_counter(core);
+    }
+}
+
+fn increment_timer_counter(core: &mut GameBoyCore) {
+    if core.cpu_timing.tima_reload_delay != 0 {
+        return;
+    }
+
+    let timer = core.memory.io_ports[TIMA_IO_INDEX];
+    let next_timer = timer.wrapping_add(1);
+    core.memory.write_io_port(TIMA_IO_INDEX, next_timer);
+    if next_timer == 0 {
+        core.cpu_timing.tima_reload_delay = TIMER_RELOAD_DELAY_M_CYCLES;
+    }
+}
+
+fn finish_pending_timer_reload(core: &mut GameBoyCore) {
+    if core.cpu_timing.tima_reload_delay == 0 {
+        return;
+    }
+
+    core.cpu_timing.tima_reload_delay -= 1;
+    if core.cpu_timing.tima_reload_delay != 0 {
+        return;
+    }
+
+    let modulo = core.memory.io_ports[TMA_IO_INDEX];
+    core.memory.write_io_port(TIMA_IO_INDEX, modulo);
+    let interrupt_flags = core.memory.io_ports[IF_IO_INDEX] | INTERRUPT_TIMER;
+    core.memory.write_io_port(IF_IO_INDEX, interrupt_flags);
 }
 
 fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
@@ -468,11 +624,23 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
         core.memory_access.oam = true;
         core.gpu_timing.blanked_screen = false;
         core.gpu_timing.time_in_mode = 0;
+        core.gpu_timing.line_scan_vram_clocks = 172;
         core.gpu_mode = GpuMode::ScanOam;
         core.memory
             .write_io_port(STAT_IO_INDEX, core.memory.io_ports[STAT_IO_INDEX] & 0xfc);
         core.memory.write_io_port(LY_IO_INDEX, 0);
     } else if !was_enabled {
+        core.memory_access.oam = false;
+        core.memory_access.vram = true;
+        core.gpu_timing.blanked_screen = false;
+        core.gpu_timing.time_in_mode = 0;
+        core.gpu_timing.line_scan_vram_clocks = 172;
+        core.gpu_mode = GpuMode::ScanOam;
+        core.memory.write_io_port(
+            STAT_IO_INDEX,
+            (core.memory.io_ports[STAT_IO_INDEX] & 0xfc) | 0x02,
+        );
+        core.memory.write_io_port(LY_IO_INDEX, 0);
         core.video_frame.begin_frame();
     }
 
@@ -481,12 +649,7 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
 
 fn start_oam_dma(core: &mut GameBoyCore, value: u8) {
     core.memory.write_io_port(DMA_IO_INDEX, value);
-    let mut source = u16::from(value) << 8;
-    for index in 0..core.memory.oam.len() {
-        let byte = read8(core, source);
-        core.memory.oam[index] = byte;
-        source = source.wrapping_add(1);
-    }
+    core.dma.oam.pending_source_high = Some(value);
 }
 
 fn write_key1(core: &mut GameBoyCore, value: u8) {
@@ -522,15 +685,17 @@ fn write_hdma5(core: &mut GameBoyCore, value: u8) {
         return;
     }
     if value & 0x80 == 0 {
-        if core.memory.io_ports[HDMA5_IO_INDEX] != 0xff {
-            core.memory.write_io_port(HDMA5_IO_INDEX, value);
+        if hblank_dma_active(core) {
+            core.memory
+                .write_io_port(HDMA5_IO_INDEX, core.memory.io_ports[HDMA5_IO_INDEX] | 0x80);
             return;
         }
         let blocks = usize::from(value & 0x7f) + 1;
-        transfer_hdma_block(core, blocks * 16);
+        transfer_hdma_block(core, blocks * HDMA_BLOCK_BYTES);
+        add_vram_dma_cpu_halt(core, blocks);
         core.memory.write_io_port(HDMA5_IO_INDEX, 0xff);
     } else {
-        core.memory.write_io_port(HDMA5_IO_INDEX, value);
+        core.memory.write_io_port(HDMA5_IO_INDEX, value & 0x7f);
     }
 }
 
@@ -633,11 +798,18 @@ fn transfer_hdma_block(core: &mut GameBoyCore, byte_count: usize) {
     }
     let mut destination = hdma_destination(core);
     for _ in 0..byte_count {
-        let value = read8(core, source);
-        write8(core, destination, value);
+        let value = read8_unrestricted(core, source);
+        write_hdma_vram_byte(core, destination, value);
         source = source.wrapping_add(1);
         destination = 0x8000 | (destination.wrapping_add(1) & 0x1fff);
     }
+    set_hdma_source(core, source);
+    set_hdma_destination(core, destination);
+}
+
+fn write_hdma_vram_byte(core: &mut GameBoyCore, destination: u16, value: u8) {
+    core.memory
+        .write_vram(core.memory_access.vram_bank_offset, destination, value);
 }
 
 fn hdma_source(core: &GameBoyCore) -> u16 {
@@ -652,8 +824,42 @@ fn hdma_destination(core: &GameBoyCore) -> u16 {
             & 0x1fff)
 }
 
+fn set_hdma_source(core: &mut GameBoyCore, source: u16) {
+    core.memory
+        .write_io_port(HDMA1_IO_INDEX, (source >> 8) as u8);
+    core.memory
+        .write_io_port(HDMA2_IO_INDEX, (source & 0x00f0) as u8);
+}
+
+fn set_hdma_destination(core: &mut GameBoyCore, destination: u16) {
+    let relative = destination & 0x1ff0;
+    core.memory
+        .write_io_port(HDMA3_IO_INDEX, ((relative >> 8) as u8) & 0x1f);
+    core.memory
+        .write_io_port(HDMA4_IO_INDEX, (relative & 0x00f0) as u8);
+}
+
 fn valid_hdma_source(source: u16) -> bool {
     (source & 0xe000) != 0x8000 && source < 0xe000
+}
+
+fn hblank_dma_active(core: &GameBoyCore) -> bool {
+    core.rom.properties.cgb_flag
+        && core.memory.io_ports[HDMA5_IO_INDEX] != 0xff
+        && core.memory.io_ports[HDMA5_IO_INDEX] & 0x80 == 0
+}
+
+fn add_vram_dma_cpu_halt(core: &mut GameBoyCore, blocks: usize) {
+    let blocks = i32::try_from(blocks).unwrap_or(i32::MAX / HDMA_BLOCK_M_CYCLES);
+    let speed_factor = core.gpu_timing.clock_factor.max(1);
+    let cycles = blocks
+        .saturating_mul(HDMA_BLOCK_M_CYCLES)
+        .saturating_mul(speed_factor);
+    core.dma.vram.cpu_halt_m_cycles = core.dma.vram.cpu_halt_m_cycles.saturating_add(cycles);
+}
+
+fn oam_dma_blocks_cpu_access(core: &GameBoyCore, address: u16) -> bool {
+    core.dma.oam.active && !core.rom.properties.cgb_flag && !(0xff80..=0xfffe).contains(&address)
 }
 
 #[cfg(test)]
@@ -687,20 +893,79 @@ mod tests {
     }
 
     #[test]
-    fn timer_control_configures_timer_frequency() {
+    fn system_counter_updates_visible_divider() {
         let mut core = GameBoyCore::default();
 
-        write8(&mut core, 0xff07, 0x05);
+        step_system_counter(&mut core, 256);
 
-        assert!(core.cpu_timing.timer_running);
-        assert_eq!(core.cpu_timing.timer_inc_time, 16);
+        assert_eq!(core.cpu_timing.system_counter, 0x0100);
+        assert_eq!(core.memory.io_ports[DIV_IO_INDEX], 0x01);
+    }
+
+    #[test]
+    fn divider_reset_ticks_timer_on_selected_bit_falling_edge() {
+        let mut core = GameBoyCore::default();
+        core.cpu_timing.system_counter = 0x0008;
+        core.memory.io_ports[DIV_IO_INDEX] = 0x22;
+        core.memory.io_ports[TAC_IO_INDEX] = 0x05;
+
+        write8(&mut core, 0xff04, 0xaa);
+
+        assert_eq!(core.cpu_timing.system_counter, 0);
+        assert_eq!(core.memory.io_ports[DIV_IO_INDEX], 0);
+        assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 1);
+    }
+
+    #[test]
+    fn timer_control_write_ticks_timer_on_dmg_falling_edge() {
+        let mut core = GameBoyCore::default();
+        core.cpu_timing.system_counter = 0x0008;
+        core.memory.io_ports[TAC_IO_INDEX] = 0x05;
+
+        write8(&mut core, 0xff07, 0x04);
+
+        assert_eq!(core.memory.io_ports[TAC_IO_INDEX], 0x04);
+        assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 1);
+    }
+
+    #[test]
+    fn cgb_timer_control_disable_does_not_tick_timer() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.cpu_timing.system_counter = 0x0008;
+        core.memory.io_ports[TAC_IO_INDEX] = 0x05;
+
+        write8(&mut core, 0xff07, 0x01);
+
+        assert_eq!(core.memory.io_ports[TAC_IO_INDEX], 0x01);
+        assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 0);
+    }
+
+    #[test]
+    fn lcd_enable_starts_line_zero_oam_scan() {
+        let mut core = GameBoyCore::default();
+        core.memory_access.oam = true;
+        core.memory_access.vram = true;
+        core.gpu_mode = GpuMode::HBlank;
+        core.gpu_timing.time_in_mode = 37;
+        core.memory.io_ports[LCDC_IO_INDEX] = 0x00;
+        core.memory.io_ports[STAT_IO_INDEX] = 0x00;
+        core.memory.io_ports[LY_IO_INDEX] = 42;
+
+        write8(&mut core, 0xff40, 0x80);
+
+        assert_eq!(core.gpu_mode, GpuMode::ScanOam);
+        assert_eq!(core.gpu_timing.time_in_mode, 0);
+        assert_eq!(core.memory.io_ports[STAT_IO_INDEX] & 0x03, 0x02);
+        assert_eq!(core.memory.io_ports[LY_IO_INDEX], 0);
+        assert!(!core.memory_access.oam);
+        assert!(core.memory_access.vram);
     }
 
     #[test]
     fn cgb_general_hdma_copies_to_vram() {
         let mut core = GameBoyCore::default();
         core.rom.properties.cgb_flag = true;
-        core.memory_access.vram = true;
         core.memory.io_ports[HDMA5_IO_INDEX] = 0xff;
         core.memory.rom[0x0200] = 0x80;
         core.memory.rom[0x0201] = 0x40;
@@ -715,6 +980,7 @@ mod tests {
         assert_eq!(core.memory.vram[1], 0x40);
         assert_eq!(&core.memory.tile_set[0..2], &[1, 2]);
         assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0xff);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, HDMA_BLOCK_M_CYCLES);
     }
 
     #[test]
@@ -733,10 +999,69 @@ mod tests {
 
         assert_eq!(core.memory.vram[0], 0x55);
         assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0xff);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, HDMA_BLOCK_M_CYCLES);
     }
 
     #[test]
-    fn oam_dma_copies_from_rom_source_pages() {
+    fn hblank_hdma_tracks_active_remaining_blocks() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.memory.rom[0x0200] = 0x11;
+        core.memory.rom[0x0210] = 0x22;
+        write8(&mut core, 0xff51, 0x02);
+        write8(&mut core, 0xff52, 0x00);
+        write8(&mut core, 0xff53, 0x00);
+        write8(&mut core, 0xff54, 0x00);
+
+        write8(&mut core, 0xff55, 0x81);
+
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0x01);
+
+        run_hblank_dma(&mut core);
+
+        assert_eq!(core.memory.vram[0], 0x11);
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0x00);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, HDMA_BLOCK_M_CYCLES);
+
+        run_hblank_dma(&mut core);
+
+        assert_eq!(core.memory.vram[0x10], 0x22);
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0xff);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, HDMA_BLOCK_M_CYCLES * 2);
+    }
+
+    #[test]
+    fn hblank_hdma_does_not_run_while_cpu_is_halted() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.cpu_mode = CpuMode::Halted;
+        core.memory.rom[0x0200] = 0x55;
+        write8(&mut core, 0xff51, 0x02);
+        write8(&mut core, 0xff52, 0x00);
+        write8(&mut core, 0xff53, 0x00);
+        write8(&mut core, 0xff54, 0x00);
+        write8(&mut core, 0xff55, 0x80);
+
+        run_hblank_dma(&mut core);
+
+        assert_eq!(core.memory.vram[0], 0x00);
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0x00);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, 0);
+    }
+
+    #[test]
+    fn active_hblank_hdma_can_be_stopped_by_hdma5_write() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        write8(&mut core, 0xff55, 0x82);
+
+        write8(&mut core, 0xff55, 0x00);
+
+        assert_eq!(core.memory.io_ports[HDMA5_IO_INDEX], 0x82);
+    }
+
+    #[test]
+    fn oam_dma_starts_after_deferred_activation_and_steps_one_byte_per_mcycle() {
         let mut core = GameBoyCore::default();
         core.memory_access.oam = true;
         core.memory.rom[0x0200] = 0x12;
@@ -744,9 +1069,48 @@ mod tests {
 
         write8(&mut core, 0xff46, 0x02);
 
+        assert_eq!(core.memory.oam[0], 0x00);
+        assert_eq!(core.dma.oam.pending_source_high, Some(0x02));
+        assert!(!core.dma.oam.active);
+
+        begin_deferred_oam_dma(&mut core);
+        step_oam_dma(&mut core);
+
         assert_eq!(core.memory.oam[0], 0x12);
+        assert_eq!(core.memory.oam[1], 0x00);
+        assert!(core.dma.oam.active);
+
+        step_oam_dma(&mut core);
+
         assert_eq!(core.memory.oam[1], 0x34);
         assert_eq!(core.memory.io_ports[DMA_IO_INDEX], 0x02);
+    }
+
+    #[test]
+    fn oam_dma_blocks_non_hram_cpu_access_on_dmg() {
+        let mut core = GameBoyCore::default();
+        core.memory.rom[0x0100] = 0x12;
+        core.memory.io_ports[0x80] = 0x34;
+        core.dma.oam.active = true;
+
+        assert_eq!(read8(&core, 0x0100), 0xff);
+        assert_eq!(read8(&core, 0xff80), 0x34);
+
+        write8(&mut core, 0xc000, 0x56);
+        write8(&mut core, 0xff80, 0x78);
+
+        assert_eq!(core.memory.wram[0], 0x00);
+        assert_eq!(core.memory.io_ports[0x80], 0x78);
+    }
+
+    #[test]
+    fn oam_dma_does_not_block_cgb_cpu_bus() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.cgb_flag = true;
+        core.memory.rom[0x0100] = 0x12;
+        core.dma.oam.active = true;
+
+        assert_eq!(read8(&core, 0x0100), 0x12);
     }
 
     #[test]

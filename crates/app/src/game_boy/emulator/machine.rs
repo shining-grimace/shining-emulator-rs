@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::game_boy::emulator::audio_unit::AudioUnitState;
 use crate::game_boy::emulator::constants::{GB_CLOCK_HZ, SGB_CLOCK_HZ};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuRegisters, CpuTiming, SerialState};
+use crate::game_boy::emulator::dma::DmaState;
 use crate::game_boy::emulator::gpu::{GpuMode, GpuTiming, LineRenderer, MemoryAccess};
 use crate::game_boy::emulator::memory::GameBoyMemory;
 use crate::game_boy::emulator::palettes::{CgbPaletteRegisters, PaletteState};
@@ -19,6 +20,7 @@ pub(crate) struct GameBoyCore {
     pub(crate) cpu_timing: CpuTiming,
     pub(crate) cpu_mode: CpuMode,
     pub(crate) serial: SerialState,
+    pub(crate) dma: DmaState,
     pub(crate) gpu_timing: GpuTiming,
     pub(crate) gpu_mode: GpuMode,
     pub(crate) line_renderer: LineRenderer,
@@ -41,6 +43,7 @@ impl Default for GameBoyCore {
             cpu_timing: CpuTiming::default(),
             cpu_mode: CpuMode::default(),
             serial: SerialState::default(),
+            dma: DmaState::default(),
             gpu_timing: GpuTiming::default(),
             gpu_mode: GpuMode::default(),
             line_renderer: LineRenderer::default(),
@@ -78,6 +81,7 @@ impl GameBoyCore {
         self.cpu_timing.reset_for_rom_load();
         self.cpu_mode.reset_for_rom_load();
         self.serial.reset_for_rom_load();
+        self.dma.reset_for_rom_load();
         self.gpu_timing.reset_for_rom_load();
         self.gpu_mode.reset_for_rom_load();
         self.memory_access.reset_for_rom_load();

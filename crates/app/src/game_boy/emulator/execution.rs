@@ -8,6 +8,8 @@ const FLAG_Z: u8 = 0x80;
 const FLAG_N: u8 = 0x40;
 const FLAG_H: u8 = 0x20;
 const FLAG_C: u8 = 0x10;
+const IF_IO_INDEX: usize = 0x0f;
+const IE_IO_INDEX: usize = 0xff;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Reg8 {
@@ -38,6 +40,15 @@ enum Condition {
 }
 
 pub(crate) fn perform_op(core: &mut GameBoyCore) -> i32 {
+    let consume_halt_bug = core.cpu_registers.halt_bug;
+    let cycles = perform_op_inner(core);
+    if consume_halt_bug {
+        core.cpu_registers.halt_bug = false;
+    }
+    cycles
+}
+
+fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
     if core.cpu_mode == CpuMode::Halted {
         return 4;
     }
@@ -129,8 +140,16 @@ pub(crate) fn perform_op(core: &mut GameBoyCore) -> i32 {
             4
         }
         0x76 => {
-            core.cpu_mode = CpuMode::Halted;
-            advance_pc(core, 1);
+            let halt_bug = !core.cpu_registers.ime
+                && core.cpu_registers.ime_enable_delay != 1
+                && interrupt_pending(core);
+            if halt_bug {
+                advance_pc(core, 1);
+                core.cpu_registers.halt_bug = true;
+            } else {
+                core.cpu_mode = CpuMode::Halted;
+                advance_pc(core, 1);
+            }
             4
         }
         0xc0 => conditional_return(core, Condition::Nz),
@@ -253,6 +272,7 @@ pub(crate) fn perform_op(core: &mut GameBoyCore) -> i32 {
         }
         0xf3 => {
             core.cpu_registers.ime = false;
+            core.cpu_registers.ime_enable_delay = 0;
             advance_pc(core, 1);
             4
         }
@@ -283,7 +303,7 @@ pub(crate) fn perform_op(core: &mut GameBoyCore) -> i32 {
             16
         }
         0xfb => {
-            core.cpu_registers.ime = true;
+            core.cpu_registers.ime_enable_delay = 2;
             advance_pc(core, 1);
             4
         }
@@ -421,7 +441,7 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
 }
 
 fn execute_cb(core: &mut GameBoyCore) -> i32 {
-    let opcode = read8(core, pc(core).wrapping_add(1));
+    let opcode = read8(core, operand_address(core, 1));
     let register = reg8_from_index(opcode & 0x07);
     let mut value = read_reg8(core, register);
 
@@ -453,15 +473,26 @@ fn pc(core: &GameBoyCore) -> u16 {
 }
 
 fn advance_pc(core: &mut GameBoyCore, amount: u16) {
-    core.cpu_registers.pc = u32::from(pc(core).wrapping_add(amount));
+    core.cpu_registers.pc = u32::from(pc_after_instruction(core, amount));
+}
+
+fn pc_after_instruction(core: &GameBoyCore, amount: u16) -> u16 {
+    let halt_bug_adjustment = u16::from(core.cpu_registers.halt_bug);
+    pc(core).wrapping_add(amount.saturating_sub(halt_bug_adjustment))
+}
+
+fn operand_address(core: &GameBoyCore, offset: u16) -> u16 {
+    let halt_bug_adjustment = u16::from(core.cpu_registers.halt_bug);
+    pc(core).wrapping_add(offset.saturating_sub(halt_bug_adjustment))
 }
 
 fn imm8(core: &GameBoyCore) -> u8 {
-    read8(core, pc(core).wrapping_add(1))
+    read8(core, operand_address(core, 1))
 }
 
 fn imm16(core: &GameBoyCore) -> u16 {
-    read16(core, pc(core).wrapping_add(1))
+    u16::from(read8(core, operand_address(core, 1)))
+        | (u16::from(read8(core, operand_address(core, 2))) << 8)
 }
 
 fn signed_imm8(core: &GameBoyCore) -> i8 {
@@ -470,7 +501,7 @@ fn signed_imm8(core: &GameBoyCore) -> i8 {
 
 fn relative_jump(core: &mut GameBoyCore) {
     let offset = i16::from(signed_imm8(core));
-    let next_pc = pc(core).wrapping_add(2).wrapping_add_signed(offset);
+    let next_pc = pc_after_instruction(core, 2).wrapping_add_signed(offset);
     core.cpu_registers.pc = u32::from(next_pc);
 }
 
@@ -505,7 +536,7 @@ fn condition_met(core: &GameBoyCore, condition: Condition) -> bool {
 
 fn call(core: &mut GameBoyCore) -> i32 {
     let target = imm16(core);
-    let return_address = pc(core).wrapping_add(3);
+    let return_address = pc_after_instruction(core, 3);
     push(core, return_address);
     core.cpu_registers.pc = u32::from(target);
     24
@@ -524,6 +555,7 @@ fn return_from_call(core: &mut GameBoyCore, enable_interrupts: bool) -> i32 {
     core.cpu_registers.pc = u32::from(pop(core));
     if enable_interrupts {
         core.cpu_registers.ime = true;
+        core.cpu_registers.ime_enable_delay = 0;
     }
     16
 }
@@ -539,7 +571,7 @@ fn conditional_return(core: &mut GameBoyCore, condition: Condition) -> i32 {
 }
 
 fn restart(core: &mut GameBoyCore, address: u16) -> i32 {
-    let return_address = pc(core).wrapping_add(1);
+    let return_address = pc_after_instruction(core, 1);
     push(core, return_address);
     core.cpu_registers.pc = u32::from(address);
     16
@@ -939,6 +971,12 @@ fn invalid_instruction(core: &mut GameBoyCore, opcode: u8) -> i32 {
     core.cpu_timing.clocks_acc.max(4)
 }
 
+fn interrupt_pending(core: &GameBoyCore) -> bool {
+    let enabled = core.memory.io_ports.get(IE_IO_INDEX).copied().unwrap_or(0);
+    let requested = core.memory.io_ports.get(IF_IO_INDEX).copied().unwrap_or(0);
+    enabled & requested & 0x1f != 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -990,5 +1028,35 @@ mod tests {
         assert_eq!(perform_op(&mut core), 8);
 
         assert_eq!(core.cpu_registers.f, FLAG_Z | FLAG_H | FLAG_C);
+    }
+
+    #[test]
+    fn halt_with_disabled_ime_and_pending_interrupt_triggers_halt_bug() {
+        let mut core = GameBoyCore::default();
+        core.memory.rom[0x0100] = 0x76;
+        core.memory.io_ports[IE_IO_INDEX] = 0x01;
+        core.memory.io_ports[IF_IO_INDEX] = 0x01;
+        core.cpu_registers.pc = 0x0100;
+
+        assert_eq!(perform_op(&mut core), 4);
+
+        assert_eq!(core.cpu_mode, CpuMode::Running);
+        assert_eq!(core.cpu_registers.pc, 0x0101);
+        assert!(core.cpu_registers.halt_bug);
+    }
+
+    #[test]
+    fn halt_bug_shifts_immediate_operands_and_pc_advance() {
+        let mut core = GameBoyCore::default();
+        core.memory.rom[0x0100] = 0x06;
+        core.memory.rom[0x0101] = 0x42;
+        core.cpu_registers.pc = 0x0100;
+        core.cpu_registers.halt_bug = true;
+
+        assert_eq!(perform_op(&mut core), 8);
+
+        assert_eq!(core.cpu_registers.b, 0x06);
+        assert_eq!(core.cpu_registers.pc, 0x0101);
+        assert!(!core.cpu_registers.halt_bug);
     }
 }
