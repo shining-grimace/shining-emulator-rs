@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::game_boy::emulator::GameBoyCore;
 use crate::game_boy::emulator::cpu::{CpuMode, CpuRegisters, CpuTiming, SerialState};
+use crate::game_boy::emulator::dma::{DmaState, OamDmaState, VramDmaState};
 use crate::game_boy::emulator::gpu::{GpuMode, GpuTiming, LineRenderer, MemoryAccess};
 use crate::game_boy::emulator::input::JoypadInputNibbles;
 use crate::game_boy::emulator::memory::GameBoyMemory;
@@ -36,6 +37,7 @@ pub(crate) fn apply_save_state(core: &mut GameBoyCore, bytes: &[u8]) -> Result<(
     core.cpu_timing = state.cpu_timing.into();
     core.cpu_mode = state.cpu_mode.into();
     core.serial = state.serial.into();
+    core.dma = state.dma.into();
     core.gpu_timing = state.gpu_timing.into();
     core.gpu_mode = state.gpu_mode.into();
     core.line_renderer = state.line_renderer.into();
@@ -106,6 +108,8 @@ struct EmulatorSaveState {
     cpu_timing: CpuTimingSnapshot,
     cpu_mode: CpuModeSnapshot,
     serial: SerialSnapshot,
+    #[serde(default)]
+    dma: DmaSnapshot,
     gpu_timing: GpuTimingSnapshot,
     gpu_mode: GpuModeSnapshot,
     line_renderer: LineRendererSnapshot,
@@ -127,6 +131,7 @@ impl EmulatorSaveState {
             cpu_timing: CpuTimingSnapshot::from(core.cpu_timing),
             cpu_mode: CpuModeSnapshot::from(core.cpu_mode),
             serial: SerialSnapshot::from(core.serial),
+            dma: DmaSnapshot::from(core.dma),
             gpu_timing: GpuTimingSnapshot::from(core.gpu_timing),
             gpu_mode: GpuModeSnapshot::from(core.gpu_mode),
             line_renderer: LineRendererSnapshot::from(core.line_renderer),
@@ -217,6 +222,10 @@ struct CpuRegistersSnapshot {
     h: u8,
     l: u8,
     ime: bool,
+    #[serde(default)]
+    ime_enable_delay: u8,
+    #[serde(default)]
+    halt_bug: bool,
 }
 
 impl From<CpuRegisters> for CpuRegistersSnapshot {
@@ -233,6 +242,8 @@ impl From<CpuRegisters> for CpuRegistersSnapshot {
             h: registers.h,
             l: registers.l,
             ime: registers.ime,
+            ime_enable_delay: registers.ime_enable_delay,
+            halt_bug: registers.halt_bug,
         }
     }
 }
@@ -251,6 +262,8 @@ impl From<CpuRegistersSnapshot> for CpuRegisters {
             h: snapshot.h,
             l: snapshot.l,
             ime: snapshot.ime,
+            ime_enable_delay: snapshot.ime_enable_delay,
+            halt_bug: snapshot.halt_bug,
         }
     }
 }
@@ -259,10 +272,10 @@ impl From<CpuRegistersSnapshot> for CpuRegisters {
 struct CpuTimingSnapshot {
     clocks_acc: i32,
     clock_frequency_hz: i64,
-    divider_count: u32,
-    timer_count: u32,
-    timer_inc_time: u32,
-    timer_running: bool,
+    #[serde(default)]
+    system_counter: u16,
+    #[serde(default)]
+    tima_reload_delay: u8,
 }
 
 impl From<CpuTiming> for CpuTimingSnapshot {
@@ -270,10 +283,8 @@ impl From<CpuTiming> for CpuTimingSnapshot {
         Self {
             clocks_acc: timing.clocks_acc,
             clock_frequency_hz: timing.clock_frequency_hz,
-            divider_count: timing.divider_count,
-            timer_count: timing.timer_count,
-            timer_inc_time: timing.timer_inc_time,
-            timer_running: timing.timer_running,
+            system_counter: timing.system_counter,
+            tima_reload_delay: timing.tima_reload_delay,
         }
     }
 }
@@ -283,10 +294,8 @@ impl From<CpuTimingSnapshot> for CpuTiming {
         Self {
             clocks_acc: snapshot.clocks_acc,
             clock_frequency_hz: snapshot.clock_frequency_hz,
-            divider_count: snapshot.divider_count,
-            timer_count: snapshot.timer_count,
-            timer_inc_time: snapshot.timer_inc_time,
-            timer_running: snapshot.timer_running,
+            system_counter: snapshot.system_counter,
+            tima_reload_delay: snapshot.tima_reload_delay,
         }
     }
 }
@@ -348,13 +357,94 @@ impl From<SerialSnapshot> for SerialState {
     }
 }
 
+#[derive(Default, Deserialize, Serialize)]
+struct DmaSnapshot {
+    oam: OamDmaSnapshot,
+    vram: VramDmaSnapshot,
+}
+
+impl From<DmaState> for DmaSnapshot {
+    fn from(dma: DmaState) -> Self {
+        Self {
+            oam: OamDmaSnapshot::from(dma.oam),
+            vram: VramDmaSnapshot::from(dma.vram),
+        }
+    }
+}
+
+impl From<DmaSnapshot> for DmaState {
+    fn from(snapshot: DmaSnapshot) -> Self {
+        Self {
+            oam: snapshot.oam.into(),
+            vram: snapshot.vram.into(),
+        }
+    }
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct OamDmaSnapshot {
+    pending_source_high: Option<u8>,
+    source_high: u8,
+    next_index: u8,
+    active: bool,
+}
+
+impl From<OamDmaState> for OamDmaSnapshot {
+    fn from(oam: OamDmaState) -> Self {
+        Self {
+            pending_source_high: oam.pending_source_high,
+            source_high: oam.source_high,
+            next_index: oam.next_index,
+            active: oam.active,
+        }
+    }
+}
+
+impl From<OamDmaSnapshot> for OamDmaState {
+    fn from(snapshot: OamDmaSnapshot) -> Self {
+        Self {
+            pending_source_high: snapshot.pending_source_high,
+            source_high: snapshot.source_high,
+            next_index: snapshot.next_index,
+            active: snapshot.active,
+        }
+    }
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct VramDmaSnapshot {
+    cpu_halt_m_cycles: i32,
+}
+
+impl From<VramDmaState> for VramDmaSnapshot {
+    fn from(vram: VramDmaState) -> Self {
+        Self {
+            cpu_halt_m_cycles: vram.cpu_halt_m_cycles,
+        }
+    }
+}
+
+impl From<VramDmaSnapshot> for VramDmaState {
+    fn from(snapshot: VramDmaSnapshot) -> Self {
+        Self {
+            cpu_halt_m_cycles: snapshot.cpu_halt_m_cycles,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct GpuTimingSnapshot {
     clock_factor: i32,
     time_in_mode: i32,
+    #[serde(default = "default_line_scan_vram_clocks")]
+    line_scan_vram_clocks: i32,
     last_ly_compare: u32,
     blanked_screen: bool,
     need_clear: bool,
+}
+
+fn default_line_scan_vram_clocks() -> i32 {
+    172
 }
 
 impl From<GpuTiming> for GpuTimingSnapshot {
@@ -362,6 +452,7 @@ impl From<GpuTiming> for GpuTimingSnapshot {
         Self {
             clock_factor: timing.clock_factor,
             time_in_mode: timing.time_in_mode,
+            line_scan_vram_clocks: timing.line_scan_vram_clocks,
             last_ly_compare: timing.last_ly_compare,
             blanked_screen: timing.blanked_screen,
             need_clear: timing.need_clear,
@@ -374,6 +465,7 @@ impl From<GpuTimingSnapshot> for GpuTiming {
         Self {
             clock_factor: snapshot.clock_factor,
             time_in_mode: snapshot.time_in_mode,
+            line_scan_vram_clocks: snapshot.line_scan_vram_clocks,
             last_ly_compare: snapshot.last_ly_compare,
             blanked_screen: snapshot.blanked_screen,
             need_clear: snapshot.need_clear,
@@ -597,16 +689,32 @@ impl CgbPaletteRegistersSnapshot {
 #[derive(Deserialize, Serialize)]
 struct RomSnapshot {
     properties: RomPropertiesSnapshot,
+    #[serde(default)]
+    fixed_bank_offset: u32,
     bank_offset: u32,
+    #[serde(default = "default_mbc1_lower_bank")]
+    mbc1_lower_bank: u8,
+    #[serde(default)]
+    mbc1_upper_bank: u8,
+    #[serde(default)]
+    suspicious_mbc_warning_logged: bool,
     current_rom_id: String,
     current_opened_file: String,
+}
+
+fn default_mbc1_lower_bank() -> u8 {
+    1
 }
 
 impl From<&RomState> for RomSnapshot {
     fn from(rom: &RomState) -> Self {
         Self {
             properties: RomPropertiesSnapshot::from(rom.properties),
+            fixed_bank_offset: rom.fixed_bank_offset,
             bank_offset: rom.bank_offset,
+            mbc1_lower_bank: rom.mbc1_lower_bank,
+            mbc1_upper_bank: rom.mbc1_upper_bank,
+            suspicious_mbc_warning_logged: rom.suspicious_mbc_warning_logged,
             current_rom_id: rom.current_rom_id.clone(),
             current_opened_file: rom.current_opened_file.clone(),
         }
@@ -617,7 +725,11 @@ impl From<RomSnapshot> for RomState {
     fn from(snapshot: RomSnapshot) -> Self {
         Self {
             properties: snapshot.properties.into(),
+            fixed_bank_offset: snapshot.fixed_bank_offset,
             bank_offset: snapshot.bank_offset,
+            mbc1_lower_bank: snapshot.mbc1_lower_bank,
+            mbc1_upper_bank: snapshot.mbc1_upper_bank,
+            suspicious_mbc_warning_logged: snapshot.suspicious_mbc_warning_logged,
             current_rom_id: snapshot.current_rom_id,
             current_opened_file: snapshot.current_opened_file,
         }
@@ -922,6 +1034,21 @@ mod tests {
         core.runtime.is_running = true;
         core.cpu_registers.pc = 0x1234;
         core.cpu_registers.a = 0xab;
+        core.cpu_registers.ime_enable_delay = 2;
+        core.cpu_registers.halt_bug = true;
+        core.cpu_timing.system_counter = 0x3456;
+        core.cpu_timing.tima_reload_delay = 1;
+        core.dma.oam.pending_source_high = Some(0xc0);
+        core.dma.oam.source_high = 0xd0;
+        core.dma.oam.next_index = 0x20;
+        core.dma.oam.active = true;
+        core.dma.vram.cpu_halt_m_cycles = 3;
+        core.gpu_timing.line_scan_vram_clocks = 180;
+        core.rom.fixed_bank_offset = 0x8000;
+        core.rom.bank_offset = 0xc000;
+        core.rom.mbc1_lower_bank = 3;
+        core.rom.mbc1_upper_bank = 2;
+        core.rom.suspicious_mbc_warning_logged = true;
         core.memory.wram[0x10] = 0x42;
         core.memory.vram[0x20] = 0x24;
         core.sram.data[0x30] = 0x99;
@@ -930,6 +1057,17 @@ mod tests {
         let bytes = encode_save_state(&core).expect("save state should encode");
         core.cpu_registers.pc = 0;
         core.cpu_registers.a = 0;
+        core.cpu_registers.ime_enable_delay = 0;
+        core.cpu_registers.halt_bug = false;
+        core.cpu_timing.system_counter = 0;
+        core.cpu_timing.tima_reload_delay = 0;
+        core.dma.reset_for_rom_load();
+        core.gpu_timing.line_scan_vram_clocks = 0;
+        core.rom.fixed_bank_offset = 0;
+        core.rom.bank_offset = 0;
+        core.rom.mbc1_lower_bank = 1;
+        core.rom.mbc1_upper_bank = 0;
+        core.rom.suspicious_mbc_warning_logged = false;
         core.memory.wram[0x10] = 0;
         core.memory.vram[0x20] = 0;
         core.sram.data[0x30] = 0;
@@ -938,6 +1076,21 @@ mod tests {
 
         assert_eq!(core.cpu_registers.pc, 0x1234);
         assert_eq!(core.cpu_registers.a, 0xab);
+        assert_eq!(core.cpu_registers.ime_enable_delay, 2);
+        assert!(core.cpu_registers.halt_bug);
+        assert_eq!(core.cpu_timing.system_counter, 0x3456);
+        assert_eq!(core.cpu_timing.tima_reload_delay, 1);
+        assert_eq!(core.dma.oam.pending_source_high, Some(0xc0));
+        assert_eq!(core.dma.oam.source_high, 0xd0);
+        assert_eq!(core.dma.oam.next_index, 0x20);
+        assert!(core.dma.oam.active);
+        assert_eq!(core.dma.vram.cpu_halt_m_cycles, 3);
+        assert_eq!(core.gpu_timing.line_scan_vram_clocks, 180);
+        assert_eq!(core.rom.fixed_bank_offset, 0x8000);
+        assert_eq!(core.rom.bank_offset, 0xc000);
+        assert_eq!(core.rom.mbc1_lower_bank, 3);
+        assert_eq!(core.rom.mbc1_upper_bank, 2);
+        assert!(core.rom.suspicious_mbc_warning_logged);
         assert_eq!(core.memory.wram[0x10], 0x42);
         assert_eq!(core.memory.vram[0x20], 0x24);
         assert_eq!(core.sram.data[0x30], 0x99);
