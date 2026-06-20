@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_midi_graph::{
     MidiFileSource, MidiGraphAudioContext, MidiGraphPlugin, Sf2FileSource, WaveFileSource,
-    midi::event::{CueData, Event, EventTarget, Message, MidiPlaybackState},
+    midi::event::{CueData, Event, EventTarget, EventTiming, Message, MidiPlaybackState},
 };
 
 use crate::app_state::AppState;
@@ -138,6 +138,7 @@ fn queue_menu_audio_event(
     if let Err(error) = sender.send(Message {
         target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
         data: event,
+        timing: EventTiming::Imprecise,
     }) {
         eprintln!("failed to queue menu audio {description}: {error}");
     }

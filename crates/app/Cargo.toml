@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 bevy = { workspace = true }
-bevy-midi-graph = { git = "https://github.com/shining-grimace/bevy-midi-graph.git", rev = "c546ca54da2de352713e640450c06be6ede40dbf" }
+bevy-midi-graph = { git = "https://github.com/shining-grimace/bevy-midi-graph.git", rev = "d3c0bb235cf33197e263c5053bf4658baf828413" }
 directories = "6.0.0"
 fastrand = "2.4.1"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -4,7 +4,7 @@ use std::path::Path;
 use bevy::prelude::*;
 use bevy_midi_graph::{
     GraphAssetLoader, MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource,
-    midi::event::{Event, EventTarget, Message},
+    midi::event::{Event, EventTarget, EventTiming, Message},
     midi::node::ChildConfig,
 };
 use serde::{Deserialize, Serialize};
@@ -132,6 +132,7 @@ pub(crate) fn apply_audio_preset_to_playback(
             .send(Message {
                 target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
                 data: Event::StateSnapshot(snapshot),
+                timing: EventTiming::Imprecise,
             })
             .map_err(|error| error.to_string())?;
     }
