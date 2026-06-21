@@ -114,8 +114,9 @@ impl Plugin for UiInteractionsPlugin {
                 (
                     focus::ensure_initial_focus.run_if(initial_focus_added),
                     focus::focus_pressed_element,
-                    focus::navigate_focus,
                     focus::restore_focus_from_input,
+                    list_view::navigate_virtual_list_by_keys,
+                    focus::navigate_focus,
                     list_view::focus_list_item_on_list_focus,
                     list_view::enter_focused_list_item,
                     list_view::remember_focused_list_item,

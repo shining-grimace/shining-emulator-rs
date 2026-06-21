@@ -123,7 +123,31 @@ a. Add a ROM provider, disabled by default, which loads publicly-available
    ROMs that validate emulation correctness
 b. Add integration tests to run emulation on validation ROMs
 
-# Stage 8 - Polish & Embellishments
+# Stage 8 - Fixing all known issues
+
+Resolve all known issues to to get the product to a production-grade point.
+
+Steps: 
+a. Test everything - all possible things - and keep the issues list below updated
+b. Fix everything on the list below
+c. Finalise all assets (app icons, hero images, audio samples, menu music)
+
+Known issues:
+- Image upscaling isn't implemented
+- SGB border isn't implemented
+- Upon return to Home from a game, the audio volumes and other parameters aren't reset 
+- Emulation speed changing may or may not be implemented (hasn't been tested)
+- "rhythm-land" reports that this is an inaccurate emulator
+- Several SGB ROMs have incorrect palette grids (e.g. on a splash screen)
+- Audio needs to be tweaked to match a good reference video
+- On deleting a ROM provider from the list, it doesn't disappear immediately from the list
+- The audio doesn't loop, but reaches the end and stops
+- On Android, the menu music shows audio channels that are not a well-volume-balanced mix
+- On Android, emulation seems to keep running when the app gets backgrounded
+- Controllers haven't been tested on any platform
+- Windows hasn't been tested
+
+# Stage 9 - Polish & Embellishments
 
 Polish everything, and add extra unnecessary things for charm and replayability.
 
@@ -132,13 +156,13 @@ NOTE: Move some of these up?
 Steps:
 a. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
    press of the left Ctrl key, conditionally in debug builds only
-b. Remove remaining jank from the UI
-c. Consider accessibility
-d. Consider multi language support
-e. Consider compatibility with libretro cores
-f. Check is vsync enabled, or any other possible cause of high CPU usage in settings
-g. Make sure all dead-code annotations are removed
-h. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
+b. Consider accessibility
+c. Consider multi language support
+d. Consider compatibility with libretro cores
+e. Revise the Homebrew Hub integration: are we using it within its terms, and can the ROM list use the most highly-regarded ROMs only?
+e. Check is vsync enabled, or any other possible cause of high CPU usage in settings
+f. Make sure all dead-code annotations are removed
+g. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
    in/out and fading in/out on appear/disappear, row focus highlights in list views
    translating from one to another, scrolling being ease-out rather than instant
-i. Easter eggs?
+h. Easter eggs?

@@ -1471,8 +1471,29 @@ mod tests {
                 write8(&mut core, 0xff00, JOYP_SELECT_NONE);
             }
         }
+        write8(&mut core, 0xff00, JOYP_SELECT_DIRECTIONS);
+        write8(&mut core, 0xff00, JOYP_SELECT_NONE);
 
         assert!(core.sgb.mult_enabled);
+        assert_eq!(core.sgb.packet_errors, 0);
+    }
+
+    #[test]
+    fn sgb_joypad_packet_stop_bit_does_not_shift_next_packet() {
+        let mut core = GameBoyCore::default();
+        core.rom.properties.sgb_flag = true;
+        let mut first_packet = [0_u8; 16];
+        first_packet[0] = (0x07 << 3) | 0x02;
+        first_packet[3] = 44;
+        first_packet[6..].fill(0xff);
+        let mut second_packet = [0_u8; 16];
+        second_packet[0] = 0xff;
+
+        write_sgb_packet(&mut core, first_packet);
+        write_sgb_packet(&mut core, second_packet);
+
+        assert_eq!(core.sgb.command_bytes[1][0], 0xff);
+        assert_eq!(core.sgb.character_palettes[2 * 20 + 3], 3);
         assert_eq!(core.sgb.packet_errors, 0);
     }
 
@@ -1530,5 +1551,7 @@ mod tests {
                 write8(core, 0xff00, JOYP_SELECT_NONE);
             }
         }
+        write8(core, 0xff00, JOYP_SELECT_DIRECTIONS);
+        write8(core, 0xff00, JOYP_SELECT_NONE);
     }
 }

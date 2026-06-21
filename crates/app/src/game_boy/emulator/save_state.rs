@@ -891,6 +891,10 @@ impl SramSnapshot {
 #[derive(Deserialize, Serialize)]
 struct SgbSnapshot {
     reading_command: bool,
+    #[serde(default)]
+    awaiting_stop_bit: bool,
+    #[serde(default)]
+    stop_bit_received: bool,
     command_bytes: Vec<u32>,
     command_bits: Vec<u8>,
     command: u32,
@@ -908,12 +912,16 @@ struct SgbSnapshot {
     palettes: Vec<u32>,
     system_palettes: Vec<u32>,
     character_palettes: Vec<u32>,
+    #[serde(default)]
+    attribute_files: Vec<u32>,
 }
 
 impl From<&SgbState> for SgbSnapshot {
     fn from(sgb: &SgbState) -> Self {
         Self {
             reading_command: sgb.reading_command,
+            awaiting_stop_bit: sgb.awaiting_stop_bit,
+            stop_bit_received: sgb.stop_bit_received,
             command_bytes: sgb
                 .command_bytes
                 .iter()
@@ -935,6 +943,7 @@ impl From<&SgbState> for SgbSnapshot {
             palettes: sgb.palettes.to_vec(),
             system_palettes: sgb.system_palettes.to_vec(),
             character_palettes: sgb.character_palettes.to_vec(),
+            attribute_files: sgb.attribute_files.to_vec(),
         }
     }
 }
@@ -975,8 +984,19 @@ impl SgbSnapshot {
             &self.character_palettes,
             &mut sgb.character_palettes,
         )?;
+        if self.attribute_files.is_empty() {
+            sgb.attribute_files.fill(0);
+        } else {
+            copy_u32_slice(
+                "sgb.attribute_files",
+                &self.attribute_files,
+                &mut sgb.attribute_files,
+            )?;
+        }
 
         sgb.reading_command = self.reading_command;
+        sgb.awaiting_stop_bit = self.awaiting_stop_bit;
+        sgb.stop_bit_received = self.stop_bit_received;
         sgb.command = self.command;
         sgb.read_command_bits = self.read_command_bits;
         sgb.read_command_bytes = self.read_command_bytes;
@@ -1053,6 +1073,7 @@ mod tests {
         core.memory.vram[0x20] = 0x24;
         core.sram.data[0x30] = 0x99;
         core.sram.has_battery = true;
+        core.sgb.attribute_files[0x40] = 3;
 
         let bytes = encode_save_state(&core).expect("save state should encode");
         core.cpu_registers.pc = 0;
@@ -1071,6 +1092,7 @@ mod tests {
         core.memory.wram[0x10] = 0;
         core.memory.vram[0x20] = 0;
         core.sram.data[0x30] = 0;
+        core.sgb.attribute_files[0x40] = 0;
 
         apply_save_state(&mut core, &bytes).expect("save state should restore");
 
@@ -1095,5 +1117,6 @@ mod tests {
         assert_eq!(core.memory.vram[0x20], 0x24);
         assert_eq!(core.sram.data[0x30], 0x99);
         assert!(core.sram.is_dirty());
+        assert_eq!(core.sgb.attribute_files[0x40], 3);
     }
 }

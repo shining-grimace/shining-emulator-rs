@@ -26,6 +26,9 @@ pub(super) const SGB_TRANSFER_VRAM_BYTES: usize = 4_096;
 pub(super) const SGB_PALETTE_COLORS: usize = 4 * 4;
 pub(super) const SGB_SYSTEM_PALETTE_COLORS: usize = 512 * 4;
 pub(super) const SGB_CHARACTER_PALETTE_ENTRIES: usize = 18 * 20;
+pub(super) const SGB_ATTRIBUTE_FILES: usize = 45;
+pub(super) const SGB_ATTRIBUTE_FILE_ENTRIES: usize =
+    SGB_ATTRIBUTE_FILES * SGB_CHARACTER_PALETTE_ENTRIES;
 
 pub(super) const AUDIO_BUFFER_FRAMES: usize = 12_000;
 pub(super) const AUDIO_WAVEFORM_SAMPLES: usize = 32;

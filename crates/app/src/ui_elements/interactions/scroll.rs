@@ -8,6 +8,7 @@ use super::focus::FocusedUiElement;
 use super::multi_select::UiMultiSelectOption;
 use super::picking::{DraggableUiElement, HoveredUiElement};
 use super::tree::contains_entity;
+use super::ui_input::UiInputState;
 use super::visual_state::UiElementKind;
 
 const KEY_SCROLL_REPEAT_DELAY_SECONDS: f32 = 0.32;
@@ -500,6 +501,7 @@ fn end_scroll_thumb_drag(mut event: On<Pointer<DragEnd>>, mut state: ResMut<Scro
 
 pub(super) fn keep_focused_list_item_visible(
     mut commands: Commands,
+    input: Res<UiInputState>,
     drag_state: Res<ScrollThumbDragState>,
     focused_items: Query<(Entity, &ComputedNode, &UiGlobalTransform), With<FocusedUiElement>>,
     added_focus: Query<(), Added<FocusedUiElement>>,
@@ -524,7 +526,7 @@ pub(super) fn keep_focused_list_item_visible(
     virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
-    if drag_state.active || drag_state.released_this_frame {
+    if input.direction().is_none() || drag_state.active || drag_state.released_this_frame {
         return;
     }
 
@@ -1011,6 +1013,7 @@ mod tests {
             56.0
         );
     }
+
 }
 
 fn has_hovered_descendant(

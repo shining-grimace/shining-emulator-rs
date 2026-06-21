@@ -297,9 +297,6 @@ fn handle_home_activation(
             UI_MULTI_SELECT_WIDTH,
             HOME_POPUP_ESTIMATED_HEIGHT,
         );
-        for entity in &focused {
-            commands.entity(entity).remove::<FocusedUiElement>();
-        }
         commands.spawn_scene(auto_save_popup_scene(&assets, *theme, rom, popup_position));
     }
 }
@@ -588,6 +585,7 @@ fn bind_home_rom_rows(
         for (slot, row) in rows.into_iter().enumerate() {
             commands.entity(row).insert(VirtualListRow {
                 slot,
+                row_index: slot,
                 item_index: usize::MAX,
             });
         }
@@ -696,7 +694,12 @@ fn refresh_home_rom_rows(
     let mut next_focused_entity = None;
 
     for (entity, mut row, children, _, _) in &mut *rows {
-        let Some(rom_index) = rom_list_data.order.get(first_visible + row.slot).copied() else {
+        let row_index = first_visible + row.slot;
+        if row.row_index != row_index {
+            row.row_index = row_index;
+        }
+
+        let Some(rom_index) = rom_list_data.order.get(row_index).copied() else {
             if row.item_index != usize::MAX {
                 row.item_index = usize::MAX;
                 set_list_row_cells(

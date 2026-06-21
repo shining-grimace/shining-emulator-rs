@@ -43,12 +43,14 @@ pub struct VirtualListContent;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct VirtualListSelection {
+    pub selected_row_index: Option<usize>,
     pub selected_item_index: Option<usize>,
 }
 
 #[derive(Clone, Copy, Component, Debug)]
 pub struct VirtualListRow {
     pub slot: usize,
+    pub row_index: usize,
     pub item_index: usize,
 }
 

@@ -202,25 +202,21 @@ pub(super) fn select_virtual_list_rows(
         if row.item_index == usize::MAX {
             continue;
         }
-        select_virtual_list_row(
-            clicked_entity,
-            row.item_index,
-            &mut virtual_selections,
-            &parents,
-        );
+        select_virtual_list_row(clicked_entity, *row, &mut virtual_selections, &parents);
     }
 }
 
 fn select_virtual_list_row(
     row_entity: Entity,
-    item_index: usize,
+    row: VirtualListRow,
     virtual_selections: &mut Query<&mut VirtualListSelection>,
     parents: &Query<&ChildOf>,
 ) {
     let mut current = Some(row_entity);
     while let Some(entity) = current {
         if let Ok(mut selection) = virtual_selections.get_mut(entity) {
-            selection.selected_item_index = Some(item_index);
+            selection.selected_row_index = Some(row.row_index);
+            selection.selected_item_index = Some(row.item_index);
             return;
         }
         current = parents.get(entity).ok().map(|parent| parent.0);

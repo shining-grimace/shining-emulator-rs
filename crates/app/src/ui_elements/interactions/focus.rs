@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::ui_elements::list_view::VirtualListRow;
+
 use super::list_view::SuppressListItemFocusRedirect;
 use super::picking::{HoveredUiElement, UiPointerClicked};
 use super::scroll::UiScrollArea;
@@ -96,7 +98,7 @@ impl LastFocusedUiElement {
 
 pub(super) fn ensure_initial_focus(
     mut commands: Commands,
-    focused: Query<(), With<FocusedUiElement>>,
+    focused: Query<Entity, With<FocusedUiElement>>,
     candidates: Query<
         (Entity, &InitialFocus),
         (
@@ -108,15 +110,18 @@ pub(super) fn ensure_initial_focus(
     nodes: Query<&Node>,
     parents: Query<&ChildOf>,
 ) {
-    if !focused.is_empty() {
-        return;
-    }
-
-    if let Some((entity, _)) = candidates.iter().find(|(entity, initial_focus)| {
+    let Some((target, _)) = candidates.iter().find(|(entity, initial_focus)| {
         initial_focus.enabled && entity_visible(*entity, &nodes, &parents)
-    }) {
-        commands.entity(entity).insert(FocusedUiElement);
+    }) else {
+        return;
+    };
+
+    for entity in &focused {
+        if entity != target {
+            commands.entity(entity).remove::<FocusedUiElement>();
+        }
     }
+    commands.entity(target).insert(FocusedUiElement);
 }
 
 pub(super) fn restore_focus_from_input(
@@ -145,6 +150,7 @@ pub(super) fn restore_focus_from_input(
     >,
     nodes: Query<&Node>,
     parents: Query<&ChildOf>,
+    virtual_rows: Query<(), With<VirtualListRow>>,
     mut last_focused: ResMut<LastFocusedUiElement>,
 ) {
     if !focused.is_empty() || !input.focus_recovery_requested() {
@@ -158,9 +164,13 @@ pub(super) fn restore_focus_from_input(
         })
         .and_then(|entity| focusable_entity(entity, &candidates, &nodes, &parents))
         .or_else(|| {
-            last_focused
-                .entity
-                .and_then(|entity| focusable_entity(entity, &candidates, &nodes, &parents))
+            last_focused.entity.and_then(|entity| {
+                if virtual_rows.contains(entity) {
+                    containing_recoverable_list(entity, &candidates, &nodes, &parents)
+                } else {
+                    focusable_entity(entity, &candidates, &nodes, &parents)
+                }
+            })
         })
         .or_else(|| default_focus_target(&candidates, &nodes, &parents))
         .or_else(|| initial_focus_target(&candidates, &nodes, &parents));
@@ -320,6 +330,41 @@ fn focusable_entity(
             focus_available(entity, *kind, disabled, nodes, parents, scroll_area)
         })
         .then_some(entity)
+}
+
+fn containing_recoverable_list(
+    entity: Entity,
+    candidates: &Query<
+        (
+            Entity,
+            &UiElementKind,
+            Option<&InitialFocus>,
+            Has<DefaultFocusTarget>,
+            Has<DisabledUiElement>,
+            Option<&Node>,
+            Option<&UiScrollArea>,
+        ),
+        With<UiFocusNav>,
+    >,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
+) -> Option<Entity> {
+    let mut current = entity;
+    while let Ok(parent) = parents.get(current) {
+        let parent_entity = parent.0;
+        if candidates
+            .get(parent_entity)
+            .is_ok_and(|(_, kind, _, _, disabled, _, scroll_area)| {
+                *kind == UiElementKind::List
+                    && focus_available(parent_entity, *kind, disabled, nodes, parents, scroll_area)
+            })
+        {
+            return Some(parent_entity);
+        }
+        current = parent_entity;
+    }
+
+    None
 }
 
 fn default_focus_target(
@@ -690,5 +735,26 @@ impl FocusDirection {
             FocusDirection::Down => nav.down,
             FocusDirection::Left => nav.left,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn newly_added_initial_focus_replaces_existing_focus() {
+        let mut world = World::new();
+        let previous = world.spawn(FocusedUiElement).id();
+        let target = world
+            .spawn((InitialFocus { enabled: true }, UiFocusNav::default()))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(ensure_initial_focus);
+        schedule.run(&mut world);
+
+        assert!(world.get::<FocusedUiElement>(previous).is_none());
+        assert!(world.get::<FocusedUiElement>(target).is_some());
     }
 }
