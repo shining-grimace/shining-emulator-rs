@@ -10,11 +10,12 @@ use bevy_midi_graph::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::audio::{MENU_MIDI_NODE_ID, MENU_PROGRAM_NO};
+use crate::audio::{GAME_AUDIO_PROGRAM_NO, MENU_MIDI_NODE_ID, MENU_PROGRAM_NO};
 
 const MENU_MIDI_PATH: &str = "audio/audio.mid";
 const MENU_MIDI_TRACK_INDEX: usize = 0;
 pub(crate) const GAME_AUDIO_CHANNEL_NODE_IDS: [u64; 4] = [201, 202, 203, 204];
+const GAME_AUDIO_ROOT_NODE_ID: u64 = 200;
 const GAME_AUDIO_SOURCE_NODE_IDS: [u64; 4] = [211, 212, 213, 214];
 const WAVETABLE_SAMPLE_RATE: u32 = 4096;
 const WAVETABLE_BASE_NOTE: u8 = 127;
@@ -140,6 +141,26 @@ pub(crate) fn apply_audio_preset_to_playback(
     Ok(())
 }
 
+pub(crate) fn apply_audio_preset_to_gameplay(
+    preset: &AudioPreset,
+    asset_server: &Res<AssetServer>,
+    audio_context: &mut MidiGraphAudioContext,
+    midi_assets: &Res<Assets<MidiFileSource>>,
+    sf2_assets: &Res<Assets<Sf2FileSource>>,
+    wave_assets: &Res<Assets<WaveFileSource>>,
+) -> Result<(), String> {
+    let graph_json = game_audio_graph_json_from_audio_preset(preset);
+    let config: ChildConfig =
+        serde_json::from_value(graph_json).map_err(|error| error.to_string())?;
+    let mut loader = GraphAssetLoader::new(asset_server, midi_assets, sf2_assets, wave_assets);
+
+    audio_context
+        .store_new_program(GAME_AUDIO_PROGRAM_NO, &config, &mut loader)
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
 fn midi_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
     json!({
         "type": "Midi",
@@ -156,6 +177,19 @@ fn midi_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
             "2": midi_channel_source_json(preset, 2),
             "3": midi_channel_source_json(preset, 3)
         }
+    })
+}
+
+fn game_audio_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
+    json!({
+        "type": "Combiner",
+        "node_id": GAME_AUDIO_ROOT_NODE_ID,
+        "sources": [
+            midi_channel_source_json(preset, 0),
+            midi_channel_source_json(preset, 1),
+            midi_channel_source_json(preset, 2),
+            midi_channel_source_json(preset, 3)
+        ]
     })
 }
 
@@ -394,5 +428,29 @@ mod tests {
         assert_eq!(wavetable_channel["base_note"], json!(WAVETABLE_BASE_NOTE));
         assert_eq!(wavetable_channel["looping"]["start"], json!(0));
         assert_eq!(wavetable_channel["looping"]["end"], json!(16));
+    }
+
+    #[test]
+    fn gameplay_graph_uses_combiner_root_so_paused_menu_midi_cannot_silence_game_audio() {
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
+
+        assert_eq!(graph["type"], json!("Combiner"));
+        assert_eq!(graph["node_id"], json!(GAME_AUDIO_ROOT_NODE_ID));
+        assert_eq!(
+            graph["sources"][0]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[0])
+        );
+        assert_eq!(
+            graph["sources"][1]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[1])
+        );
+        assert_eq!(
+            graph["sources"][2]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
+        );
+        assert_eq!(
+            graph["sources"][3]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[3])
+        );
     }
 }

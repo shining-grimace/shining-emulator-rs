@@ -19,12 +19,12 @@ use crate::game_boy::frame_renderer::{
 pub struct GameBoyPlugin;
 
 pub(crate) use emulator::{
-    GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, GameBoyRomLoadRequest, apply_save_state,
-    encode_save_state,
+    GameBoyAudioBalance, GameBoyAudioChannel, GameBoyAudioCommand, GameBoyAudioEvent, GameBoyCore,
+    GameBoyEmulator, GameBoyLoadStatus, GameBoyRomLoadRequest, apply_save_state, encode_save_state,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, SystemSet)]
-enum GameBoyUpdateSet {
+pub(crate) enum GameBoyUpdateSet {
     RomLoad,
     Emulation,
 }

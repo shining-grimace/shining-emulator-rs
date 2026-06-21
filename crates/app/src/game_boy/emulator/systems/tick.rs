@@ -209,7 +209,7 @@ fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing)
     step_oam_dma(emulator);
     emulator
         .audio_unit
-        .simulate_placeholder(MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1));
+        .advance_ticks(MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1));
     update_serial(emulator, MACHINE_CYCLE_CLOCKS);
 
     if display_enabled {

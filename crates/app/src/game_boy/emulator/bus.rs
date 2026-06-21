@@ -38,6 +38,7 @@ const BCPD_IO_INDEX: usize = 0x69;
 const OCPS_IO_INDEX: usize = 0x6a;
 const OCPD_IO_INDEX: usize = 0x6b;
 const SVBK_IO_INDEX: usize = 0x70;
+const NR52_IO_INDEX: usize = 0x26;
 
 const INTERRUPT_JOYPAD: u8 = 0x10;
 const INTERRUPT_TIMER: u8 = 0x04;
@@ -467,6 +468,7 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
         TIMA_IO_INDEX => write_timer_counter(core, value),
         TMA_IO_INDEX => write_timer_modulo(core, value),
         TAC_IO_INDEX => write_timer_control(core, value),
+        0x10..=0x26 | 0x30..=0x3f => write_audio_register(core, index, value),
         LCDC_IO_INDEX => write_lcd_control(core, value),
         STAT_IO_INDEX => {
             let stat = core.memory.io_ports[STAT_IO_INDEX] & 0x07;
@@ -502,6 +504,32 @@ fn write_io(core: &mut GameBoyCore, index: usize, value: u8) {
         SVBK_IO_INDEX => write_wram_bank(core, value),
         _ => core.memory.write_io_port(index, value),
     }
+}
+
+fn write_audio_register(core: &mut GameBoyCore, index: usize, value: u8) {
+    if index == NR52_IO_INDEX {
+        core.memory.write_io_port(
+            NR52_IO_INDEX,
+            (value & 0x80) | 0x70 | core.audio_unit.channel_status_bits(),
+        );
+    } else {
+        core.memory.write_io_port(index, value);
+    }
+
+    core.audio_unit
+        .write_register(index, value, &core.memory.io_ports);
+    core.memory.write_io_port(
+        NR52_IO_INDEX,
+        audio_status_register_value(&core.audio_unit, &core.memory.io_ports),
+    );
+}
+
+fn audio_status_register_value(
+    audio_unit: &crate::game_boy::emulator::audio_unit::AudioUnitState,
+    io_ports: &[u8],
+) -> u8 {
+    let global_enable = io_ports.get(NR52_IO_INDEX).copied().unwrap_or_default() & 0x80;
+    global_enable | 0x70 | audio_unit.channel_status_bits()
 }
 
 fn write_joyp(core: &mut GameBoyCore, value: u8) {
