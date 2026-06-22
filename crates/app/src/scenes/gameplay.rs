@@ -101,7 +101,7 @@ fn spawn_gameplay_scene(
 
 fn return_home_from_gameplay(
     mut input_events: MessageReader<MappedInputEvent>,
-    storage: Res<LocalStorage>,
+    mut storage: ResMut<LocalStorage>,
     emulators: Query<&GameBoyCore, With<GameBoyEmulator>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
@@ -109,7 +109,7 @@ fn return_home_from_gameplay(
         .read()
         .any(|event| event.state == ButtonState::Pressed && event.action == InputAction::QuitRom)
     {
-        auto_save_gameplay_from_query(&storage, &emulators);
+        auto_save_gameplay_from_query(&mut storage, &emulators);
         next_state.set(AppState::Home);
     }
 }
@@ -146,7 +146,7 @@ fn handle_gameplay_activation(
     theme: Res<ActiveTheme>,
     queries: GameplayMenuActivationQueries,
     mut emulators: Query<&mut GameBoyCore, With<GameBoyEmulator>>,
-    storage: Res<LocalStorage>,
+    mut storage: ResMut<LocalStorage>,
     state: Res<State<AppState>>,
     mut status: ResMut<GameBoyLoadStatus>,
     mut menu_pause: ResMut<GameplayMenuPauseState>,
@@ -187,10 +187,10 @@ fn handle_gameplay_activation(
     match option.option_index {
         0 => resume_gameplay(&mut emulators, &mut status),
         1 => reboot_current_rom(&mut emulators, &storage, &mut status),
-        2 => create_manual_save(&mut emulators, &storage, &mut status),
+        2 => create_manual_save(&mut emulators, &mut storage, &mut status),
         3 => restore_manual_save(&mut emulators, &storage, &mut status),
         4 => {
-            auto_save_gameplay_from_mut_query(&storage, &mut emulators);
+            auto_save_gameplay_from_mut_query(&mut storage, &mut emulators);
             next_state.set(AppState::Home);
         }
         _ => resume_gameplay(&mut emulators, &mut status),
@@ -219,14 +219,14 @@ fn resume_after_gameplay_menu_dismissal(
 }
 
 fn auto_save_gameplay_on_exit(
-    storage: Res<LocalStorage>,
+    mut storage: ResMut<LocalStorage>,
     emulators: Query<&GameBoyCore, With<GameBoyEmulator>>,
 ) {
-    auto_save_gameplay_from_query(&storage, &emulators);
+    auto_save_gameplay_from_query(&mut storage, &emulators);
 }
 
 fn auto_save_gameplay_from_query(
-    storage: &LocalStorage,
+    storage: &mut LocalStorage,
     emulators: &Query<&GameBoyCore, With<GameBoyEmulator>>,
 ) {
     let Some(emulator) = emulators.iter().next() else {
@@ -236,7 +236,7 @@ fn auto_save_gameplay_from_query(
 }
 
 fn auto_save_gameplay_from_mut_query(
-    storage: &LocalStorage,
+    storage: &mut LocalStorage,
     emulators: &mut Query<&mut GameBoyCore, With<GameBoyEmulator>>,
 ) {
     let Some(emulator) = emulators.iter_mut().next() else {
@@ -245,7 +245,7 @@ fn auto_save_gameplay_from_mut_query(
     auto_save_loaded_game(storage, &emulator);
 }
 
-fn auto_save_loaded_game(storage: &LocalStorage, emulator: &GameBoyCore) {
+fn auto_save_loaded_game(storage: &mut LocalStorage, emulator: &GameBoyCore) {
     if !emulator.runtime.is_running || emulator.rom.current_rom_id.is_empty() {
         return;
     }
@@ -260,6 +260,10 @@ fn auto_save_loaded_game(storage: &LocalStorage, emulator: &GameBoyCore) {
     };
     if let Err(error) = write_save_state_file(storage.auto_save_path(&rom_id), &bytes) {
         warn!("failed to write automatic save state: {error}");
+        return;
+    }
+    if let Err(error) = storage.record_rom_played(&rom_id) {
+        warn!("failed to save last-played timestamp after automatic save state: {error}");
     }
 }
 
@@ -506,7 +510,7 @@ fn reboot_current_rom(
 
 fn create_manual_save(
     emulators: &mut Query<&mut GameBoyCore, With<GameBoyEmulator>>,
-    storage: &LocalStorage,
+    storage: &mut LocalStorage,
     status: &mut GameBoyLoadStatus,
 ) {
     let Some(mut emulator) = emulators.iter_mut().next() else {
@@ -532,6 +536,10 @@ fn create_manual_save(
     };
     if let Err(error) = write_save_state_file(manual_path, &bytes) {
         status.set_error_message(format!("Save state could not be created: {error}"));
+        return;
+    }
+    if let Err(error) = storage.record_rom_played(&rom_id) {
+        status.set_error_message(format!("Last-played timestamp could not be saved: {error}"));
         return;
     }
 

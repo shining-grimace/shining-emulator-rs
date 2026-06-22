@@ -18,7 +18,9 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::audio::preset_graph::default_audio_preset;
 use crate::input::mappings::ensure_essential_navigation_mappings;
-use crate::storage::data::{GeneralSettings, LastPlayedTimestamps, LocalStorageData, RomMetadata};
+use crate::storage::data::{
+    GeneralSettings, LastPlayedTimestamp, LastPlayedTimestamps, LocalStorageData, RomMetadata,
+};
 use crate::storage::errors::StorageError;
 use crate::storage::input_mappings::{InputDeviceType, default_input_mappings};
 use crate::storage::paths::StoragePaths;
@@ -116,6 +118,28 @@ impl LocalStorage {
 
     pub fn save_timestamps(&self) -> Result<(), StorageError> {
         write_json(&self.paths.timestamps_file, &self.data.timestamps)
+    }
+
+    pub fn record_rom_played(&mut self, rom_id: &str) -> Result<(), StorageError> {
+        self.record_rom_played_at(rom_id, unix_timestamp())
+    }
+
+    fn record_rom_played_at(&mut self, rom_id: &str, timestamp: u64) -> Result<(), StorageError> {
+        if let Some(stored_timestamp) = self
+            .data
+            .timestamps
+            .last_played
+            .iter_mut()
+            .find(|stored_timestamp| stored_timestamp.id == rom_id)
+        {
+            stored_timestamp.timestamp = timestamp;
+        } else {
+            self.data.timestamps.last_played.push(LastPlayedTimestamp {
+                id: rom_id.to_string(),
+                timestamp,
+            });
+        }
+        self.save_timestamps()
     }
 
     pub fn save_input_mappings(&self) -> Result<(), StorageError> {
@@ -491,6 +515,61 @@ mod tests {
             .load_sram("rom-id", 16)
             .expect("SRAM file should be loaded");
         assert_eq!(reloaded[3], 0x7c);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn record_rom_played_inserts_timestamp_and_writes_file() {
+        let root = std::env::temp_dir().join(format!(
+            "shining-emulator-timestamp-insert-test-{}",
+            std::process::id()
+        ));
+        let mut storage = LocalStorage {
+            paths: StoragePaths::from_root(root.clone()),
+            data: LocalStorageData::default(),
+        };
+
+        storage
+            .record_rom_played_at("rom-id", 123)
+            .expect("timestamp should be saved");
+
+        assert_eq!(storage.data.timestamps.last_played.len(), 1);
+        assert_eq!(storage.data.timestamps.last_played[0].id, "rom-id");
+        assert_eq!(storage.data.timestamps.last_played[0].timestamp, 123);
+
+        let saved: LastPlayedTimestamps = read_or_create_json(
+            &storage.paths.timestamps_file,
+            &LastPlayedTimestamps::default(),
+        )
+        .expect("timestamp file should be readable");
+        assert_eq!(saved.last_played.len(), 1);
+        assert_eq!(saved.last_played[0].id, "rom-id");
+        assert_eq!(saved.last_played[0].timestamp, 123);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn record_rom_played_updates_existing_timestamp() {
+        let root = std::env::temp_dir().join(format!(
+            "shining-emulator-timestamp-update-test-{}",
+            std::process::id()
+        ));
+        let mut storage = LocalStorage {
+            paths: StoragePaths::from_root(root.clone()),
+            data: LocalStorageData::default(),
+        };
+
+        storage
+            .record_rom_played_at("rom-id", 123)
+            .expect("initial timestamp should be saved");
+        storage
+            .record_rom_played_at("rom-id", 456)
+            .expect("updated timestamp should be saved");
+
+        assert_eq!(storage.data.timestamps.last_played.len(), 1);
+        assert_eq!(storage.data.timestamps.last_played[0].timestamp, 456);
 
         let _ = fs::remove_dir_all(root);
     }

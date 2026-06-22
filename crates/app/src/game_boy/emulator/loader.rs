@@ -478,7 +478,7 @@ fn remote_api_download_url(
 }
 
 fn update_loaded_rom_storage(storage: &mut LocalStorage, rom_index: usize, rom_id: &str) {
-    let changed = if let Some(rom) = storage.data.roms.get_mut(rom_index) {
+    let rom_metadata_changed = if let Some(rom) = storage.data.roms.get_mut(rom_index) {
         if rom.id.as_deref() != Some(rom_id) {
             rom.id = Some(rom_id.to_string());
             true
@@ -489,10 +489,13 @@ fn update_loaded_rom_storage(storage: &mut LocalStorage, rom_index: usize, rom_i
         false
     };
 
-    if changed {
+    if rom_metadata_changed {
         if let Err(error) = storage.save_roms() {
             warn!("failed to save ROM metadata after loading ROM: {error}");
         }
+    }
+    if let Err(error) = storage.record_rom_played(rom_id) {
+        warn!("failed to save last-played timestamp after loading ROM: {error}");
     }
 }
 
