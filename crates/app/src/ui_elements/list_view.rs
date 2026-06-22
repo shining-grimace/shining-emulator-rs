@@ -1,4 +1,5 @@
 use bevy::asset::HandleTemplate;
+use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 
@@ -242,11 +243,11 @@ fn collect_list_item_entities_recursive(
     }
 }
 
-pub fn set_list_row_cells(
+pub fn set_list_row_cells<F: QueryFilter>(
     values: &[&str],
     children: &Children,
     cells: &mut Query<(&mut UiListCellText, &Children)>,
-    texts: &mut Query<&mut Text>,
+    texts: &mut Query<&mut Text, F>,
     child_query: &Query<&Children>,
 ) {
     for (cell_index, cell_entity) in collect_list_cell_entities(children, cells, child_query)

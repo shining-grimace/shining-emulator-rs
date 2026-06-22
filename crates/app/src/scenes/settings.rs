@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::ui::UiScale;
 use bevy_midi_graph::{MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource};
@@ -28,10 +29,10 @@ use crate::ui_elements::description::description;
 use crate::ui_elements::info_message::{InfoMessage, info_message_text, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, InitialFocus, SelectedUiElement, UI_FOCUS_NONE,
-    UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiMultiSelect,
+    UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds, UiListCellText, UiMultiSelect,
 };
 use crate::ui_elements::list_view::{
-    ListColumn, ListRow, ListViewConfig, collect_list_item_entities, list_view,
+    ListColumn, ListRow, ListViewConfig, collect_list_item_entities, list_view, set_list_row_cells,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
@@ -97,6 +98,20 @@ struct ProviderEditButton;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct ProviderCreateButton;
+
+#[derive(SystemParam)]
+struct ProviderButtonQueries<'w, 's> {
+    create_buttons: Query<'w, 's, (), With<ProviderCreateButton>>,
+    edit_buttons: Query<'w, 's, (), With<ProviderEditButton>>,
+    delete_buttons: Query<'w, 's, (), With<ProviderDeleteButton>>,
+    sync_buttons: Query<'w, 's, (), With<ProviderSyncButton>>,
+    selected_provider_rows: Query<'w, 's, &'static ProviderRow, With<SelectedUiElement>>,
+    provider_lists: Query<'w, 's, &'static Children, With<ProviderList>>,
+    kinds: Query<'w, 's, &'static UiElementKind>,
+    child_query: Query<'w, 's, &'static Children>,
+    cells: Query<'w, 's, (&'static mut UiListCellText, &'static Children)>,
+    texts: Query<'w, 's, &'static mut Text, Without<InfoMessage>>,
+}
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct EditPrimaryMappingButton;
@@ -438,11 +453,8 @@ fn existing_audio_preset_numbers(storage: &LocalStorage) -> Vec<u8> {
 
 fn handle_provider_button_activation(
     activated: On<Add, ActivatedUiElement>,
-    create_buttons: Query<(), With<ProviderCreateButton>>,
-    edit_buttons: Query<(), With<ProviderEditButton>>,
-    delete_buttons: Query<(), With<ProviderDeleteButton>>,
-    sync_buttons: Query<(), With<ProviderSyncButton>>,
-    selected_provider_rows: Query<&ProviderRow, With<SelectedUiElement>>,
+    mut commands: Commands,
+    mut queries: ProviderButtonQueries,
     mut edit_target: ResMut<RomProviderEditTarget>,
     mut storage: ResMut<LocalStorage>,
     mut sync_state: ResMut<ProviderSyncTaskState>,
@@ -455,18 +467,18 @@ fn handle_provider_button_activation(
     }
 
     let entity = activated.entity;
-    if create_buttons.get(entity).is_ok() {
+    if queries.create_buttons.get(entity).is_ok() {
         edit_target.provider_index = None;
         next_state.set(AppState::RomProvider);
-    } else if edit_buttons.get(entity).is_ok() {
-        let Some(index) = selected_provider_index(&selected_provider_rows) else {
+    } else if queries.edit_buttons.get(entity).is_ok() {
+        let Some(index) = selected_provider_index(&queries.selected_provider_rows) else {
             set_latest_info_message(&mut messages, "Select a ROM provider to edit.");
             return;
         };
         edit_target.provider_index = Some(index);
         next_state.set(AppState::RomProvider);
-    } else if delete_buttons.get(entity).is_ok() {
-        let Some(index) = selected_provider_index(&selected_provider_rows) else {
+    } else if queries.delete_buttons.get(entity).is_ok() {
+        let Some(index) = selected_provider_index(&queries.selected_provider_rows) else {
             set_latest_info_message(&mut messages, "Select a ROM provider to delete.");
             return;
         };
@@ -490,11 +502,20 @@ fn handle_provider_button_activation(
                 eprintln!("failed to save ROM providers: {error}");
                 set_latest_info_message(&mut messages, "ROM provider could not be deleted.");
             } else {
+                refresh_provider_lists(
+                    &mut commands,
+                    &storage.data.providers,
+                    &queries.provider_lists,
+                    &queries.kinds,
+                    &queries.child_query,
+                    &mut queries.cells,
+                    &mut queries.texts,
+                );
                 set_latest_info_message(&mut messages, "ROM provider deleted.");
             }
         }
-    } else if sync_buttons.get(entity).is_ok() {
-        let Some(index) = selected_provider_index(&selected_provider_rows) else {
+    } else if queries.sync_buttons.get(entity).is_ok() {
+        let Some(index) = selected_provider_index(&queries.selected_provider_rows) else {
             set_latest_info_message(&mut messages, "Select a ROM provider to sync.");
             return;
         };
@@ -566,6 +587,36 @@ fn bind_provider_rows(
             commands.entity(row).insert(ProviderRow { index });
         }
         commands.entity(list_entity).insert(ProviderRowsBound);
+    }
+}
+
+fn refresh_provider_lists(
+    commands: &mut Commands,
+    providers: &[RomProvider],
+    provider_lists: &Query<&Children, With<ProviderList>>,
+    kinds: &Query<&UiElementKind>,
+    child_query: &Query<&Children>,
+    cells: &mut Query<(&mut UiListCellText, &Children)>,
+    texts: &mut Query<&mut Text, Without<InfoMessage>>,
+) {
+    let provider_rows = providers.iter().map(provider_row).collect::<Vec<_>>();
+    for children in provider_lists {
+        let row_entities = collect_list_item_entities(children, kinds, child_query);
+        for (index, row_entity) in row_entities.into_iter().enumerate() {
+            let Some(row) = provider_rows.get(index) else {
+                commands.entity(row_entity).try_despawn();
+                continue;
+            };
+
+            if let Ok(row_children) = child_query.get(row_entity) {
+                let values = row.cells.iter().map(String::as_str).collect::<Vec<_>>();
+                set_list_row_cells(&values, row_children, cells, texts, child_query);
+            }
+            commands
+                .entity(row_entity)
+                .insert(ProviderRow { index })
+                .remove::<SelectedUiElement>();
+        }
     }
 }
 
