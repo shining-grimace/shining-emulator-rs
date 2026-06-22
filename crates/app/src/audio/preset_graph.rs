@@ -10,6 +10,7 @@ use bevy_midi_graph::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::app_assets::BUILT_IN_AUDIO_SAMPLE_PATHS;
 use crate::audio::{GAME_AUDIO_PROGRAM_NO, MENU_MIDI_NODE_ID, MENU_PROGRAM_NO};
 
 const MENU_MIDI_PATH: &str = "audio/audio.mid";
@@ -27,6 +28,16 @@ const OSCILLATOR_LFSR_NOISE: &str = "LFSR Noise";
 const OSCILLATOR_WAVE_TABLE: &str = "Wave Table";
 const OSCILLATOR_BUILT_IN_SAMPLER: &str = "Built-in Sampler";
 const OSCILLATOR_CUSTOM_SAMPLER: &str = "Custom Sampler";
+const BUILT_IN_SAMPLE_BASE_NOTE: u8 = 60;
+const BUILT_IN_SAMPLE_LOOP_START: usize = 0;
+const BUILT_IN_SAMPLE_LOOP_END: usize = 96_000;
+const MENU_SQUARE_WAVE_VOLUME_MULTIPLIER: f32 = 0.25;
+
+#[derive(Clone, Copy)]
+enum AudioGraphTarget {
+    Menu,
+    Gameplay,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -172,10 +183,10 @@ fn midi_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
             }
         },
         "channels": {
-            "0": midi_channel_source_json(preset, 0),
-            "1": midi_channel_source_json(preset, 1),
-            "2": midi_channel_source_json(preset, 2),
-            "3": midi_channel_source_json(preset, 3)
+            "0": midi_channel_source_json(preset, 0, MENU_SQUARE_WAVE_VOLUME_MULTIPLIER, AudioGraphTarget::Menu),
+            "1": midi_channel_source_json(preset, 1, MENU_SQUARE_WAVE_VOLUME_MULTIPLIER, AudioGraphTarget::Menu),
+            "2": midi_channel_source_json(preset, 2, MENU_SQUARE_WAVE_VOLUME_MULTIPLIER, AudioGraphTarget::Menu),
+            "3": midi_channel_source_json(preset, 3, MENU_SQUARE_WAVE_VOLUME_MULTIPLIER, AudioGraphTarget::Menu)
         }
     })
 }
@@ -185,23 +196,33 @@ fn game_audio_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
         "type": "Combiner",
         "node_id": GAME_AUDIO_ROOT_NODE_ID,
         "sources": [
-            midi_channel_source_json(preset, 0),
-            midi_channel_source_json(preset, 1),
-            midi_channel_source_json(preset, 2),
-            midi_channel_source_json(preset, 3)
+            midi_channel_source_json(preset, 0, 1.0, AudioGraphTarget::Gameplay),
+            midi_channel_source_json(preset, 1, 1.0, AudioGraphTarget::Gameplay),
+            midi_channel_source_json(preset, 2, 1.0, AudioGraphTarget::Gameplay),
+            midi_channel_source_json(preset, 3, 1.0, AudioGraphTarget::Gameplay)
         ]
     })
 }
 
-fn midi_channel_source_json(preset: &AudioPreset, index: usize) -> Value {
-    let channel = preset_channel(preset, index);
+fn midi_channel_source_json(
+    preset: &AudioPreset,
+    index: usize,
+    square_wave_volume_multiplier: f32,
+    target: AudioGraphTarget,
+) -> Value {
+    let channel = channel_for_graph(preset, index, target);
     let channel_node_id = game_audio_channel_node_id(index);
     let uses_envelope = channel_uses_envelope(&channel);
     let source_node_id = match uses_envelope {
         true => game_audio_source_node_id(index),
         false => channel_node_id,
     };
-    let source = oscillator_source_json(index, &channel, source_node_id);
+    let source = oscillator_source_json(
+        index,
+        &channel,
+        source_node_id,
+        square_wave_volume_multiplier,
+    );
 
     if uses_envelope {
         json!({
@@ -216,6 +237,21 @@ fn midi_channel_source_json(preset: &AudioPreset, index: usize) -> Value {
     } else {
         source
     }
+}
+
+fn channel_for_graph(
+    preset: &AudioPreset,
+    index: usize,
+    target: AudioGraphTarget,
+) -> AudioChannelPreset {
+    let mut channel = preset_channel(preset, index);
+    if index == 2 {
+        channel.oscillator = match target {
+            AudioGraphTarget::Menu => OSCILLATOR_BUILT_IN_SAMPLER.to_string(),
+            AudioGraphTarget::Gameplay => OSCILLATOR_WAVE_TABLE.to_string(),
+        };
+    }
+    channel
 }
 
 fn channel_uses_envelope(channel: &AudioChannelPreset) -> bool {
@@ -240,6 +276,7 @@ fn oscillator_source_json(
     channel_index: usize,
     preset: &AudioChannelPreset,
     node_id: u64,
+    square_wave_volume_multiplier: f32,
 ) -> Value {
     match preset.oscillator.as_str() {
         OSCILLATOR_TRIANGLE => json!({
@@ -262,62 +299,47 @@ fn oscillator_source_json(
             "inside_feedback": false
         }),
         OSCILLATOR_WAVE_TABLE => wavetable_source_json(node_id),
-        OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample_source_json(preset, channel_index, node_id),
-        OSCILLATOR_CUSTOM_SAMPLER => custom_sample_source_json(preset, channel_index, node_id),
+        OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample_source_json(preset, node_id),
+        OSCILLATOR_CUSTOM_SAMPLER => custom_sample_source_json(preset, node_id),
         _ => json!({
             "type": "SquareWave",
             "node_id": node_id,
             "balance": "Both",
-            "amplitude": channel_amplitude(channel_index),
+            "amplitude": channel_amplitude(channel_index) * square_wave_volume_multiplier,
             "duty_cycle": square_duty_cycle(preset)
         }),
     }
 }
 
-fn built_in_sample_source_json(
-    preset: &AudioChannelPreset,
-    channel_index: usize,
-    node_id: u64,
-) -> Value {
-    match preset.built_in_sample.as_str() {
-        "Guitar" => json!({
-            "type": "SawtoothWave",
-            "node_id": node_id,
-            "balance": "Both",
-            "amplitude": channel_amplitude(channel_index)
-        }),
-        "Bass" => json!({
-            "type": "TriangleWave",
-            "node_id": node_id,
-            "balance": "Both",
-            "amplitude": channel_amplitude(channel_index) * 0.8
-        }),
-        "Bell" => json!({
-            "type": "SquareWave",
-            "node_id": node_id,
-            "balance": "Both",
-            "amplitude": channel_amplitude(channel_index) * 0.7,
-            "duty_cycle": 0.125
-        }),
-        _ => json!({
-            "type": "SquareWave",
-            "node_id": node_id,
-            "balance": "Both",
-            "amplitude": channel_amplitude(channel_index),
-            "duty_cycle": 0.5
-        }),
-    }
+fn built_in_sample_source_json(preset: &AudioChannelPreset, node_id: u64) -> Value {
+    let sample_path = built_in_sample_path(&preset.built_in_sample);
+    json!({
+        "type": "SampleLoop",
+        "node_id": node_id,
+        "balance": "Both",
+        "source": {
+            "FilePath": sample_path
+        },
+        "base_note": BUILT_IN_SAMPLE_BASE_NOTE,
+        "looping": {
+            "start": BUILT_IN_SAMPLE_LOOP_START,
+            "end": BUILT_IN_SAMPLE_LOOP_END
+        }
+    })
 }
 
-fn custom_sample_source_json(
-    preset: &AudioChannelPreset,
-    channel_index: usize,
-    node_id: u64,
-) -> Value {
+fn custom_sample_source_json(preset: &AudioChannelPreset, node_id: u64) -> Value {
     // The current MIDI Graph Bevy loader resolves samples through Bevy's asset server, while this
     // screen stores native file picker paths. Keep applying the preset instead of failing until a
     // local-file asset source is available.
-    built_in_sample_source_json(preset, channel_index, node_id)
+    built_in_sample_source_json(preset, node_id)
+}
+
+fn built_in_sample_path(sample: &str) -> &'static str {
+    BUILT_IN_AUDIO_SAMPLE_PATHS
+        .iter()
+        .find_map(|(label, path)| (*label == sample).then_some(*path))
+        .unwrap_or(BUILT_IN_AUDIO_SAMPLE_PATHS[0].1)
 }
 
 fn wavetable_source_json(node_id: u64) -> Value {
@@ -417,8 +439,8 @@ mod tests {
 
     #[test]
     fn default_wave_table_channel_uses_wavetable_sampler_config() {
-        let graph = midi_graph_json_from_audio_preset(&default_audio_preset());
-        let wavetable_channel = &graph["channels"]["2"];
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
+        let wavetable_channel = &graph["sources"][2];
 
         assert_eq!(wavetable_channel["type"], json!("SampleLoop"));
         assert_eq!(
@@ -452,5 +474,111 @@ mod tests {
             graph["sources"][3]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[3])
         );
+    }
+
+    #[test]
+    fn menu_square_wave_channels_use_reduced_volume() {
+        let graph = midi_graph_json_from_audio_preset(&default_audio_preset());
+
+        assert_eq!(
+            graph["channels"]["0"]["source"]["amplitude"],
+            json!(channel_amplitude(0) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
+        );
+        assert_eq!(
+            graph["channels"]["1"]["source"]["amplitude"],
+            json!(channel_amplitude(1) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
+        );
+    }
+
+    #[test]
+    fn gameplay_square_wave_channels_keep_original_volume() {
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
+
+        assert_eq!(
+            graph["sources"][0]["source"]["amplitude"],
+            json!(channel_amplitude(0))
+        );
+        assert_eq!(
+            graph["sources"][1]["source"]["amplitude"],
+            json!(channel_amplitude(1))
+        );
+    }
+
+    #[test]
+    fn menu_channel_three_uses_selected_wave_sample_not_hidden_oscillator() {
+        let mut preset = default_audio_preset();
+        preset.channels[2].oscillator = OSCILLATOR_SQUARE.to_string();
+        preset.channels[2].built_in_sample = "Bell".to_string();
+
+        let graph = midi_graph_json_from_audio_preset(&preset);
+        let source = &graph["channels"]["2"]["source"];
+
+        assert_eq!(source["type"], json!("SampleLoop"));
+        assert_eq!(source["source"]["FilePath"], json!("audio/Bell.wav"));
+    }
+
+    #[test]
+    fn gameplay_channel_three_uses_wavetable_not_hidden_oscillator() {
+        let mut preset = default_audio_preset();
+        preset.channels[2].oscillator = OSCILLATOR_SQUARE.to_string();
+        preset.channels[2].built_in_sample = "Bell".to_string();
+
+        let graph = game_audio_graph_json_from_audio_preset(&preset);
+        let source = &graph["sources"][2];
+
+        assert_eq!(source["type"], json!("SampleLoop"));
+        assert_eq!(
+            source["source"]["WavetableWithSampleRate"][0],
+            json!(WAVETABLE_SAMPLE_RATE)
+        );
+    }
+
+    #[test]
+    fn built_in_sampler_uses_selected_wav_asset() {
+        for (sample, path) in BUILT_IN_AUDIO_SAMPLE_PATHS {
+            let mut preset = default_audio_preset();
+            preset.channels[0].oscillator = OSCILLATOR_BUILT_IN_SAMPLER.to_string();
+            preset.channels[0].built_in_sample = sample.to_string();
+
+            let graph = midi_graph_json_from_audio_preset(&preset);
+            let source = &graph["channels"]["0"]["source"];
+
+            assert_eq!(source["type"], json!("SampleLoop"));
+            assert_eq!(source["node_id"], json!(GAME_AUDIO_SOURCE_NODE_IDS[0]));
+            assert_eq!(source["source"]["FilePath"], json!(path));
+            assert_eq!(source["base_note"], json!(BUILT_IN_SAMPLE_BASE_NOTE));
+            assert_eq!(
+                source["looping"]["start"],
+                json!(BUILT_IN_SAMPLE_LOOP_START)
+            );
+            assert_eq!(source["looping"]["end"], json!(BUILT_IN_SAMPLE_LOOP_END));
+        }
+    }
+
+    #[test]
+    fn unknown_built_in_sampler_selection_falls_back_to_piano() {
+        let mut preset = default_audio_preset();
+        preset.channels[0].oscillator = OSCILLATOR_BUILT_IN_SAMPLER.to_string();
+        preset.channels[0].built_in_sample = "Unknown".to_string();
+
+        let graph = midi_graph_json_from_audio_preset(&preset);
+
+        assert_eq!(
+            graph["channels"]["0"]["source"]["source"]["FilePath"],
+            json!("audio/Piano.wav")
+        );
+    }
+
+    #[test]
+    fn built_in_sampler_source_deserializes_to_sample_loop_config() {
+        use bevy_midi_graph::midi::node::SampleLoop;
+
+        let mut preset = default_audio_preset();
+        preset.channels[0].oscillator = OSCILLATOR_BUILT_IN_SAMPLER.to_string();
+
+        let graph = midi_graph_json_from_audio_preset(&preset);
+        let source = graph["channels"]["0"]["source"].clone();
+
+        let _: SampleLoop = serde_json::from_value(source).unwrap();
     }
 }

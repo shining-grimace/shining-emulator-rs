@@ -813,8 +813,11 @@ fn audio_preset_from_form(
     let channels = (1..=4)
         .map(|channel| {
             let mut channel_preset = preset_channel(&default, (channel - 1) as usize).clone();
-            channel_preset.oscillator =
-                oscillator_label(select_value(selects, channel, FIELD_OSCILLATOR, 0)).to_string();
+            if matches!(channel, 1 | 2 | 4) {
+                channel_preset.oscillator =
+                    oscillator_label(select_value(selects, channel, FIELD_OSCILLATOR, 0))
+                        .to_string();
+            }
             channel_preset.built_in_sample =
                 sample_label(select_value(selects, channel, FIELD_BUILT_IN_SAMPLE, 0)).to_string();
             channel_preset.custom_sample_path = pickers
@@ -822,8 +825,11 @@ fn audio_preset_from_form(
                 .find(|(picker, _)| picker.channel == channel)
                 .map(|(_, picker)| picker.value.clone())
                 .unwrap_or_default();
-            channel_preset.modulation_a =
-                modulation_label(select_value(selects, channel, FIELD_MODULATION_A, 0)).to_string();
+            if matches!(channel, 1 | 2) {
+                channel_preset.modulation_a =
+                    modulation_label(select_value(selects, channel, FIELD_MODULATION_A, 0))
+                        .to_string();
+            }
             if channel == 1 {
                 channel_preset.modulation_b = Some(
                     modulation_label(select_value(selects, channel, FIELD_MODULATION_B, 1))
