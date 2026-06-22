@@ -1013,7 +1013,6 @@ mod tests {
             56.0
         );
     }
-
 }
 
 fn has_hovered_descendant(

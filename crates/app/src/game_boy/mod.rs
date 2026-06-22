@@ -1,6 +1,7 @@
 mod emulator;
 mod frame_buffer;
 mod frame_renderer;
+mod xbr_upscaler;
 
 use bevy::prelude::*;
 

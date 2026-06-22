@@ -133,12 +133,9 @@ b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
-- Image upscaling isn't implemented
 - SGB border isn't implemented
 - Upon return to Home from a game, the audio volumes and other parameters aren't reset 
-- Emulation speed changing may or may not be implemented (hasn't been tested)
 - "rhythm-land" reports that this is an inaccurate emulator
-- Several SGB ROMs have incorrect palette grids (e.g. on a splash screen)
 - Audio needs to be tweaked to match a good reference video
 - On deleting a ROM provider from the list, it doesn't disappear immediately from the list
 - The audio doesn't loop, but reaches the end and stops
