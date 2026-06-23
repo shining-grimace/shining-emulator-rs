@@ -65,7 +65,7 @@ refer to them in other places internally.
 
 The settings will be stored in a JSON file called `settings.json` holding
 an object of key-value pairs where the keys are "forceButtonOverlay",
-"upscalingMode", "emulationModel", "sgbOverlayEnable", "uiScale",
+"upscalingMode", "emulationModel", "sgbOverlayEnable", "fontSize",
 "uiTheme", and "audioPreset". All values are integers.
 
 ### ROM Providers

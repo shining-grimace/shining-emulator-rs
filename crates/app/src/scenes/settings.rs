@@ -7,7 +7,7 @@ use std::fs;
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged, active_theme_for_setting};
-use crate::app_ui_scale::{UI_SCALE_LABELS, apply_ui_scale_setting};
+use crate::app_ui_scale::{FONT_SIZE_LABELS, apply_font_size_setting};
 use crate::audio::preset_graph::{
     apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
 };
@@ -48,7 +48,7 @@ const FIELD_FORCE_BUTTON_OVERLAY: u8 = 0;
 const FIELD_EMULATION_MODEL: u8 = 1;
 const FIELD_SGB_OVERLAY_ENABLE: u8 = 2;
 const FIELD_UPSCALING_MODE: u8 = 3;
-const FIELD_UI_SCALE: u8 = 4;
+const FIELD_FONT_SIZE: u8 = 4;
 const FIELD_UI_THEME: u8 = 5;
 const FIELD_AUDIO_PRESET: u8 = 6;
 const FIELD_PRIMARY_INPUT: u8 = 255;
@@ -57,7 +57,7 @@ const TARGET_OVERLAY: u16 = 0;
 const TARGET_MODEL: u16 = 1;
 const TARGET_SGB: u16 = 2;
 const TARGET_UPSCALING: u16 = 3;
-const TARGET_UI_SCALE: u16 = 4;
+const TARGET_FONT_SIZE: u16 = 4;
 const TARGET_THEME: u16 = 5;
 const TARGET_PRIMARY_INPUT: u16 = 6;
 const TARGET_EDIT_MAPPINGS: u16 = 7;
@@ -167,7 +167,7 @@ fn save_settings_select_on_activation(
     mut storage: ResMut<LocalStorage>,
     state: Res<State<AppState>>,
     mut active_theme: ResMut<ActiveTheme>,
-    mut ui_scale: ResMut<UiScale>,
+    mut font_size: ResMut<UiScale>,
     mut primary_input: ResMut<PrimaryInputDevice>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     asset_server: Res<AssetServer>,
@@ -204,7 +204,7 @@ fn save_settings_select_on_activation(
         FIELD_EMULATION_MODEL => storage.data.settings.emulation_model,
         FIELD_SGB_OVERLAY_ENABLE => storage.data.settings.sgb_overlay_enable,
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode,
-        FIELD_UI_SCALE => storage.data.settings.ui_scale,
+        FIELD_FONT_SIZE => storage.data.settings.font_size,
         FIELD_UI_THEME => storage.data.settings.ui_theme,
         FIELD_AUDIO_PRESET => storage.data.settings.audio_preset,
         _ => return,
@@ -218,7 +218,7 @@ fn save_settings_select_on_activation(
         FIELD_EMULATION_MODEL => storage.data.settings.emulation_model = value,
         FIELD_SGB_OVERLAY_ENABLE => storage.data.settings.sgb_overlay_enable = value,
         FIELD_UPSCALING_MODE => storage.data.settings.upscaling_mode = value,
-        FIELD_UI_SCALE => storage.data.settings.ui_scale = value,
+        FIELD_FONT_SIZE => storage.data.settings.font_size = value,
         FIELD_UI_THEME => storage.data.settings.ui_theme = value,
         FIELD_AUDIO_PRESET => storage.data.settings.audio_preset = value.min(9),
         _ => return,
@@ -234,8 +234,8 @@ fn save_settings_select_on_activation(
         *active_theme = active_theme_for_setting(value);
         commands.trigger(ActiveThemeChanged);
     }
-    if settings_select.field == FIELD_UI_SCALE {
-        apply_ui_scale_setting(value, &mut ui_scale);
+    if settings_select.field == FIELD_FONT_SIZE {
+        apply_font_size_setting(value, &mut font_size);
     }
     if settings_select.field == FIELD_AUDIO_PRESET {
         apply_current_audio_preset_to_playback(
@@ -643,17 +643,17 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_UPSCALING => focus_nav_ids(
             TARGET_SGB,
             TARGET_PROVIDER_LIST,
-            TARGET_UI_SCALE,
+            TARGET_FONT_SIZE,
             UI_FOCUS_NONE,
         ),
-        TARGET_UI_SCALE => focus_nav_ids(
+        TARGET_FONT_SIZE => focus_nav_ids(
             TARGET_UPSCALING,
             TARGET_PROVIDER_LIST,
             TARGET_THEME,
             UI_FOCUS_NONE,
         ),
         TARGET_THEME => focus_nav_ids(
-            TARGET_UI_SCALE,
+            TARGET_FONT_SIZE,
             TARGET_PROVIDER_LIST,
             TARGET_PRIMARY_INPUT,
             UI_FOCUS_NONE,
@@ -933,12 +933,12 @@ fn settings_left_column(
                 }
                 ResponsiveFieldRow { gap: 18.0 }
                 Children [
-                    description(font.clone(), theme, "UI Scaling"),
+                    description(font.clone(), theme, "Font Size"),
                     (
-                        multi_select(font.clone(), theme, ui_scale_config(settings.ui_scale as usize))
-                        SettingsSelect { field: FIELD_UI_SCALE }
-                        UiFocusId { id: TARGET_UI_SCALE }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_UI_SCALE).up}, right: {settings_focus_nav(TARGET_UI_SCALE).right}, down: {settings_focus_nav(TARGET_UI_SCALE).down}, left: {settings_focus_nav(TARGET_UI_SCALE).left} }
+                        multi_select(font.clone(), theme, font_size_config(settings.font_size as usize))
+                        SettingsSelect { field: FIELD_FONT_SIZE }
+                        UiFocusId { id: TARGET_FONT_SIZE }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_FONT_SIZE).up}, right: {settings_focus_nav(TARGET_FONT_SIZE).right}, down: {settings_focus_nav(TARGET_FONT_SIZE).down}, left: {settings_focus_nav(TARGET_FONT_SIZE).left} }
                     ),
                 ]
             ),
@@ -1271,10 +1271,10 @@ fn upscaling_config(selected: usize) -> MultiSelectConfig {
     select_config(selected.min(3), vec!["None", "2x", "3x", "4x"])
 }
 
-fn ui_scale_config(selected: usize) -> MultiSelectConfig {
+fn font_size_config(selected: usize) -> MultiSelectConfig {
     select_config(
-        selected.min(UI_SCALE_LABELS.len() - 1),
-        UI_SCALE_LABELS.to_vec(),
+        selected.min(FONT_SIZE_LABELS.len() - 1),
+        FONT_SIZE_LABELS.to_vec(),
     )
 }
 

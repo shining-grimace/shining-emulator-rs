@@ -133,7 +133,6 @@ b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
-- Change the UI Scaling to instead be Font Size, and make the default size smaller
 - Game Shark + Game Genie are probably not yet implemented
 - Think animations in menus: corrode away layouts on transition?
 - SGB border isn't implemented
