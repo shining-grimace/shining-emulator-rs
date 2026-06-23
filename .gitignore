@@ -13,3 +13,6 @@ local.properties
 
 # Base emulator project
 /ShiningEmulator/
+
+# Downloaded third-party emulator test ROMs
+/.test-roms/

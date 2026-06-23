@@ -20,6 +20,9 @@ mod sram;
 mod systems;
 mod video;
 
+#[cfg(test)]
+mod accuracy_tests;
+
 use bevy::prelude::*;
 
 use crate::game_boy::emulator::gpu::GpuMode;
