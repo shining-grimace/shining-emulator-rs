@@ -42,6 +42,7 @@ use crate::ui_elements::theme::UiThemeTextColor;
 const OSCILLATOR_SQUARE: usize = 0;
 const OSCILLATOR_BUILT_IN_SAMPLER: usize = 4;
 const OSCILLATOR_CUSTOM_SAMPLER: usize = 5;
+const AUDIO_OPTION_SILENCE: &str = "Silence";
 
 const FIELD_OSCILLATOR: u8 = 0;
 const FIELD_BUILT_IN_SAMPLE: u8 = 1;
@@ -749,7 +750,7 @@ fn custom_sample_row(
 
 fn oscillator_config(selected: usize) -> MultiSelectConfig {
     select_config(
-        selected.min(5),
+        selected.min(6),
         vec![
             "Square Wave",
             "Triangle Wave",
@@ -757,6 +758,7 @@ fn oscillator_config(selected: usize) -> MultiSelectConfig {
             "LFSR Noise",
             "Built-in Sampler",
             "Custom Sampler",
+            AUDIO_OPTION_SILENCE,
         ],
     )
 }
@@ -775,7 +777,10 @@ fn modulation_config(selected: usize) -> MultiSelectConfig {
 }
 
 fn sample_config(selected: usize) -> MultiSelectConfig {
-    select_config(selected.min(3), vec!["Piano", "Guitar", "Bass", "Bell"])
+    select_config(
+        selected.min(4),
+        vec!["Piano", "Guitar", "Bass", "Bell", AUDIO_OPTION_SILENCE],
+    )
 }
 
 fn select_config(selected: usize, options: Vec<&'static str>) -> MultiSelectConfig {
@@ -820,6 +825,9 @@ fn audio_preset_from_form(
             }
             channel_preset.built_in_sample =
                 sample_label(select_value(selects, channel, FIELD_BUILT_IN_SAMPLE, 0)).to_string();
+            if channel == 3 && channel_preset.built_in_sample == AUDIO_OPTION_SILENCE {
+                channel_preset.oscillator = AUDIO_OPTION_SILENCE.to_string();
+            }
             channel_preset.custom_sample_path = pickers
                 .iter()
                 .find(|(picker, _)| picker.channel == channel)
@@ -1009,7 +1017,7 @@ fn sample_label(index: usize) -> &'static str {
     sample_options().get(index).copied().unwrap_or("Piano")
 }
 
-fn oscillator_options() -> [&'static str; 6] {
+fn oscillator_options() -> [&'static str; 7] {
     [
         "Square Wave",
         "Triangle Wave",
@@ -1017,6 +1025,7 @@ fn oscillator_options() -> [&'static str; 6] {
         "LFSR Noise",
         "Built-in Sampler",
         "Custom Sampler",
+        AUDIO_OPTION_SILENCE,
     ]
 }
 
@@ -1030,6 +1039,6 @@ fn modulation_options() -> [&'static str; 5] {
     ]
 }
 
-fn sample_options() -> [&'static str; 4] {
-    ["Piano", "Guitar", "Bass", "Bell"]
+fn sample_options() -> [&'static str; 5] {
+    ["Piano", "Guitar", "Bass", "Bell", AUDIO_OPTION_SILENCE]
 }

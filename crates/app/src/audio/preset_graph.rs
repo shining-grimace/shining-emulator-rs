@@ -28,6 +28,7 @@ const OSCILLATOR_LFSR_NOISE: &str = "LFSR Noise";
 const OSCILLATOR_WAVE_TABLE: &str = "Wave Table";
 const OSCILLATOR_BUILT_IN_SAMPLER: &str = "Built-in Sampler";
 const OSCILLATOR_CUSTOM_SAMPLER: &str = "Custom Sampler";
+const OSCILLATOR_SILENCE: &str = "Silence";
 const BUILT_IN_SAMPLE_BASE_NOTE: u8 = 60;
 const BUILT_IN_SAMPLE_LOOP_START: usize = 0;
 const BUILT_IN_SAMPLE_LOOP_END: usize = 96_000;
@@ -246,15 +247,24 @@ fn channel_for_graph(
 ) -> AudioChannelPreset {
     let mut channel = preset_channel(preset, index);
     if index == 2 {
-        channel.oscillator = match target {
-            AudioGraphTarget::Menu => OSCILLATOR_BUILT_IN_SAMPLER.to_string(),
-            AudioGraphTarget::Gameplay => OSCILLATOR_WAVE_TABLE.to_string(),
-        };
+        if channel.built_in_sample == OSCILLATOR_SILENCE || channel.oscillator == OSCILLATOR_SILENCE
+        {
+            channel.oscillator = OSCILLATOR_SILENCE.to_string();
+        } else {
+            channel.oscillator = match target {
+                AudioGraphTarget::Menu => OSCILLATOR_BUILT_IN_SAMPLER.to_string(),
+                AudioGraphTarget::Gameplay => OSCILLATOR_WAVE_TABLE.to_string(),
+            };
+        }
     }
     channel
 }
 
 fn channel_uses_envelope(channel: &AudioChannelPreset) -> bool {
+    if channel.oscillator == OSCILLATOR_SILENCE || channel.built_in_sample == OSCILLATOR_SILENCE {
+        return false;
+    }
+
     matches!(
         channel.oscillator.as_str(),
         OSCILLATOR_SQUARE
@@ -279,6 +289,7 @@ fn oscillator_source_json(
     square_wave_volume_multiplier: f32,
 ) -> Value {
     match preset.oscillator.as_str() {
+        OSCILLATOR_SILENCE => null_source_json(node_id),
         OSCILLATOR_TRIANGLE => json!({
             "type": "TriangleWave",
             "node_id": node_id,
@@ -312,6 +323,10 @@ fn oscillator_source_json(
 }
 
 fn built_in_sample_source_json(preset: &AudioChannelPreset, node_id: u64) -> Value {
+    if preset.built_in_sample == OSCILLATOR_SILENCE {
+        return null_source_json(node_id);
+    }
+
     let sample_path = built_in_sample_path(&preset.built_in_sample);
     json!({
         "type": "SampleLoop",
@@ -325,6 +340,13 @@ fn built_in_sample_source_json(preset: &AudioChannelPreset, node_id: u64) -> Val
             "start": BUILT_IN_SAMPLE_LOOP_START,
             "end": BUILT_IN_SAMPLE_LOOP_END
         }
+    })
+}
+
+fn null_source_json(node_id: u64) -> Value {
+    json!({
+        "type": "Null",
+        "node_id": node_id
     })
 }
 
@@ -531,6 +553,61 @@ mod tests {
             source["source"]["WavetableWithSampleRate"][0],
             json!(WAVETABLE_SAMPLE_RATE)
         );
+    }
+
+    #[test]
+    fn silence_oscillator_uses_null_node() {
+        let mut preset = default_audio_preset();
+        preset.channels[0].oscillator = OSCILLATOR_SILENCE.to_string();
+
+        let graph = midi_graph_json_from_audio_preset(&preset);
+        let source = &graph["channels"]["0"];
+
+        assert_eq!(source["type"], json!("Null"));
+        assert_eq!(source["node_id"], json!(GAME_AUDIO_CHANNEL_NODE_IDS[0]));
+    }
+
+    #[test]
+    fn silence_built_in_sample_uses_null_node() {
+        let mut preset = default_audio_preset();
+        preset.channels[0].oscillator = OSCILLATOR_BUILT_IN_SAMPLER.to_string();
+        preset.channels[0].built_in_sample = OSCILLATOR_SILENCE.to_string();
+
+        let graph = midi_graph_json_from_audio_preset(&preset);
+        let source = &graph["channels"]["0"];
+
+        assert_eq!(source["type"], json!("Null"));
+        assert_eq!(source["node_id"], json!(GAME_AUDIO_CHANNEL_NODE_IDS[0]));
+    }
+
+    #[test]
+    fn channel_three_silence_uses_null_node_for_menu_and_gameplay() {
+        let mut preset = default_audio_preset();
+        preset.channels[2].oscillator = OSCILLATOR_SILENCE.to_string();
+        preset.channels[2].built_in_sample = OSCILLATOR_SILENCE.to_string();
+
+        let menu_graph = midi_graph_json_from_audio_preset(&preset);
+        let gameplay_graph = game_audio_graph_json_from_audio_preset(&preset);
+
+        assert_eq!(menu_graph["channels"]["2"]["type"], json!("Null"));
+        assert_eq!(
+            menu_graph["channels"]["2"]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
+        );
+        assert_eq!(gameplay_graph["sources"][2]["type"], json!("Null"));
+        assert_eq!(
+            gameplay_graph["sources"][2]["node_id"],
+            json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
+        );
+    }
+
+    #[test]
+    fn silence_source_deserializes_to_null_config() {
+        use bevy_midi_graph::midi::node::Null;
+
+        let source = null_source_json(GAME_AUDIO_CHANNEL_NODE_IDS[0]);
+
+        let _: Null = serde_json::from_value(source).unwrap();
     }
 
     #[test]

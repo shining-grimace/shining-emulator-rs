@@ -133,8 +133,9 @@ b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
-- Add support for NullNode from MIDI Graph
-- ROMs seem not to be ordered most-recently-played first
+- Change the UI Scaling to instead be Font Size, and make the default size smaller
+- Game Shark + Game Genie are probably not yet implemented
+- Think animations in menus: corrode away layouts on transition?
 - SGB border isn't implemented
 - Upon return to Home from a game, the audio volumes and other parameters aren't reset 
 - "rhythm-land" reports that this is an inaccurate emulator
