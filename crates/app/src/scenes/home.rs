@@ -7,9 +7,9 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    UI_CONTENT_GAP, UI_FIELD_GAP, UI_MAX_CONTENT_WIDTH, UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP,
-    UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
-    UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP, UI_SIDEBAR_WIDTH,
+    UI_CONTENT_GAP, UI_FIELD_GAP, UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING,
+    UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING, UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP,
+    UI_SIDEBAR_WIDTH, UI_WIDE_CONTENT_WIDTH,
 };
 use crate::game_boy::GameBoyRomLoadRequest;
 use crate::input::selection::PrimaryInputDevice;
@@ -357,7 +357,7 @@ fn home_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(UI_MAX_CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,

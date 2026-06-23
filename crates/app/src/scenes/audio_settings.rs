@@ -13,9 +13,10 @@ use crate::audio::preset_graph::{
     load_audio_preset,
 };
 use crate::dimensions::{
-    UI_BODY_FONT_SIZE, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_INNER_PADDING, UI_MAX_CONTENT_WIDTH,
-    UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
-    UI_SECTION_GAP, UI_WIDE_PRIMARY_COLUMN_PERCENT, UI_WIDE_SECONDARY_COLUMN_PERCENT,
+    UI_BODY_FONT_SIZE, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_INNER_PADDING, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING,
+    UI_SECTION_GAP, UI_WIDE_CONTENT_WIDTH, UI_WIDE_PRIMARY_COLUMN_PERCENT,
+    UI_WIDE_SECONDARY_COLUMN_PERCENT,
 };
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
@@ -337,7 +338,7 @@ fn audio_settings_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(UI_MAX_CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,

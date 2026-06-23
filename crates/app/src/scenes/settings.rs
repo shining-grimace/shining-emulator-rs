@@ -12,9 +12,9 @@ use crate::audio::preset_graph::{
     apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
 };
 use crate::dimensions::{
-    UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_MAX_CONTENT_WIDTH, UI_PANEL_GAP,
-    UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
-    UI_SECONDARY_COLUMN_PERCENT, UI_SECTION_GAP,
+    UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING,
+    UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING, UI_SECONDARY_COLUMN_PERCENT, UI_SECTION_GAP,
+    UI_WIDE_CONTENT_WIDTH,
 };
 use crate::input::selection::{
     InputMappingEditTarget, PrimaryInputDevice, mapping_label, selected_mapping_index,
@@ -780,7 +780,7 @@ fn settings_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(UI_MAX_CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,

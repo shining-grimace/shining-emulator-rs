@@ -10,9 +10,9 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_CONTENT_GAP, UI_MAX_CONTENT_WIDTH,
-    UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
-    UI_SECONDARY_COLUMN_PERCENT,
+    HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_CONTENT_GAP, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
+    UI_SECONDARY_COLUMN_PERCENT, UI_WIDE_CONTENT_WIDTH,
 };
 use crate::input::selection::PrimaryInputDevice;
 use crate::storage::LocalStorage;
@@ -226,7 +226,7 @@ fn rom_data_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(UI_MAX_CONTENT_WIDTH),
+                    max_width: px(UI_WIDE_CONTENT_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
