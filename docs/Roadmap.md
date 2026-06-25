@@ -136,6 +136,9 @@ Known issues:
 - Game Shark + Game Genie are probably not yet implemented
 - Think animations in menus: corrode away layouts on transition?
 - SGB border isn't implemented
+- The custom loading indicator isn't used in all places where it should be
+- Emulation modes seem npt to work, and adding "No SGB" would be a good addition
+- The ROM list should have fewer columns on mobile so that the game names are more visible
 - Upon return to Home from a game, the audio volumes and other parameters aren't reset 
 - "rhythm-land" reports that this is an inaccurate emulator
 - Audio needs to be tweaked to match a good reference video

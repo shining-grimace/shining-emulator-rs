@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game_boy::emulator::audio_unit::AudioUnitState;
+use crate::game_boy::emulator::cheats::CheatTable;
 use crate::game_boy::emulator::constants::{GB_CLOCK_HZ, SGB_CLOCK_HZ};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuRegisters, CpuTiming, SerialState};
 use crate::game_boy::emulator::dma::DmaState;
@@ -48,6 +49,7 @@ pub(crate) struct GameBoyCore {
     pub(crate) sgb: SgbState,
     pub(crate) audio_unit: AudioUnitState,
     pub(crate) video_frame: VideoFrameAssembler,
+    pub(crate) cheats: CheatTable,
 }
 
 impl Default for GameBoyCore {
@@ -71,6 +73,7 @@ impl Default for GameBoyCore {
             sgb: SgbState::default(),
             audio_unit: AudioUnitState::default(),
             video_frame: VideoFrameAssembler::default(),
+            cheats: CheatTable::default(),
         }
     }
 }

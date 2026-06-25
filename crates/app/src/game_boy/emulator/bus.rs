@@ -64,7 +64,10 @@ pub(crate) fn read8(core: &GameBoyCore, address: u16) -> u8 {
     if oam_dma_blocks_cpu_access(core, address) {
         return 0xff;
     }
-    read8_unrestricted(core, address)
+    let value = read8_unrestricted(core, address);
+    core.cheats
+        .read_patch(address, value)
+        .unwrap_or(value)
 }
 
 fn read8_unrestricted(core: &GameBoyCore, address: u16) -> u8 {
