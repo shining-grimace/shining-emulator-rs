@@ -176,11 +176,11 @@ fn handle_gameplay_activation(
         clear_gameplay_ui_focus(&mut commands, &queries.focused, &mut last_focused);
         menu_pause.paused_by_menu = true;
         despawn_choice_popups(&mut commands, &queries.popup_roots);
-    let popup_position = centered_choice_popup_position(
-        &queries.windows,
-        CHEAT_CODES_POPUP_WIDTH,
-        CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
-    );
+        let popup_position = centered_choice_popup_position(
+            &queries.windows,
+            CHEAT_CODES_POPUP_WIDTH,
+            CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
+        );
         commands.spawn_scene(gameplay_menu_popup_scene(&assets, *theme, popup_position));
         return;
     }
@@ -189,18 +189,23 @@ fn handle_gameplay_activation(
         return;
     };
 
-    let Some(context_index) = choice_popup_context_index(
-        entity,
-        &queries.popup_roots,
-        &queries.child_query,
-    ) else {
+    let Some(context_index) =
+        choice_popup_context_index(entity, &queries.popup_roots, &queries.child_query)
+    else {
         return;
     };
 
     if context_index == CHEAT_CODES_CONTEXT_INDEX {
         match option.option_index {
             CHEAT_OPTION_ADD => {
-                handle_add_cheat_code(&mut commands, &queries, &mut emulators, &assets, theme, &mut status);
+                handle_add_cheat_code(
+                    &mut commands,
+                    &queries,
+                    &mut emulators,
+                    &assets,
+                    theme,
+                    &mut status,
+                );
             }
             CHEAT_OPTION_BACK => {
                 handle_cheat_codes_back(&mut commands, &assets, *theme, &queries);
@@ -667,15 +672,17 @@ fn spawn_cheat_codes_popup(
         UI_MULTI_SELECT_WIDTH,
         CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
     );
-    commands.spawn_scene(cheat_codes_popup_scene(assets, theme, popup_position, cheat_codes));
+    commands.spawn_scene(cheat_codes_popup_scene(
+        assets,
+        theme,
+        popup_position,
+        cheat_codes,
+    ));
 }
 
 const CHEAT_CODES_POPUP_ESTIMATED_HEIGHT: f32 = 480.0;
 
-fn despawn_cheat_codes_popup(
-    commands: &mut Commands,
-    queries: &GameplayMenuActivationQueries,
-) {
+fn despawn_cheat_codes_popup(commands: &mut Commands, queries: &GameplayMenuActivationQueries) {
     for root in &queries.cheat_code_popup_roots {
         commands.entity(root).try_despawn();
     }
@@ -718,7 +725,12 @@ fn handle_add_cheat_code(
         CHEAT_CODES_POPUP_WIDTH,
         CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
     );
-    commands.spawn_scene(cheat_codes_popup_scene(assets, *theme, popup_position, &cheat_codes));
+    commands.spawn_scene(cheat_codes_popup_scene(
+        assets,
+        *theme,
+        popup_position,
+        &cheat_codes,
+    ));
 }
 
 fn handle_cheat_codes_back(
@@ -736,7 +748,12 @@ fn handle_cheat_codes_back(
     commands.spawn_scene(gameplay_menu_popup_scene(assets, theme, popup_position));
 }
 
-fn cheat_codes_popup_scene(assets: &AppAssets, theme: ActiveTheme, position: Vec2, codes: &[CheatCode]) -> impl Scene {
+fn cheat_codes_popup_scene(
+    assets: &AppAssets,
+    theme: ActiveTheme,
+    position: Vec2,
+    codes: &[CheatCode],
+) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
 
     bsn! {
@@ -774,7 +791,11 @@ fn cheat_codes_popup_scene(assets: &AppAssets, theme: ActiveTheme, position: Vec
     }
 }
 
-fn cheat_codes_list_container(font: Handle<Font>, theme: ActiveTheme, codes: &[CheatCode]) -> impl Scene {
+fn cheat_codes_list_container(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    codes: &[CheatCode],
+) -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
@@ -939,42 +960,48 @@ fn cheat_codes_close_button(
     }
 }
 
-fn cheat_codes_list(font: Handle<Font>, theme: ActiveTheme, codes: &[CheatCode]) -> Vec<Box<dyn SceneList>> {
+fn cheat_codes_list(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    codes: &[CheatCode],
+) -> Vec<Box<dyn SceneList>> {
     if codes.is_empty() {
-        return vec![
-            Box::new(bsn_list![
-                Text("No cheat codes entered.")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_BODY_FONT_SIZE),
-                }
-                TextColor({theme.tertiary})
-                UiThemeTextColor::Tertiary
-                TextLayout::new(Justify::Center, LineBreak::WordBoundary)
-            ]) as Box<dyn SceneList>,
-        ];
-    }
-
-    codes.iter().enumerate().map(|(_i, code)| {
-        let font = font.clone();
-        let status = if code.enabled { "ON" } else { "OFF" };
-        let label_text = format!(
-            "[{status}] {:04X}:{:02X}{}",
-            code.address,
-            code.value,
-            if code.compare.is_some() { " (cmp)" } else { "" }
-        );
-        Box::new(bsn_list![
-            Text({label_text})
+        return vec![Box::new(bsn_list![
+            Text("No cheat codes entered.")
             TextFont {
                 font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                font_size: px(UI_CONTROL_FONT_SIZE),
+                font_size: px(UI_BODY_FONT_SIZE),
             }
-            TextColor({theme.primary})
-            UiThemeTextColor::Primary
-            TextLayout::new(Justify::Left, LineBreak::NoWrap)
-        ]) as Box<dyn SceneList>
-    }).collect()
+            TextColor({theme.tertiary})
+            UiThemeTextColor::Tertiary
+            TextLayout::new(Justify::Center, LineBreak::WordBoundary)
+        ]) as Box<dyn SceneList>];
+    }
+
+    codes
+        .iter()
+        .enumerate()
+        .map(|(_i, code)| {
+            let font = font.clone();
+            let status = if code.enabled { "ON" } else { "OFF" };
+            let label_text = format!(
+                "[{status}] {:04X}:{:02X}{}",
+                code.address,
+                code.value,
+                if code.compare.is_some() { " (cmp)" } else { "" }
+            );
+            Box::new(bsn_list![
+                Text({label_text})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                TextLayout::new(Justify::Left, LineBreak::NoWrap)
+            ]) as Box<dyn SceneList>
+        })
+        .collect()
 }
 
 fn cheat_codes_popup_label(font: Handle<Font>, theme: ActiveTheme, text: &str) -> impl Scene {

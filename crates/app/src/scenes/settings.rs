@@ -53,6 +53,10 @@ const FIELD_UI_THEME: u8 = 5;
 const FIELD_AUDIO_PRESET: u8 = 6;
 const FIELD_PRIMARY_INPUT: u8 = 255;
 
+const EMULATION_MODEL_BEST_FOR_ROM: u8 = 0;
+const EMULATION_MODEL_GAME_BOY_MONO: u8 = 1;
+const EMULATION_MODEL_SUPER_GAME_BOY: u8 = 3;
+
 const TARGET_OVERLAY: u16 = 0;
 const TARGET_MODEL: u16 = 1;
 const TARGET_SGB: u16 = 2;
@@ -184,10 +188,10 @@ fn save_settings_select_on_activation(
         return;
     };
 
-    let value = if settings_select.field == FIELD_AUDIO_PRESET {
-        selected_audio_preset_number(&storage, ui_select.selected)
-    } else {
-        ui_select.selected as u8
+    let value = match settings_select.field {
+        FIELD_AUDIO_PRESET => selected_audio_preset_number(&storage, ui_select.selected),
+        FIELD_EMULATION_MODEL => selected_emulation_model_value(ui_select.selected),
+        _ => ui_select.selected as u8,
     };
     if settings_select.field == FIELD_PRIMARY_INPUT {
         primary_input.mapping_index = selected_mapping_index(
@@ -879,7 +883,7 @@ fn settings_left_column(
                 }
                 ResponsiveFieldRow { gap: 18.0 }
                 Children [
-                    description(font.clone(), theme, "Force Emulated Model"),
+                    description(font.clone(), theme, "Emulated Model"),
                     (
                         multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
                         SettingsSelect { field: FIELD_EMULATION_MODEL }
@@ -1253,14 +1257,25 @@ fn button_overlay_config(selected: usize) -> MultiSelectConfig {
 
 fn emulation_model_config(selected: usize) -> MultiSelectConfig {
     select_config(
-        selected.min(3),
-        vec![
-            "Best for ROM",
-            "Game Boy",
-            "Game Boy Color",
-            "Super GameBoy",
-        ],
+        emulation_model_selected_index(selected as u8),
+        vec!["Best for ROM", "GameBoy Mono", "Super GameBoy"],
     )
+}
+
+fn selected_emulation_model_value(selected: usize) -> u8 {
+    match selected {
+        1 => EMULATION_MODEL_GAME_BOY_MONO,
+        2 => EMULATION_MODEL_SUPER_GAME_BOY,
+        _ => EMULATION_MODEL_BEST_FOR_ROM,
+    }
+}
+
+fn emulation_model_selected_index(value: u8) -> usize {
+    match value {
+        EMULATION_MODEL_GAME_BOY_MONO => 1,
+        EMULATION_MODEL_SUPER_GAME_BOY => 2,
+        _ => 0,
+    }
 }
 
 fn yes_no_config(selected: usize) -> MultiSelectConfig {

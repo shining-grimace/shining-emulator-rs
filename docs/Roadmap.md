@@ -133,11 +133,14 @@ b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
-- Game Shark + Game Genie are probably not yet implemented
 - Think animations in menus: corrode away layouts on transition?
 - SGB border isn't implemented
+- The Emulation Menu doesn't appear in the screen centre
+- Cheat codes need some work: the popup should be shown in screen sentre, and should list options in a list view which has a maximum (scrolling) height, shows the type ("Game Geni" or "GameShark") and has a "Remove" button to remove the selected one
+- For drop-down selections, when the options are opened, clicking the main element again doesn't hide the options
+- In main Settings, the Edit Mappings button is less wide than the standard size of other elements
+- In main Settings, sections are not distinct because there's no margin between say input settings and audio settings
 - The custom loading indicator isn't used in all places where it should be
-- Emulation modes seem npt to work, and adding "No SGB" would be a good addition
 - The ROM list should have fewer columns on mobile so that the game names are more visible
 - Upon return to Home from a game, the audio volumes and other parameters aren't reset 
 - "rhythm-land" reports that this is an inaccurate emulator

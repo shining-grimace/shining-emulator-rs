@@ -1,3 +1,7 @@
+---
+name: ai-standards
+description: Coding standards for Bevy projects
+---
 
 # Rust & Bevy ECS Desktop App Architecture
 

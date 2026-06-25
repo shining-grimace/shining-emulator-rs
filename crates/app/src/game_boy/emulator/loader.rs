@@ -24,6 +24,10 @@ const ROM_SIZE_INDEX: usize = 0x0148;
 const RAM_SIZE_INDEX: usize = 0x0149;
 const HEADER_CHECKSUM_INDEX: usize = 0x014d;
 
+const EMULATION_MODEL_BEST_FOR_ROM: u8 = 0;
+const EMULATION_MODEL_GAME_BOY_MONO: u8 = 1;
+const EMULATION_MODEL_SUPER_GAME_BOY: u8 = 3;
+
 const OFFICIAL_LOGO: [u8; 48] = [
     0xce, 0xed, 0x66, 0x66, 0xcc, 0x0d, 0x00, 0x0b, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0c, 0x00, 0x0d,
     0x00, 0x08, 0x11, 0x1f, 0x88, 0x89, 0x00, 0x0e, 0xdc, 0xcc, 0x6e, 0xe6, 0xdd, 0xdd, 0xd9, 0x99,
@@ -180,7 +184,8 @@ fn load_rom_into_emulator(
     storage: &LocalStorage,
     resume_auto_save: bool,
 ) -> Result<i64, GameBoyLoadError> {
-    let properties = parse_rom_properties(&loaded.bytes)?;
+    let mut properties = parse_rom_properties(&loaded.bytes)?;
+    apply_emulation_model_setting(&mut properties, storage.data.settings.emulation_model);
     if usize::try_from(properties.size_bytes)
         .ok()
         .is_some_and(|size_bytes| size_bytes > loaded.bytes.len())
@@ -217,6 +222,21 @@ fn load_rom_into_emulator(
     }
 
     Ok(emulator.cpu_timing.clock_frequency_hz)
+}
+
+fn apply_emulation_model_setting(properties: &mut RomProperties, emulation_model: u8) {
+    match emulation_model {
+        EMULATION_MODEL_BEST_FOR_ROM => {}
+        EMULATION_MODEL_GAME_BOY_MONO => {
+            properties.cgb_flag = false;
+            properties.sgb_flag = false;
+        }
+        EMULATION_MODEL_SUPER_GAME_BOY => {
+            properties.cgb_flag = false;
+            properties.sgb_flag = true;
+        }
+        _ => {}
+    }
 }
 
 fn restore_auto_save_if_present(
@@ -604,6 +624,47 @@ mod tests {
 
         assert!(parse_rom_properties(&ram_128k).is_ok());
         assert!(parse_rom_properties(&ram_64k).is_ok());
+    }
+
+    #[test]
+    fn emulation_model_setting_can_force_game_boy_mono() {
+        let mut properties = RomProperties {
+            cgb_flag: true,
+            sgb_flag: true,
+            ..Default::default()
+        };
+
+        apply_emulation_model_setting(&mut properties, EMULATION_MODEL_GAME_BOY_MONO);
+
+        assert!(!properties.cgb_flag);
+        assert!(!properties.sgb_flag);
+    }
+
+    #[test]
+    fn emulation_model_setting_can_force_super_game_boy() {
+        let mut properties = RomProperties {
+            cgb_flag: true,
+            ..Default::default()
+        };
+
+        apply_emulation_model_setting(&mut properties, EMULATION_MODEL_SUPER_GAME_BOY);
+
+        assert!(!properties.cgb_flag);
+        assert!(properties.sgb_flag);
+    }
+
+    #[test]
+    fn removed_emulation_model_settings_fall_back_to_best_for_rom() {
+        let mut properties = RomProperties {
+            cgb_flag: true,
+            sgb_flag: true,
+            ..Default::default()
+        };
+
+        apply_emulation_model_setting(&mut properties, 2);
+
+        assert!(properties.cgb_flag);
+        assert!(properties.sgb_flag);
     }
 
     fn minimal_rom(cart_type: u8, rom_size: u8, ram_size: u8) -> Vec<u8> {

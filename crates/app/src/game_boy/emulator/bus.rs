@@ -65,9 +65,7 @@ pub(crate) fn read8(core: &GameBoyCore, address: u16) -> u8 {
         return 0xff;
     }
     let value = read8_unrestricted(core, address);
-    core.cheats
-        .read_patch(address, value)
-        .unwrap_or(value)
+    core.cheats.read_patch(address, value).unwrap_or(value)
 }
 
 fn read8_unrestricted(core: &GameBoyCore, address: u16) -> u8 {

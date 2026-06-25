@@ -68,14 +68,16 @@ fn parse_game_genie(cleaned: &str) -> Option<(u16, u8, Option<u8>)> {
         6 => {
             let value = (bytes[0] << 4) | bytes[1];
             let addr_high = 0xF - bytes[5];
-            let addr_low = (u16::from(bytes[2]) << 8) | (u16::from(bytes[3]) << 4) | u16::from(bytes[4]);
+            let addr_low =
+                (u16::from(bytes[2]) << 8) | (u16::from(bytes[3]) << 4) | u16::from(bytes[4]);
             let address = (u16::from(addr_high) << 12) | addr_low;
             Some((address, value, None))
         }
         9 => {
             let value = (bytes[0] << 4) | bytes[1];
             let addr_high = 0xF - bytes[5];
-            let addr_low = (u16::from(bytes[2]) << 8) | (u16::from(bytes[3]) << 4) | u16::from(bytes[4]);
+            let addr_low =
+                (u16::from(bytes[2]) << 8) | (u16::from(bytes[3]) << 4) | u16::from(bytes[4]);
             let address = (u16::from(addr_high) << 12) | addr_low;
             let raw = (bytes[6] << 4) | bytes[8];
             let original = rotate_right_8(raw ^ 0xFF, 2) ^ 0x45;
@@ -155,14 +157,23 @@ mod tests {
     use super::*;
 
     fn gg6_decode(code: &str) -> (u16, u8) {
-        let bytes: Vec<u8> = code.chars().map(|c| c.to_digit(16).unwrap() as u8).collect();
+        let bytes: Vec<u8> = code
+            .chars()
+            .map(|c| c.to_digit(16).unwrap() as u8)
+            .collect();
         let value = (bytes[0] << 4) | bytes[1];
-        let addr = ((0xF - bytes[5]) as u16) << 12 | (u16::from(bytes[2]) << 8) | (u16::from(bytes[3]) << 4) | u16::from(bytes[4]);
+        let addr = ((0xF - bytes[5]) as u16) << 12
+            | (u16::from(bytes[2]) << 8)
+            | (u16::from(bytes[3]) << 4)
+            | u16::from(bytes[4]);
         (addr, value)
     }
 
     fn gg9_compare(code: &str) -> u8 {
-        let bytes: Vec<u8> = code.chars().map(|c| c.to_digit(16).unwrap() as u8).collect();
+        let bytes: Vec<u8> = code
+            .chars()
+            .map(|c| c.to_digit(16).unwrap() as u8)
+            .collect();
         let raw = (bytes[6] << 4) | bytes[8];
         rotate_right_8(raw ^ 0xFF, 2) ^ 0x45
     }

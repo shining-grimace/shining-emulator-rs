@@ -31,11 +31,11 @@ use crate::game_boy::emulator::gpu::GpuMode;
 pub(crate) use audio_unit::{
     GameBoyAudioBalance, GameBoyAudioChannel, GameBoyAudioCommand, GameBoyAudioEvent,
 };
+pub(crate) use cheats::{CheatCode, parse_cheat_code};
 pub(crate) use loader::{
     GameBoyLoadStatus, GameBoyRomLoadRequest, GameBoyRomLoadTaskState, begin_game_boy_rom_load,
     finish_game_boy_rom_load, has_pending_game_boy_rom_load,
 };
-pub(crate) use cheats::{CheatCode, parse_cheat_code};
 pub(crate) use machine::GameBoyCore;
 pub(crate) use save_state::{apply_save_state, encode_save_state};
 pub(super) use systems::{

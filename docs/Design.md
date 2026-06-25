@@ -831,7 +831,9 @@ Under General Settings, these options are available:
   all times, including a description text underneath it which explains that if
   this is not enabled, the overlay is only shown on touch devices with no
   non-touch input devices available
-- A drop-down selection to force emulation to run in a particular GameBoy model
+- A drop-down selection for the emulated GameBoy model, choosing between
+  "Best for ROM", "GameBoy Mono", and "Super GameBoy". "GameBoy Mono" disables
+  color and Super GameBoy features; "Super GameBoy" disables color.
 - A drop-down selection for whether the Super GameBoy border is shown
 - A selection for the upscaling mode, choosing between "None", "2x", "3x", and
   "4x", where "None" is the default option
