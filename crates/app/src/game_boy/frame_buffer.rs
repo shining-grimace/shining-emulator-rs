@@ -58,6 +58,15 @@ impl Default for GameBoyFrameRing {
 }
 
 impl GameBoyFrameRing {
+    pub(crate) fn clear_to_black(&mut self) {
+        for frame in &mut self.frames {
+            frame.pixels.fill(0);
+        }
+        self.next_write_index = 0;
+        self.latest_written_index = None;
+        self.latest_sequence = GameBoyFrameSequence::default();
+    }
+
     pub(crate) fn borrow_next_write_frame(&mut self) -> Option<WritableGameBoyFrame<'_>> {
         let Self {
             frames,
@@ -143,5 +152,24 @@ mod tests {
 
         assert_eq!(ring.latest_written_index, Some(GAME_BOY_FRAME_RING_LEN - 1));
         assert_eq!(ring.next_write_index, 0);
+    }
+
+    #[test]
+    fn clear_to_black_removes_latest_frame_and_resets_ring() {
+        let mut ring = GameBoyFrameRing::default();
+        let mut frame = ring.borrow_next_write_frame().unwrap();
+        frame.pixels_mut()[0] = 0xff;
+        frame.publish();
+
+        ring.clear_to_black();
+
+        assert!(ring.latest_written_frame().is_none());
+        assert_eq!(ring.next_write_index, 0);
+        assert_eq!(ring.latest_sequence, GameBoyFrameSequence::default());
+        assert!(
+            ring.frames
+                .iter()
+                .all(|frame| frame.pixels.iter().all(|pixel| *pixel == 0))
+        );
     }
 }

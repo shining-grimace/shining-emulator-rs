@@ -13,8 +13,8 @@ use crate::game_boy::emulator::{
 };
 use crate::game_boy::frame_buffer::{GAME_BOY_FRAME_RATE_HZ, GameBoyFrameRing};
 use crate::game_boy::frame_renderer::{
-    GameBoyFrameTexture, resize_game_boy_frame_display, spawn_game_boy_frame_display,
-    update_game_boy_frame_texture,
+    GameBoyFrameTexture, reset_game_boy_frame_output, resize_game_boy_frame_display,
+    spawn_game_boy_frame_display, update_game_boy_frame_texture,
 };
 
 pub struct GameBoyPlugin;
@@ -43,6 +43,7 @@ impl Plugin for GameBoyPlugin {
                 OnEnter(AppState::Gameplay),
                 (
                     spawn_game_boy_emulator,
+                    reset_game_boy_frame_output,
                     spawn_game_boy_frame_display,
                     begin_game_boy_rom_load,
                 )

@@ -64,6 +64,10 @@ impl GameBoyLoadStatus {
         }
     }
 
+    pub(crate) fn is_loading(&self) -> bool {
+        matches!(self.state, GameBoyLoadState::Loading(_))
+    }
+
     fn set_loading(&mut self, message: impl Into<String>) {
         self.state = GameBoyLoadState::Loading(message.into());
     }

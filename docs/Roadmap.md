@@ -140,8 +140,6 @@ Known issues:
 - For drop-down selections, when the options are opened, clicking the main element again doesn't hide the options
 - In main Settings, the Edit Mappings button is less wide than the standard size of other elements
 - In main Settings, sections are not distinct because there's no margin between say input settings and audio settings; it might be nice to add more explainers, to mention the xBR algorithm is used for upscaling, and explain some other options, and consider moving input and audio options nearer the top (more frequently-updated things brought more into quick access)
-- Does PS have incorrect colours?
-- The custom loading indicator isn't used in all places where it should be
 - The ROM list should have fewer columns on mobile so that the game names are more visible
 - Upon return to Home from a game, the audio volumes and other parameters aren't reset 
 - "rhythm-land" reports that this is an inaccurate emulator

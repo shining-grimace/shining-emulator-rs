@@ -13,9 +13,9 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    GAMEPLAY_ERROR_ICON_SIZE, TOUCH_OVERLAY_MARGIN, UI_BODY_FONT_SIZE, UI_CONTENT_GAP,
-    UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_MULTI_SELECT_WIDTH,
-    UI_SCREEN_PADDING,
+    GAMEPLAY_ERROR_ICON_SIZE, LOADING_INDICATOR_GRID_SIZE, TOUCH_OVERLAY_MARGIN, UI_BODY_FONT_SIZE,
+    UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING,
+    UI_MULTI_SELECT_WIDTH, UI_SCREEN_PADDING,
 };
 use crate::game_boy::{
     CheatCode, GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, apply_save_state,
@@ -34,6 +34,7 @@ use crate::ui_elements::interactions::{
     ActivatedUiElement, FocusedUiElement, IgnorePicking, LastFocusedUiElement, UiElementColors,
     UiElementKind, UiElementLabel, UiFocusNav, UiTextInput,
 };
+use crate::ui_elements::loading_indicator::loading_indicator_scene;
 use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_padding, ui_radius};
 use crate::ui_elements::text_input::text_input_with_value_width;
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
@@ -58,6 +59,12 @@ struct GameplayErrorOverlay;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct GameplayErrorMessage;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct GameplayErrorIcon;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct GameplayLoadingIndicator;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct GameplayMenuButton;
@@ -129,7 +136,11 @@ fn return_home_from_gameplay(
 
 fn update_gameplay_error_overlay(
     status: Res<GameBoyLoadStatus>,
-    mut overlays: Query<&mut Node, With<GameplayErrorOverlay>>,
+    mut nodes: ParamSet<(
+        Query<&mut Node, With<GameplayErrorOverlay>>,
+        Query<&mut Node, With<GameplayLoadingIndicator>>,
+        Query<&mut Node, With<GameplayErrorIcon>>,
+    )>,
     mut messages: Query<&mut Text, With<GameplayErrorMessage>>,
 ) {
     let message = status.overlay_message();
@@ -139,8 +150,24 @@ fn update_gameplay_error_overlay(
         Display::None
     };
 
-    for mut node in &mut overlays {
+    for mut node in &mut nodes.p0() {
         node.display = display;
+    }
+    let loading_display = if status.is_loading() {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let error_display = if message.is_some() && !status.is_loading() {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    for mut node in &mut nodes.p1() {
+        node.display = loading_display;
+    }
+    for mut node in &mut nodes.p2() {
+        node.display = error_display;
     }
     let Some(message) = message else {
         return;
@@ -375,11 +402,23 @@ fn gameplay_scene(
                                     width: px(GAMEPLAY_ERROR_ICON_SIZE),
                                     height: px(GAMEPLAY_ERROR_ICON_SIZE),
                                 }
+                                GameplayErrorIcon
                                 ImageNode {
                                     image: {HandleTemplate::Handle(assets.icons.clone())},
                                     color: {theme.secondary},
                                     rect: {Some(error_icon_rect())},
                                 }
+                            ),
+                            (
+                                Node {
+                                    display: Display::None,
+                                    width: px(LOADING_INDICATOR_GRID_SIZE),
+                                    height: px(LOADING_INDICATOR_GRID_SIZE),
+                                }
+                                GameplayLoadingIndicator
+                                Children [
+                                    {bsn_list![loading_indicator_scene(theme)]}
+                                ]
                             ),
                             (
                                 Text("Loading ROM...")

@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{LOADING_INDICATOR_GRID_SIZE, LOADING_INDICATOR_SQUARE_SIZE};
 
@@ -10,10 +9,7 @@ pub struct LoadingIndicatorPlugin;
 
 impl Plugin for LoadingIndicatorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            update_loading_indicator.run_if(in_state(AppState::Loading)),
-        );
+        app.add_systems(Update, update_loading_indicator);
     }
 }
 

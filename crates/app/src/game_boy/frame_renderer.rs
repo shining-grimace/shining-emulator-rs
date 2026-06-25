@@ -90,6 +90,15 @@ pub(super) fn spawn_game_boy_frame_display(
     ));
 }
 
+pub(super) fn reset_game_boy_frame_output(
+    mut frames: ResMut<GameBoyFrameRing>,
+    texture: ResMut<GameBoyFrameTexture>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    frames.clear_to_black();
+    clear_game_boy_screen_image(texture.into_inner(), &mut images);
+}
+
 pub(super) fn update_game_boy_frame_texture(
     frames: Res<GameBoyFrameRing>,
     storage: Res<LocalStorage>,
@@ -199,6 +208,26 @@ fn ensure_game_boy_screen_image(
     texture.extent = Some(extent);
     texture.uploaded_sequence = None;
     texture.uploaded_border_sequence = None;
+}
+
+fn clear_game_boy_screen_image(texture: &mut GameBoyFrameTexture, images: &mut Assets<Image>) {
+    texture.uploaded_sequence = None;
+    texture.uploaded_border_sequence = None;
+
+    let Some(handle) = texture.handle.as_ref() else {
+        return;
+    };
+    let Some(mut image) = images.get_mut(handle) else {
+        return;
+    };
+    let Some(data) = image.data.as_mut() else {
+        warn!("Game Boy frame texture has no writable image data");
+        return;
+    };
+
+    for pixel in data.chunks_exact_mut(GAME_BOY_RGBA_CHANNELS) {
+        pixel.copy_from_slice(&GAME_BOY_TEXTURE_CLEAR_PIXEL);
+    }
 }
 
 fn gameplay_frame_size(
@@ -506,6 +535,39 @@ mod tests {
         let mut rgba = vec![0; GAME_BOY_TEXTURE_BYTES];
 
         assert!(!copy_rgb_frame_to_rgba_texture(&[], &mut rgba));
+    }
+
+    #[test]
+    fn clear_game_boy_screen_image_resets_texture_to_black() {
+        let mut images = Assets::<Image>::default();
+        let handle = images.add(game_boy_screen_image(1, FrameExtent::GameBoy));
+        {
+            let mut image = images.get_mut(&handle).unwrap();
+            image.data.as_mut().unwrap().fill(0x80);
+        }
+        let mut texture = GameBoyFrameTexture {
+            handle: Some(handle.clone()),
+            scale: Some(1),
+            extent: Some(FrameExtent::GameBoy),
+            uploaded_sequence: Some(GameBoyFrameSequence::default()),
+            uploaded_border_sequence: Some(3),
+            source_pixels: Vec::new(),
+            upscaled_pixels: Vec::new(),
+        };
+
+        clear_game_boy_screen_image(&mut texture, &mut images);
+
+        let image = images.get(&handle).unwrap();
+        assert_eq!(texture.uploaded_sequence, None);
+        assert_eq!(texture.uploaded_border_sequence, None);
+        assert!(
+            image
+                .data
+                .as_ref()
+                .unwrap()
+                .chunks_exact(GAME_BOY_RGBA_CHANNELS)
+                .all(|pixel| pixel == GAME_BOY_TEXTURE_CLEAR_PIXEL)
+        );
     }
 
     #[test]
