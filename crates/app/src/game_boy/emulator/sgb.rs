@@ -1,5 +1,6 @@
 use crate::game_boy::emulator::constants::{
-    SGB_ATTRIBUTE_FILE_ENTRIES, SGB_ATTRIBUTE_FILES, SGB_CHARACTER_PALETTE_ENTRIES,
+    SGB_ATTRIBUTE_FILE_ENTRIES, SGB_ATTRIBUTE_FILES, SGB_BORDER_PALETTE_COLORS,
+    SGB_BORDER_TILE_BYTES_TOTAL, SGB_BORDER_TILE_MAP_ENTRIES, SGB_CHARACTER_PALETTE_ENTRIES,
     SGB_MONO_PIXELS, SGB_PALETTE_COLORS, SGB_SYSTEM_PALETTE_COLORS, SGB_TRANSFER_VRAM_BYTES,
 };
 use crate::game_boy::emulator::memory::GameBoyMemory;
@@ -15,11 +16,15 @@ const SGBCOM_ATTR_CHR: u32 = 0x07;
 const SGBCOM_PAL_SET: u32 = 0x0a;
 const SGBCOM_PAL_TRN: u32 = 0x0b;
 const SGBCOM_MLT_REQ: u32 = 0x11;
+const SGBCOM_CHR_TRN: u32 = 0x13;
+const SGBCOM_PCT_TRN: u32 = 0x14;
 const SGBCOM_ATTR_TRN: u32 = 0x15;
 const SGBCOM_ATTR_SET: u32 = 0x16;
 const SGBCOM_MASK_EN: u32 = 0x17;
 
 const DEFAULT_SGB_PALETTE: [u32; 4] = [0xffff_ffff, 0xff88_b0b0, 0xff50_7878, 0xff00_0000];
+const SGB_BORDER_BG_MAP_BYTES: usize = SGB_BORDER_TILE_MAP_ENTRIES * 2;
+const SGB_BORDER_PALETTE_OFFSET: usize = 0x800;
 
 #[derive(Debug)]
 pub(crate) struct SgbState {
@@ -47,6 +52,10 @@ pub(crate) struct SgbState {
     pub(crate) system_palettes: Box<[u32]>,
     pub(crate) character_palettes: Box<[u32]>,
     pub(crate) attribute_files: Box<[u32]>,
+    pub(crate) border_tiles: Box<[u8]>,
+    pub(crate) border_tile_map: Box<[u16]>,
+    pub(crate) border_palettes: Box<[u32]>,
+    pub(crate) border_sequence: u64,
 }
 
 impl Default for SgbState {
@@ -76,6 +85,10 @@ impl Default for SgbState {
             system_palettes: zeroed_u32s(SGB_SYSTEM_PALETTE_COLORS),
             character_palettes: zeroed_u32s(SGB_CHARACTER_PALETTE_ENTRIES),
             attribute_files: zeroed_u32s(SGB_ATTRIBUTE_FILE_ENTRIES),
+            border_tiles: zeroed_bytes(SGB_BORDER_TILE_BYTES_TOTAL),
+            border_tile_map: zeroed_u16s(SGB_BORDER_TILE_MAP_ENTRIES),
+            border_palettes: zeroed_u32s(SGB_BORDER_PALETTE_COLORS),
+            border_sequence: 0,
         };
         state.reset_display_palettes();
         state
@@ -108,6 +121,10 @@ impl SgbState {
         self.system_palettes.fill(0);
         self.character_palettes.fill(0);
         self.attribute_files.fill(0);
+        self.border_tiles.fill(0);
+        self.border_tile_map.fill(0);
+        self.border_palettes.fill(0xff00_0000);
+        self.border_sequence = self.border_sequence.wrapping_add(1);
     }
 
     fn reset_display_palettes(&mut self) {
@@ -256,6 +273,8 @@ impl SgbState {
                 self.player_count = self.command_bytes[0][1] + 1;
                 self.read_joypad_id = 0x0f;
             }
+            SGBCOM_CHR_TRN => self.apply_chr_trn(memory),
+            SGBCOM_PCT_TRN => self.apply_pct_trn(memory),
             SGBCOM_ATTR_TRN => self.apply_attr_trn(memory),
             SGBCOM_ATTR_SET => self.apply_attr_set(),
             SGBCOM_MASK_EN => {
@@ -493,6 +512,50 @@ impl SgbState {
         }
     }
 
+    fn apply_chr_trn(&mut self, memory: &GameBoyMemory) {
+        if memory.io_ports.get(0x40).copied().unwrap_or(0) & 0x80 == 0 {
+            return;
+        }
+        self.map_vram_for_transfer(memory);
+        let tile_range = (self.command_bytes[0][1] & 0x01) as usize;
+        let destination_start = tile_range * SGB_TRANSFER_VRAM_BYTES;
+        let destination_end = destination_start + SGB_TRANSFER_VRAM_BYTES;
+        let Some(destination) = self
+            .border_tiles
+            .get_mut(destination_start..destination_end)
+        else {
+            return;
+        };
+        destination.copy_from_slice(&self.transfer_vram);
+        self.border_sequence = self.border_sequence.wrapping_add(1);
+    }
+
+    fn apply_pct_trn(&mut self, memory: &GameBoyMemory) {
+        if memory.io_ports.get(0x40).copied().unwrap_or(0) & 0x80 == 0 {
+            return;
+        }
+        self.map_vram_for_transfer(memory);
+
+        for (entry, bytes) in self
+            .border_tile_map
+            .iter_mut()
+            .zip(self.transfer_vram[..SGB_BORDER_BG_MAP_BYTES].chunks_exact(2))
+        {
+            *entry = u16::from(bytes[0]) | (u16::from(bytes[1]) << 8);
+        }
+
+        let palette_bytes_end = SGB_BORDER_PALETTE_OFFSET + SGB_BORDER_PALETTE_COLORS * 2;
+        for (colour, bytes) in self
+            .border_palettes
+            .iter_mut()
+            .zip(self.transfer_vram[SGB_BORDER_PALETTE_OFFSET..palette_bytes_end].chunks_exact(2))
+        {
+            *colour = remap_555_8888(u32::from(bytes[0]), u32::from(bytes[1]));
+        }
+
+        self.border_sequence = self.border_sequence.wrapping_add(1);
+    }
+
     fn apply_attr_set(&mut self) {
         let control = self.command_bytes[0][1];
         self.apply_attribute_file(control & 0x3f);
@@ -609,6 +672,10 @@ fn zeroed_u32s(len: usize) -> Box<[u32]> {
     vec![0; len].into_boxed_slice()
 }
 
+fn zeroed_u16s(len: usize) -> Box<[u16]> {
+    vec![0; len].into_boxed_slice()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -626,6 +693,9 @@ mod tests {
             SGB_CHARACTER_PALETTE_ENTRIES
         );
         assert_eq!(state.attribute_files.len(), SGB_ATTRIBUTE_FILE_ENTRIES);
+        assert_eq!(state.border_tiles.len(), SGB_BORDER_TILE_BYTES_TOTAL);
+        assert_eq!(state.border_tile_map.len(), SGB_BORDER_TILE_MAP_ENTRIES);
+        assert_eq!(state.border_palettes.len(), SGB_BORDER_PALETTE_COLORS);
     }
 
     #[test]
@@ -730,13 +800,7 @@ mod tests {
     #[test]
     fn attr_trn_decodes_transferred_attribute_files() {
         let mut state = SgbState::default();
-        let mut memory = GameBoyMemory::default();
-        memory.io_ports[0x40] = 0x80 | 0x10;
-        for index in 0..256 {
-            let y = index / 20;
-            let x = index % 20;
-            memory.vram[0x1800 + y * 32 + x] = index as u8;
-        }
+        let mut memory = transfer_memory();
         memory.vram[0] = 0b00_01_10_11;
         memory.vram[4049] = 0b11_10_01_00;
 
@@ -748,6 +812,38 @@ mod tests {
             &state.attribute_files[last_row + 16..last_row + 20],
             &[3, 2, 1, 0]
         );
+    }
+
+    #[test]
+    fn chr_trn_copies_transferred_tile_data_to_selected_border_tile_range() {
+        let mut state = SgbState::default();
+        let mut memory = transfer_memory();
+        memory.vram[0] = 0x12;
+        memory.vram[SGB_TRANSFER_VRAM_BYTES - 1] = 0x34;
+        state.command_bytes[0][1] = 1;
+
+        state.apply_chr_trn(&memory);
+
+        assert_eq!(state.border_tiles[0], 0);
+        assert_eq!(state.border_tiles[SGB_TRANSFER_VRAM_BYTES], 0x12);
+        assert_eq!(state.border_tiles[SGB_BORDER_TILE_BYTES_TOTAL - 1], 0x34);
+        assert_eq!(state.border_sequence, 1);
+    }
+
+    #[test]
+    fn pct_trn_decodes_border_tile_map_and_palettes() {
+        let mut state = SgbState::default();
+        let mut memory = transfer_memory();
+        memory.vram[0] = 0x34;
+        memory.vram[1] = 0x12;
+        memory.vram[SGB_BORDER_PALETTE_OFFSET] = 0x1f;
+        memory.vram[SGB_BORDER_PALETTE_OFFSET + 1] = 0x00;
+
+        state.apply_pct_trn(&memory);
+
+        assert_eq!(state.border_tile_map[0], 0x1234);
+        assert_eq!(state.border_palettes[0], 0xffff_0000);
+        assert_eq!(state.border_sequence, 1);
     }
 
     #[test]
@@ -794,5 +890,16 @@ mod tests {
             &state.character_palettes[0..8],
             &state.attribute_files[start..start + 8]
         );
+    }
+
+    fn transfer_memory() -> GameBoyMemory {
+        let mut memory = GameBoyMemory::default();
+        memory.io_ports[0x40] = 0x80 | 0x10;
+        for index in 0..256 {
+            let y = index / 20;
+            let x = index % 20;
+            memory.vram[0x1800 + y * 32 + x] = index as u8;
+        }
+        memory
     }
 }

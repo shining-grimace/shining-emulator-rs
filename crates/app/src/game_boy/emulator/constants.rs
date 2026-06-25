@@ -29,6 +29,17 @@ pub(super) const SGB_CHARACTER_PALETTE_ENTRIES: usize = 18 * 20;
 pub(super) const SGB_ATTRIBUTE_FILES: usize = 45;
 pub(super) const SGB_ATTRIBUTE_FILE_ENTRIES: usize =
     SGB_ATTRIBUTE_FILES * SGB_CHARACTER_PALETTE_ENTRIES;
+pub(super) const SGB_BORDER_TILES: usize = 256;
+pub(super) const SGB_BORDER_TILE_BYTES: usize = 32;
+pub(super) const SGB_BORDER_TILE_BYTES_TOTAL: usize = SGB_BORDER_TILES * SGB_BORDER_TILE_BYTES;
+pub(super) const SGB_BORDER_TILE_MAP_WIDTH: usize = 32;
+pub(super) const SGB_BORDER_TILE_MAP_HEIGHT: usize = 28;
+pub(super) const SGB_BORDER_TILE_MAP_ENTRIES: usize =
+    SGB_BORDER_TILE_MAP_WIDTH * SGB_BORDER_TILE_MAP_HEIGHT;
+pub(super) const SGB_BORDER_PALETTES: usize = 3;
+pub(super) const SGB_BORDER_COLORS_PER_PALETTE: usize = 16;
+pub(super) const SGB_BORDER_PALETTE_COLORS: usize =
+    SGB_BORDER_PALETTES * SGB_BORDER_COLORS_PER_PALETTE;
 
 pub(super) const AUDIO_BUFFER_FRAMES: usize = 12_000;
 pub(super) const AUDIO_WAVEFORM_SAMPLES: usize = 32;
