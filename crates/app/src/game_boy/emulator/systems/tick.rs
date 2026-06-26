@@ -137,44 +137,56 @@ fn execute_accumulated_clocks(emulator: &mut GameBoyCore, frames: &mut GameBoyFr
     apply_joypad_state_change(emulator);
 
     while emulator.cpu_timing.clocks_acc > 0 {
-        if emulator.dma.vram.cpu_halt_m_cycles > 0 {
-            emulator.dma.vram.cpu_halt_m_cycles -= 1;
-            step_machine_cycle(emulator, frames);
-            continue;
-        }
-
-        if emulator.cpu_mode == CpuMode::Stopped {
-            if switch_running_speed(emulator) {
-                step_machine_cycles(
-                    emulator,
-                    frames,
-                    machine_cycles_for_clocks(STOP_SPEED_SWITCH_CLOCKS),
-                );
-                emulator.cpu_mode = CpuMode::Running;
-            } else {
-                step_machine_cycle(emulator, frames);
-            }
-            continue;
-        }
-
-        match handle_interrupts(emulator) {
-            InterruptAction::None => {}
-            InterruptAction::WakeHalt => {
-                step_machine_cycle(emulator, frames);
-                continue;
-            }
-            InterruptAction::Service => {
-                step_machine_cycles(emulator, frames, INTERRUPT_ACK_MACHINE_CYCLES);
-                continue;
-            }
-        }
-
-        let clocks_passed = perform_op(emulator);
-        emulator.cpu_registers.pc &= 0xffff;
-        step_machine_cycles(emulator, frames, machine_cycles_for_clocks(clocks_passed));
-        begin_deferred_oam_dma(emulator);
-        finish_instruction_interrupt_state(emulator);
+        execute_next_step(emulator, frames);
     }
+}
+
+#[cfg(test)]
+pub(in crate::game_boy::emulator) fn execute_next_test_step(
+    emulator: &mut GameBoyCore,
+    frames: &mut GameBoyFrameRing,
+) {
+    apply_joypad_state_change(emulator);
+    execute_next_step(emulator, frames);
+}
+
+fn execute_next_step(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) {
+    if emulator.dma.vram.cpu_halt_m_cycles > 0 {
+        emulator.dma.vram.cpu_halt_m_cycles -= 1;
+        step_machine_cycle(emulator, frames);
+        return;
+    }
+
+    if emulator.cpu_mode == CpuMode::Stopped {
+        if switch_running_speed(emulator) {
+            step_machine_cycles(
+                emulator,
+                frames,
+                machine_cycles_for_clocks(STOP_SPEED_SWITCH_CLOCKS),
+            );
+            emulator.cpu_mode = CpuMode::Running;
+        } else {
+            step_machine_cycle(emulator, frames);
+        }
+        return;
+    }
+
+    match handle_interrupts(emulator) {
+        InterruptAction::None => {}
+        InterruptAction::WakeHalt => {
+            return;
+        }
+        InterruptAction::Service => {
+            step_machine_cycles(emulator, frames, INTERRUPT_ACK_MACHINE_CYCLES);
+            return;
+        }
+    }
+
+    let clocks_passed = perform_op(emulator);
+    emulator.cpu_registers.pc &= 0xffff;
+    step_machine_cycles(emulator, frames, machine_cycles_for_clocks(clocks_passed));
+    begin_deferred_oam_dma(emulator);
+    finish_instruction_interrupt_state(emulator);
 }
 
 fn machine_cycles_for_clocks(clocks: i32) -> i32 {
@@ -849,6 +861,7 @@ mod tests {
         emulator.cpu_registers.pc = 0x0101;
         emulator.cpu_registers.sp = 0xfffe;
         emulator.cpu_timing.clocks_acc = MACHINE_CYCLE_CLOCKS;
+        emulator.memory.rom[0x0101] = 0x00;
         emulator.memory.io_ports[IE_IO_INDEX] = INTERRUPT_TIMER;
         emulator.memory.io_ports[IF_IO_INDEX] = INTERRUPT_TIMER;
         let mut frames = GameBoyFrameRing::default();
@@ -856,7 +869,7 @@ mod tests {
         execute_accumulated_clocks(&mut emulator, &mut frames);
 
         assert_eq!(emulator.cpu_mode, CpuMode::Running);
-        assert_eq!(emulator.cpu_registers.pc, 0x0101);
+        assert_eq!(emulator.cpu_registers.pc, 0x0102);
         assert_eq!(emulator.cpu_registers.sp, 0xfffe);
         assert_eq!(
             emulator.memory.io_ports[IF_IO_INDEX] & INTERRUPT_TIMER,

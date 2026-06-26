@@ -276,6 +276,8 @@ struct CpuTimingSnapshot {
     system_counter: u16,
     #[serde(default)]
     tima_reload_delay: u8,
+    #[serde(default)]
+    tima_reload_active: bool,
 }
 
 impl From<CpuTiming> for CpuTimingSnapshot {
@@ -285,6 +287,7 @@ impl From<CpuTiming> for CpuTimingSnapshot {
             clock_frequency_hz: timing.clock_frequency_hz,
             system_counter: timing.system_counter,
             tima_reload_delay: timing.tima_reload_delay,
+            tima_reload_active: timing.tima_reload_active,
         }
     }
 }
@@ -296,6 +299,7 @@ impl From<CpuTimingSnapshot> for CpuTiming {
             clock_frequency_hz: snapshot.clock_frequency_hz,
             system_counter: snapshot.system_counter,
             tima_reload_delay: snapshot.tima_reload_delay,
+            tima_reload_active: snapshot.tima_reload_active,
         }
     }
 }
@@ -1058,6 +1062,7 @@ mod tests {
         core.cpu_registers.halt_bug = true;
         core.cpu_timing.system_counter = 0x3456;
         core.cpu_timing.tima_reload_delay = 1;
+        core.cpu_timing.tima_reload_active = true;
         core.dma.oam.pending_source_high = Some(0xc0);
         core.dma.oam.source_high = 0xd0;
         core.dma.oam.next_index = 0x20;
@@ -1082,6 +1087,7 @@ mod tests {
         core.cpu_registers.halt_bug = false;
         core.cpu_timing.system_counter = 0;
         core.cpu_timing.tima_reload_delay = 0;
+        core.cpu_timing.tima_reload_active = false;
         core.dma.reset_for_rom_load();
         core.gpu_timing.line_scan_vram_clocks = 0;
         core.rom.fixed_bank_offset = 0;
@@ -1102,6 +1108,7 @@ mod tests {
         assert!(core.cpu_registers.halt_bug);
         assert_eq!(core.cpu_timing.system_counter, 0x3456);
         assert_eq!(core.cpu_timing.tima_reload_delay, 1);
+        assert!(core.cpu_timing.tima_reload_active);
         assert_eq!(core.dma.oam.pending_source_high, Some(0xc0));
         assert_eq!(core.dma.oam.source_high, 0xd0);
         assert_eq!(core.dma.oam.next_index, 0x20);

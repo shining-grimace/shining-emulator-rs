@@ -2,24 +2,39 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::GameBoyCore;
-use super::bus::{begin_deferred_oam_dma, read8, step_oam_dma, step_system_counter};
+use super::bus::read8;
 use super::cpu::CpuMode;
-use super::execution::perform_op;
 use super::rom::{MemoryBankController, RomProperties};
+use super::systems::execute_next_test_step;
+use crate::game_boy::frame_buffer::GameBoyFrameRing;
 
 const MOONEYE_ROM_ROOT_ENV: &str = "SHINING_MOONEYE_ROM_ROOT";
 const EXPECTED_ACCEPTANCE_ROM_COUNT: usize = 75;
 const MAX_INSTRUCTIONS: usize = 2_000_000;
-const MACHINE_CYCLE_CLOCKS: u16 = 4;
 const LD_B_B_OPCODE: u8 = 0x40;
 const EXPECTED_PASS_ROMS: &[&str] = &[
     "acceptance/boot_regs-dmgABC.gb",
+    "acceptance/boot_regs-sgb.gb",
     "acceptance/bits/reg_f.gb",
     "acceptance/bits/mem_oam.gb",
+    "acceptance/di_timing-GS.gb",
     "acceptance/div_timing.gb",
+    "acceptance/ei_timing.gb",
+    "acceptance/halt_ime0_ei.gb",
+    "acceptance/halt_ime0_nointr_timing.gb",
+    "acceptance/halt_ime1_timing.gb",
+    "acceptance/halt_ime1_timing2-GS.gb",
+    "acceptance/if_ie_registers.gb",
     "acceptance/instr/daa.gb",
+    "acceptance/intr_timing.gb",
     "acceptance/oam_dma/basic.gb",
+    "acceptance/oam_dma_timing.gb",
+    "acceptance/ppu/intr_1_2_timing-GS.gb",
+    "acceptance/ppu/intr_2_0_timing.gb",
+    "acceptance/rapid_di_ei.gb",
+    "acceptance/reti_intr_timing.gb",
     "acceptance/timer/div_write.gb",
+    "acceptance/timer/rapid_toggle.gb",
     "acceptance/timer/tim00.gb",
     "acceptance/timer/tim00_div_trigger.gb",
     "acceptance/timer/tim01.gb",
@@ -29,6 +44,8 @@ const EXPECTED_PASS_ROMS: &[&str] = &[
     "acceptance/timer/tim11.gb",
     "acceptance/timer/tim11_div_trigger.gb",
     "acceptance/timer/tima_reload.gb",
+    "acceptance/timer/tima_write_reloading.gb",
+    "acceptance/timer/tma_write_reloading.gb",
 ];
 const MOONEYE_PASS_REGISTERS: RegisterSignature = RegisterSignature {
     b: 3,
@@ -167,9 +184,12 @@ fn mooneye_rom_root() -> PathBuf {
 
 fn load_mooneye_test_rom(bytes: &[u8], name: &str) -> GameBoyCore {
     let mut core = GameBoyCore::default();
+    let cgb_flag = mooneye_cgb_model(name);
     let properties = RomProperties {
         valid: true,
         mbc: MemoryBankController::None,
+        cgb_flag,
+        sgb_flag: !cgb_flag && mooneye_sgb_model(name),
         size_bytes: bytes.len() as i32,
         check_sum: u32::from(bytes[0x014d]),
         ..Default::default()
@@ -182,7 +202,16 @@ fn load_mooneye_test_rom(bytes: &[u8], name: &str) -> GameBoyCore {
     core
 }
 
+fn mooneye_sgb_model(name: &str) -> bool {
+    name.contains("-S") || name.contains("-GS") || name.contains("-sgb")
+}
+
+fn mooneye_cgb_model(name: &str) -> bool {
+    name.contains("-G")
+}
+
 fn run_until_mooneye_result(core: &mut GameBoyCore) -> MooneyeResult {
+    let mut frames = GameBoyFrameRing::default();
     for instructions in 0..MAX_INSTRUCTIONS {
         if read8(core, core.cpu_registers.pc as u16) == LD_B_B_OPCODE {
             let registers = RegisterSignature::from_core(core);
@@ -196,36 +225,19 @@ fn run_until_mooneye_result(core: &mut GameBoyCore) -> MooneyeResult {
                 }
             };
         }
-        if core.cpu_mode != CpuMode::Running {
+        if core.cpu_mode == CpuMode::Stopped {
             return MooneyeResult::Stopped {
                 instructions,
                 pc: core.cpu_registers.pc,
             };
         }
 
-        let clocks = perform_op(core);
-        core.cpu_registers.pc &= 0xffff;
-        for _ in 0..machine_cycles_for_clocks(clocks) {
-            step_system_counter(core, MACHINE_CYCLE_CLOCKS);
-            step_oam_dma(core);
-            core.audio_unit
-                .advance_ticks(i32::from(MACHINE_CYCLE_CLOCKS));
-        }
-        begin_deferred_oam_dma(core);
+        execute_next_test_step(core, &mut frames);
     }
 
     MooneyeResult::Timeout {
         instructions: MAX_INSTRUCTIONS,
     }
-}
-
-fn machine_cycles_for_clocks(clocks: i32) -> usize {
-    let clocks = clocks.max(i32::from(MACHINE_CYCLE_CLOCKS));
-    clocks
-        .saturating_add(i32::from(MACHINE_CYCLE_CLOCKS) - 1)
-        .checked_div(i32::from(MACHINE_CYCLE_CLOCKS))
-        .and_then(|cycles| usize::try_from(cycles).ok())
-        .unwrap_or(1)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

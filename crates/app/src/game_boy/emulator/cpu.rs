@@ -51,6 +51,7 @@ pub(crate) struct CpuTiming {
     pub(crate) clock_frequency_hz: i64,
     pub(crate) system_counter: u16,
     pub(crate) tima_reload_delay: u8,
+    pub(crate) tima_reload_active: bool,
 }
 
 impl Default for CpuTiming {
@@ -60,6 +61,7 @@ impl Default for CpuTiming {
             clock_frequency_hz: 1,
             system_counter: 0,
             tima_reload_delay: 0,
+            tima_reload_active: false,
         }
     }
 }
@@ -69,6 +71,7 @@ impl CpuTiming {
         self.clocks_acc = 0;
         self.system_counter = 0;
         self.tima_reload_delay = 0;
+        self.tima_reload_active = false;
     }
 }
 

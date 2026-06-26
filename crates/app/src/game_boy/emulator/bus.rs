@@ -52,10 +52,12 @@ pub(crate) fn step_system_counter(core: &mut GameBoyCore, clocks: u16) {
     let remainder = clocks % 4;
 
     for _ in 0..machine_cycles {
+        core.cpu_timing.tima_reload_active = false;
         finish_pending_timer_reload(core);
         advance_system_counter(core, 4);
     }
     if remainder != 0 {
+        core.cpu_timing.tima_reload_active = false;
         advance_system_counter(core, remainder);
     }
 }
@@ -438,6 +440,7 @@ fn read_io(core: &GameBoyCore, index: usize) -> u8 {
         0x11 | 0x16 => core.memory.io_ports[index] & 0xc0,
         0x13 | 0x18 | 0x1d => 0,
         0x14 | 0x19 | 0x1e | 0x23 => core.memory.io_ports[index] & 0x40,
+        IF_IO_INDEX => core.memory.io_ports[index] | 0xe0,
         BCPD_IO_INDEX if core.rom.properties.cgb_flag => core
             .cgb_palette_registers
             .bg_data
@@ -630,12 +633,18 @@ fn write_divider(core: &mut GameBoyCore) {
 }
 
 fn write_timer_counter(core: &mut GameBoyCore, value: u8) {
+    if core.cpu_timing.tima_reload_active {
+        return;
+    }
     core.cpu_timing.tima_reload_delay = 0;
     core.memory.write_io_port(TIMA_IO_INDEX, value);
 }
 
 fn write_timer_modulo(core: &mut GameBoyCore, value: u8) {
     core.memory.write_io_port(TMA_IO_INDEX, value);
+    if core.cpu_timing.tima_reload_active {
+        core.memory.write_io_port(TIMA_IO_INDEX, value);
+    }
 }
 
 fn write_timer_control(core: &mut GameBoyCore, value: u8) {
@@ -714,6 +723,7 @@ fn finish_pending_timer_reload(core: &mut GameBoyCore) {
     core.memory.write_io_port(TIMA_IO_INDEX, modulo);
     let interrupt_flags = core.memory.io_ports[IF_IO_INDEX] | INTERRUPT_TIMER;
     core.memory.write_io_port(IF_IO_INDEX, interrupt_flags);
+    core.cpu_timing.tima_reload_active = true;
 }
 
 fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
@@ -1158,6 +1168,40 @@ mod tests {
 
         assert_eq!(core.memory.io_ports[TAC_IO_INDEX], 0x04);
         assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 1);
+    }
+
+    #[test]
+    fn interrupt_flags_unused_bits_read_as_set() {
+        let mut core = GameBoyCore::default();
+
+        write8(&mut core, 0xff0f, 0x08);
+
+        assert_eq!(read8(&core, 0xff0f), 0xe8);
+        assert_eq!(core.memory.io_ports[IF_IO_INDEX], 0x08);
+    }
+
+    #[test]
+    fn timer_counter_write_is_ignored_during_reload_cycle() {
+        let mut core = GameBoyCore::default();
+        core.cpu_timing.tima_reload_active = true;
+        core.memory.io_ports[TIMA_IO_INDEX] = 0x42;
+
+        write8(&mut core, 0xff05, 0x99);
+
+        assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 0x42);
+        assert!(core.cpu_timing.tima_reload_active);
+    }
+
+    #[test]
+    fn timer_modulo_write_updates_timer_during_reload_cycle() {
+        let mut core = GameBoyCore::default();
+        core.cpu_timing.tima_reload_active = true;
+        core.memory.io_ports[TIMA_IO_INDEX] = 0x42;
+
+        write8(&mut core, 0xff06, 0x99);
+
+        assert_eq!(core.memory.io_ports[TMA_IO_INDEX], 0x99);
+        assert_eq!(core.memory.io_ports[TIMA_IO_INDEX], 0x99);
     }
 
     #[test]
