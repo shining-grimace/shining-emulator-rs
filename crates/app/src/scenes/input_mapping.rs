@@ -10,11 +10,12 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    ACTION_HINT_GAP, HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_BUTTON_WIDTH,
-    UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_MAPPING_FORM_BOTTOM_PADDING,
-    UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT, UI_MAPPING_GAMEBOY_COLUMNS_PERCENT,
-    UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT, UI_MAPPING_RIGHT_COLUMN_PERCENT, UI_PANEL_GAP,
-    UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING, UI_WIDE_CONTENT_WIDTH,
+    ACTION_HINT_GAP, HERO_GRID_UNITS, HERO_IMAGE_SIZE, HERO_TEXTURE_SIZE, UI_BODY_FONT_SIZE,
+    UI_BUTTON_WIDTH, UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT,
+    UI_MAPPING_FORM_BOTTOM_PADDING, UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT,
+    UI_MAPPING_GAMEBOY_COLUMNS_PERCENT, UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT,
+    UI_MAPPING_RIGHT_COLUMN_PERCENT, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING, UI_SCREEN_PADDING,
+    UI_WIDE_CONTENT_WIDTH,
 };
 use crate::input::key_ids::{gamepad_button_id, key_code_id};
 use crate::input::mappings::{RuntimeInputMappings, ensure_essential_navigation_mappings};
@@ -29,9 +30,9 @@ use crate::ui_elements::button::button;
 use crate::ui_elements::description::description;
 use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
 use crate::ui_elements::interactions::{
-    ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, IgnorePicking, InitialFocus,
-    UI_FOCUS_NONE, UiElementColors, UiElementKind, UiElementLabel, UiFocusId, UiFocusNav,
-    UiFocusNavIds,
+    ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, HoveredUiElement, IgnorePicking,
+    InitialFocus, UI_FOCUS_NONE, UiElementColors, UiElementKind, UiElementLabel, UiFocusId,
+    UiFocusNav, UiFocusNavIds, UiInputCapture, UiSchedule,
 };
 use crate::ui_elements::responsive::{
     ResponsiveColumns, ResponsiveFieldRow, ResponsivePercentWidth, ResponsiveScreenPadding,
@@ -106,7 +107,8 @@ impl Plugin for InputMappingScenePlugin {
                 Update,
                 (capture_mapping_input, sync_mapping_button_labels)
                     .chain()
-                    .run_if(in_state(AppState::InputMapping)),
+                    .run_if(in_state(AppState::InputMapping))
+                    .after(UiSchedule::Last),
             )
             .add_observer(handle_mapping_activation);
     }
@@ -136,8 +138,12 @@ fn spawn_input_mapping_scene(
     ));
 }
 
-fn clear_mapping_capture(mut capture: ResMut<MappingCaptureState>) {
+fn clear_mapping_capture(
+    mut capture: ResMut<MappingCaptureState>,
+    mut ui_capture: ResMut<UiInputCapture>,
+) {
     *capture = MappingCaptureState::default();
+    ui_capture.active = false;
 }
 
 fn handle_mapping_activation(
@@ -145,6 +151,7 @@ fn handle_mapping_activation(
     reset_buttons: Query<(), With<MappingResetButton>>,
     action_buttons: Query<&MappingActionButton>,
     mut capture: ResMut<MappingCaptureState>,
+    mut ui_capture: ResMut<UiInputCapture>,
     mut storage: ResMut<LocalStorage>,
     target: Res<InputMappingEditTarget>,
     mut runtime_mappings: ResMut<RuntimeInputMappings>,
@@ -158,6 +165,7 @@ fn handle_mapping_activation(
     if let Ok(button) = action_buttons.get(activated.entity) {
         capture.action = Some(button.action);
         capture.armed = false;
+        ui_capture.active = true;
         return;
     }
 
@@ -180,12 +188,15 @@ fn handle_mapping_activation(
 
 fn capture_mapping_input(
     mut capture: ResMut<MappingCaptureState>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut keyboard_events: MessageReader<KeyboardInput>,
     mut controller_events: MessageReader<GamepadButtonStateChangedEvent>,
     focused_buttons: Query<&MappingActionButton, With<FocusedUiElement>>,
+    hovered_buttons: Query<&MappingActionButton, With<HoveredUiElement>>,
     mut storage: ResMut<LocalStorage>,
     target: Res<InputMappingEditTarget>,
     mut runtime_mappings: ResMut<RuntimeInputMappings>,
+    mut ui_capture: ResMut<UiInputCapture>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     let keyboard_key = keyboard_events.read().find_map(|event| {
@@ -207,6 +218,18 @@ fn capture_mapping_input(
         InputDeviceType::Keyboard => keyboard_key,
         InputDeviceType::Controller => controller_key,
     };
+    let clicked_listening_button = capture.action.is_some_and(|action| {
+        capture.armed
+            && mouse_buttons.just_released(MouseButton::Left)
+            && hovered_buttons.iter().any(|button| button.action == action)
+    });
+    if clicked_listening_button {
+        capture.action = None;
+        capture.armed = false;
+        ui_capture.active = false;
+        return;
+    }
+
     let b_pressed = pressed_key.is_some_and(|key_id| {
         mapping
             .map
@@ -216,16 +239,11 @@ fn capture_mapping_input(
 
     if capture.action.is_some() && !capture.armed {
         capture.armed = true;
+        ui_capture.active = true;
         return;
     }
 
     if let Some(action) = capture.action {
-        if b_pressed {
-            capture.action = None;
-            capture.armed = false;
-            return;
-        }
-
         let Some(key_id) = pressed_key else {
             return;
         };
@@ -243,7 +261,9 @@ fn capture_mapping_input(
         );
         capture.action = None;
         capture.armed = false;
+        ui_capture.active = false;
     } else if b_pressed {
+        ui_capture.active = false;
         let Some(button) = focused_buttons.iter().next() else {
             return;
         };
@@ -257,6 +277,8 @@ fn capture_mapping_input(
             &mut messages,
             "Input mappings could not be saved.",
         );
+    } else {
+        ui_capture.active = false;
     }
 }
 
@@ -399,7 +421,7 @@ fn gameboy_mapping_panel(
                 ResponsiveColumns { gap: ACTION_HINT_GAP }
                 Children [
                     mapping_intro(left_font.clone(), theme, mapping_name),
-                    controller_hero_image(heroes, theme),
+                    controller_hero_panel(centre_font.clone(), heroes, theme),
                 ]
             ),
             (
@@ -419,6 +441,8 @@ fn gameboy_mapping_panel(
 }
 
 fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -> impl Scene {
+    let mapping_name_font = font.clone();
+
     bsn! {
         Node {
             width: percent(UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT),
@@ -430,7 +454,6 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
                 Node {
                     width: percent(100),
                     align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
                     column_gap: px(28.0),
                 }
                 ResponsiveFieldRow { gap: 28.0 }
@@ -438,19 +461,34 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
                     (
                         Node {
                             flex_grow: 1.0,
+                            min_width: px(0.0),
                             align_items: AlignItems::Center,
-                            column_gap: px(120.0),
+                            column_gap: px(28.0),
                         }
                         Children [
                             description(font.clone(), theme, "Name:"),
-                            description(font.clone(), theme, mapping_name),
+                            (
+                                Node {
+                                    flex_grow: 1.0,
+                                    min_width: px(0.0),
+                                    justify_content: JustifyContent::FlexEnd,
+                                }
+                                Children [
+                                    (
+                                        Text({mapping_name})
+                                        TextFont {
+                                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(mapping_name_font)),
+                                            font_size: px(UI_BODY_FONT_SIZE),
+                                        }
+                                        TextColor({theme.primary})
+                                        UiThemeTextColor::Primary
+                                        UiElementLabel
+                                        IgnorePicking
+                                        TextLayout::new(Justify::Right, LineBreak::WordBoundary)
+                                    )
+                                ]
+                            ),
                         ]
-                    ),
-                    (
-                        button(font.clone(), "Reset Defaults", theme, UiFocusNav::default())
-                        MappingResetButton
-                        UiFocusId { id: TARGET_RESET }
-                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_QUIT_ROM, down: TARGET_DPAD_UP, left: UI_FOCUS_NONE }
                     ),
                 ]
             ),
@@ -551,7 +589,7 @@ fn right_column(
             theme,
             mapping.clone(),
             InputAction::QuitRom,
-            "Shut down ROM",
+            "Shut Down ROM",
             TARGET_QUIT_ROM,
             right_nav(TARGET_QUIT_ROM),
         ),
@@ -569,7 +607,7 @@ fn right_column(
             theme,
             mapping.clone(),
             save_action,
-            "Save state",
+            "Save State",
             TARGET_SAVE_STATE,
             right_nav(TARGET_SAVE_STATE),
         ),
@@ -578,7 +616,7 @@ fn right_column(
             theme,
             mapping.clone(),
             load_action,
-            "Load state",
+            "Load State",
             TARGET_LOAD_STATE,
             right_nav(TARGET_LOAD_STATE),
         ),
@@ -587,7 +625,7 @@ fn right_column(
             theme,
             mapping.clone(),
             InputAction::SpeedUp,
-            "Speed up",
+            "Speed Up",
             TARGET_SPEED_UP,
             right_nav(TARGET_SPEED_UP),
         ),
@@ -596,7 +634,7 @@ fn right_column(
             theme,
             mapping.clone(),
             InputAction::SpeedDown,
-            "Speed down",
+            "Speed Down",
             TARGET_SPEED_DOWN,
             right_nav(TARGET_SPEED_DOWN),
         ),
@@ -605,7 +643,7 @@ fn right_column(
             theme,
             mapping.clone(),
             InputAction::PauseAndResume,
-            "Pause/resume",
+            "Pause/Resume",
             TARGET_PAUSE,
             right_nav(TARGET_PAUSE),
         ),
@@ -614,7 +652,7 @@ fn right_column(
             theme,
             mapping.clone(),
             InputAction::QuitApp,
-            "Quit app",
+            "Quit App",
             TARGET_QUIT_APP,
             right_nav(TARGET_QUIT_APP),
         ),
@@ -717,18 +755,36 @@ fn mapping_button(font: Handle<Font>, theme: ActiveTheme, label: String) -> impl
     }
 }
 
-fn controller_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
+fn controller_hero_panel(
+    font: Handle<Font>,
+    image: Handle<Image>,
+    theme: ActiveTheme,
+) -> impl Scene {
     bsn! {
         Node {
             width: percent(UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT),
             min_height: px(196.0),
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            row_gap: px(14.0),
             padding: UiRect::vertical(px(6.0)),
         }
         ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT }
-        IgnorePicking
         Children [
+            (
+                Node {
+                    width: percent(100),
+                    justify_content: JustifyContent::FlexEnd,
+                }
+                Children [
+                    (
+                        button(font, "Reset Defaults", theme, UiFocusNav::default())
+                        MappingResetButton
+                        UiFocusId { id: TARGET_RESET }
+                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_QUIT_ROM, down: TARGET_A, left: UI_FOCUS_NONE }
+                    )
+                ]
+            ),
             (
                 Node {
                     width: px(HERO_IMAGE_SIZE),
@@ -977,11 +1033,60 @@ mod tests {
                 .any(|entry| entry.key_id == InputKeyId::KeyQ && entry.map_to == InputAction::A)
         );
     }
+
+    #[test]
+    fn setting_game_boy_action_can_steal_key_from_emulated_b() {
+        let mut mapping = keyboard_mapping(vec![
+            entry(InputKeyId::KeyX, InputAction::A),
+            entry(InputKeyId::KeyZ, InputAction::B),
+        ]);
+
+        set_action_mapping(&mut mapping, InputAction::A, Some(InputKeyId::KeyZ));
+
+        assert!(
+            mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::KeyZ && entry.map_to == InputAction::A)
+        );
+        assert!(
+            !mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::KeyZ && entry.map_to == InputAction::B)
+        );
+        assert!(
+            !mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::KeyX && entry.map_to == InputAction::A)
+        );
+    }
+
+    #[test]
+    fn centre_and_right_column_focus_pairs_match_visual_rows() {
+        assert_eq!(right_nav(TARGET_QUIT_ROM).left, TARGET_RESET);
+        assert_eq!(right_nav(TARGET_RESET_ROM).left, TARGET_RESET);
+        assert_eq!(right_nav(TARGET_SAVE_STATE).left, TARGET_RESET);
+        assert_eq!(right_nav(TARGET_LOAD_STATE).left, TARGET_RESET);
+
+        assert_eq!(centre_nav(TARGET_A).right, TARGET_SPEED_UP);
+        assert_eq!(right_nav(TARGET_SPEED_UP).left, TARGET_A);
+
+        assert_eq!(centre_nav(TARGET_B).right, TARGET_SPEED_DOWN);
+        assert_eq!(right_nav(TARGET_SPEED_DOWN).left, TARGET_B);
+
+        assert_eq!(centre_nav(TARGET_START).right, TARGET_PAUSE);
+        assert_eq!(right_nav(TARGET_PAUSE).left, TARGET_START);
+
+        assert_eq!(centre_nav(TARGET_SELECT).right, TARGET_QUIT_APP);
+        assert_eq!(right_nav(TARGET_QUIT_APP).left, TARGET_SELECT);
+    }
 }
 
 fn left_nav(target: u16) -> UiFocusNavIds {
     match target {
-        TARGET_DPAD_UP => nav(TARGET_RESET, TARGET_A, TARGET_DPAD_DOWN, UI_FOCUS_NONE),
+        TARGET_DPAD_UP => nav(UI_FOCUS_NONE, TARGET_A, TARGET_DPAD_DOWN, UI_FOCUS_NONE),
         TARGET_DPAD_DOWN => nav(TARGET_DPAD_UP, TARGET_B, TARGET_DPAD_LEFT, UI_FOCUS_NONE),
         TARGET_DPAD_LEFT => nav(
             TARGET_DPAD_DOWN,
@@ -1001,12 +1106,12 @@ fn left_nav(target: u16) -> UiFocusNavIds {
 
 fn centre_nav(target: u16) -> UiFocusNavIds {
     match target {
-        TARGET_A => nav(TARGET_RESET, TARGET_QUIT_ROM, TARGET_B, TARGET_DPAD_UP),
-        TARGET_B => nav(TARGET_A, TARGET_RESET_ROM, TARGET_START, TARGET_DPAD_DOWN),
-        TARGET_START => nav(TARGET_B, TARGET_SAVE_STATE, TARGET_SELECT, TARGET_DPAD_LEFT),
+        TARGET_A => nav(TARGET_RESET, TARGET_SPEED_UP, TARGET_B, TARGET_DPAD_UP),
+        TARGET_B => nav(TARGET_A, TARGET_SPEED_DOWN, TARGET_START, TARGET_DPAD_DOWN),
+        TARGET_START => nav(TARGET_B, TARGET_PAUSE, TARGET_SELECT, TARGET_DPAD_LEFT),
         TARGET_SELECT => nav(
             TARGET_START,
-            TARGET_LOAD_STATE,
+            TARGET_QUIT_APP,
             UI_FOCUS_NONE,
             TARGET_DPAD_RIGHT,
         ),
@@ -1016,32 +1121,37 @@ fn centre_nav(target: u16) -> UiFocusNavIds {
 
 fn right_nav(target: u16) -> UiFocusNavIds {
     match target {
-        TARGET_QUIT_ROM => nav(UI_FOCUS_NONE, UI_FOCUS_NONE, TARGET_RESET_ROM, TARGET_A),
-        TARGET_RESET_ROM => nav(TARGET_QUIT_ROM, UI_FOCUS_NONE, TARGET_SAVE_STATE, TARGET_B),
+        TARGET_QUIT_ROM => nav(UI_FOCUS_NONE, UI_FOCUS_NONE, TARGET_RESET_ROM, TARGET_RESET),
+        TARGET_RESET_ROM => nav(
+            TARGET_QUIT_ROM,
+            UI_FOCUS_NONE,
+            TARGET_SAVE_STATE,
+            TARGET_RESET,
+        ),
         TARGET_SAVE_STATE => nav(
             TARGET_RESET_ROM,
             UI_FOCUS_NONE,
             TARGET_LOAD_STATE,
-            TARGET_START,
+            TARGET_RESET,
         ),
         TARGET_LOAD_STATE => nav(
             TARGET_SAVE_STATE,
             UI_FOCUS_NONE,
             TARGET_SPEED_UP,
-            TARGET_SELECT,
+            TARGET_RESET,
         ),
         TARGET_SPEED_UP => nav(
             TARGET_LOAD_STATE,
             UI_FOCUS_NONE,
             TARGET_SPEED_DOWN,
-            TARGET_SELECT,
+            TARGET_A,
         ),
-        TARGET_SPEED_DOWN => nav(TARGET_SPEED_UP, UI_FOCUS_NONE, TARGET_PAUSE, TARGET_SELECT),
+        TARGET_SPEED_DOWN => nav(TARGET_SPEED_UP, UI_FOCUS_NONE, TARGET_PAUSE, TARGET_B),
         TARGET_PAUSE => nav(
             TARGET_SPEED_DOWN,
             UI_FOCUS_NONE,
             TARGET_QUIT_APP,
-            TARGET_SELECT,
+            TARGET_START,
         ),
         TARGET_QUIT_APP => nav(TARGET_PAUSE, UI_FOCUS_NONE, UI_FOCUS_NONE, TARGET_SELECT),
         _ => nav(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),

@@ -15,6 +15,11 @@ pub(super) struct UiInputState {
     pub quit_app: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, Resource)]
+pub struct UiInputCapture {
+    pub active: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum UiInputDirection {
     Up,
@@ -46,8 +51,15 @@ impl UiInputState {
 pub(super) fn collect_ui_input_state(
     keys: Res<ButtonInput<KeyCode>>,
     mut mapped_events: MessageReader<MappedInputEvent>,
+    capture: Res<UiInputCapture>,
     mut input: ResMut<UiInputState>,
 ) {
+    if capture.active {
+        for _ in mapped_events.read() {}
+        *input = UiInputState::default();
+        return;
+    }
+
     *input = UiInputState {
         up: keys.just_pressed(KeyCode::ArrowUp),
         right: keys.just_pressed(KeyCode::ArrowRight),

@@ -8,8 +8,8 @@ use crate::dimensions::{
     UI_FILE_PICKER_WIDTH, UI_INNER_PADDING,
 };
 use crate::ui_elements::interactions::{
-    DisabledUiElement, HoveredUiElement, IgnorePicking, UiElementColors, UiElementKind,
-    UiElementLabel, UiFocusNav, tree::contains_entity,
+    DisabledUiElement, FocusedUiElement, HoveredUiElement, IgnorePicking, UiElementColors,
+    UiElementKind, UiElementLabel, UiFocusNav, tree::contains_entity,
 };
 use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_radius};
 use crate::ui_elements::theme::{UiElementTheme, UiThemeBorderColor, UiThemeTextColor};
@@ -230,17 +230,50 @@ pub fn directory_picker_with_value(
 }
 
 pub(crate) fn update_file_picker_hover_colours(
-    pickers: Query<(Entity, Has<HoveredUiElement>, &Children), With<UiFilePicker>>,
+    pickers: Query<
+        (
+            Entity,
+            Has<HoveredUiElement>,
+            Has<FocusedUiElement>,
+            &UiElementColors,
+            &Children,
+        ),
+        With<UiFilePicker>,
+    >,
     mut hover_fills: Query<(Entity, &UiFilePickerHoverFill, &mut BackgroundColor)>,
+    mut borders: Query<(
+        Entity,
+        &mut BorderColor,
+        Has<DisabledUiElement>,
+        Has<UiFilePickerHoverFill>,
+    )>,
     child_query: Query<&Children>,
 ) {
-    for (picker_entity, hovered, picker_children) in &pickers {
+    for (picker_entity, hovered, focused, colours, picker_children) in &pickers {
+        let active = hovered || focused;
         for (entity, fill, mut background) in &mut hover_fills {
             if picker_entity == entity || contains_entity(picker_children, entity, &child_query) {
-                let next_background = if hovered { fill.hover_fill } else { fill.fill };
+                let next_background = if active { fill.hover_fill } else { fill.fill };
                 if background.0 != next_background {
                     background.0 = next_background;
                 }
+            }
+        }
+
+        for (entity, mut border, disabled, has_hover_fill) in &mut borders {
+            if disabled
+                || !has_hover_fill
+                || !contains_entity(picker_children, entity, &child_query)
+            {
+                continue;
+            }
+            let next_border = BorderColor::all(if focused {
+                colours.secondary
+            } else {
+                colours.primary
+            });
+            if *border != next_border {
+                *border = next_border;
             }
         }
     }

@@ -132,6 +132,15 @@ a. Test everything - all possible things - and keep the issues list below update
 b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
+------------
+NEXT THINGS IN CURRENT COMMIT:
+Clicking on the listening input with the mouse doesn't leave listening mode; it would be nice if it did
+
+On the Input Mapping settings screen, it would look nicer to move the Reset Defaults button to the right above where the Hero Image is. This screen appears to have a 3-column layout, so what I'm suggesting is moving the Reset Defaults button to the middle column (and matching its width to standard button width across all of the app's settings screens) and moving the "Name:" label's value to its right fills the space left by the Reset Defaults button in the left column.
+
+On the Input Mapping screen, focus movement between the middle and right columns isn't visually intuitive. Movement should occur between emulated A and Speed Up, between B and Speed Down, between Start and Pause/resume, and between Select and Quit App. Also, those labels next to the listening buttons in the right column should use title caps, e.g. "Save state" should instead be "Save State".
+- -----------
+
 Known issues:
 - Think animations in menus: corrode away layouts on transition?
 - In main Settings, the Edit Mappings button is less wide than the standard size of other elements

@@ -14,7 +14,7 @@ use super::multi_select::{
 };
 use super::picking::{HoveredUiElement, UiPointerClicked};
 use super::tree::contains_entity;
-use super::ui_input::UiInputState;
+use super::ui_input::{UiInputCapture, UiInputState};
 use super::visual_state::{
     ActivatedUiElement, DisabledUiElement, SelectedUiElement, UiElementKind,
 };
@@ -194,10 +194,16 @@ pub(super) fn activate_controls(
 
 pub(super) fn select_virtual_list_rows(
     mut clicked: MessageReader<UiPointerClicked>,
+    capture: Res<UiInputCapture>,
     virtual_rows: Query<&VirtualListRow>,
     mut virtual_selections: Query<&mut VirtualListSelection>,
     parents: Query<&ChildOf>,
 ) {
+    if capture.active {
+        for _ in clicked.read() {}
+        return;
+    }
+
     for clicked_entity in clicked.read().map(|click| click.entity) {
         let Ok(row) = virtual_rows.get(clicked_entity) else {
             continue;
@@ -230,11 +236,18 @@ pub(super) fn dismiss_multi_selects_on_pointer_release(
     mut commands: Commands,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut clicked: MessageReader<UiPointerClicked>,
+    capture: Res<UiInputCapture>,
     hovered: Query<Entity, With<HoveredUiElement>>,
     multi_selects: MultiSelectQuery,
     child_query: Query<&Children>,
     mut press_started_inside_open_element: Local<bool>,
 ) {
+    if capture.active {
+        for _ in clicked.read() {}
+        *press_started_inside_open_element = false;
+        return;
+    }
+
     let hovered_entities = hovered.iter().collect::<Vec<_>>();
     if mouse_buttons.just_pressed(MouseButton::Left) {
         *press_started_inside_open_element =

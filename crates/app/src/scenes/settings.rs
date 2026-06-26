@@ -677,7 +677,7 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_AUDIO_PRESET => focus_nav_ids(
             TARGET_EDIT_MAPPINGS,
             TARGET_PROVIDER_LIST,
-            TARGET_DELETE_MAPPING,
+            TARGET_CREATE_MAPPING,
             UI_FOCUS_NONE,
         ),
         TARGET_DELETE_MAPPING => focus_nav_ids(
@@ -701,7 +701,7 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_PROVIDER_LIST => focus_nav_ids(
             UI_FOCUS_NONE,
             UI_FOCUS_NONE,
-            TARGET_PROVIDER_SYNC,
+            TARGET_PROVIDER_CREATE,
             TARGET_OVERLAY,
         ),
         TARGET_PROVIDER_SYNC => focus_nav_ids(

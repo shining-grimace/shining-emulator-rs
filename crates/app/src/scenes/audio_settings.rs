@@ -262,12 +262,14 @@ fn sync_audio_conditional_sections(
     selects: Query<(&AudioSelect, &UiMultiSelect), Changed<UiMultiSelect>>,
     all_selects: Query<(&AudioSelect, &UiMultiSelect)>,
     mut sections: Query<(&AudioConditionalSection, &mut Node)>,
+    mut navs: Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
 ) {
     if selects
         .iter()
         .any(|(select, _)| select.field == FIELD_OSCILLATOR)
     {
         apply_audio_conditional_sections(&all_selects, &mut sections);
+        apply_audio_focus_nav(&all_selects, &mut navs);
     }
 }
 
@@ -297,6 +299,102 @@ fn display_for(visible: bool) -> Display {
         Display::Flex
     } else {
         Display::None
+    }
+}
+
+fn apply_audio_focus_nav(
+    selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    navs: &mut Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
+) {
+    let target_entities = navs
+        .iter()
+        .map(|(entity, focus_id, _)| (focus_id.id, entity))
+        .collect::<Vec<_>>();
+    let target = |id| {
+        if id == UI_FOCUS_NONE {
+            return Entity::PLACEHOLDER;
+        }
+        target_entities
+            .iter()
+            .find_map(|(target_id, entity)| (*target_id == id).then_some(*entity))
+            .unwrap_or(Entity::PLACEHOLDER)
+    };
+
+    let ch1_oscillator = selected_channel_oscillator(selects, 1);
+    let ch2_oscillator = selected_channel_oscillator(selects, 2);
+    let ch1_first_detail = channel_detail_target(
+        ch1_oscillator,
+        TARGET_CH1_BUILT_IN_SAMPLE,
+        TARGET_CH1_CUSTOM_SAMPLE,
+        TARGET_CH1_MOD_A,
+    );
+    let ch1_last_detail = channel_detail_target(
+        ch1_oscillator,
+        TARGET_CH1_BUILT_IN_SAMPLE,
+        TARGET_CH1_CUSTOM_SAMPLE,
+        TARGET_CH1_OSCILLATOR,
+    );
+    let ch2_first_detail = channel_detail_target(
+        ch2_oscillator,
+        TARGET_CH2_BUILT_IN_SAMPLE,
+        TARGET_CH2_CUSTOM_SAMPLE,
+        TARGET_CH2_MOD_A,
+    );
+    let ch2_last_detail = channel_detail_target(
+        ch2_oscillator,
+        TARGET_CH2_BUILT_IN_SAMPLE,
+        TARGET_CH2_CUSTOM_SAMPLE,
+        TARGET_CH2_OSCILLATOR,
+    );
+
+    for (_, focus_id, mut nav) in navs.iter_mut() {
+        match focus_id.id {
+            TARGET_CH1_OSCILLATOR => nav.down = target(ch1_first_detail),
+            TARGET_CH1_BUILT_IN_SAMPLE => {
+                nav.up = target(TARGET_CH1_OSCILLATOR);
+                nav.down = target(TARGET_CH1_MOD_A);
+            }
+            TARGET_CH1_CUSTOM_SAMPLE => {
+                nav.up = target(TARGET_CH1_OSCILLATOR);
+                nav.down = target(TARGET_CH1_MOD_A);
+            }
+            TARGET_CH1_MOD_A => nav.up = target(ch1_last_detail),
+            TARGET_CH2_OSCILLATOR => nav.down = target(ch2_first_detail),
+            TARGET_CH2_BUILT_IN_SAMPLE => {
+                nav.up = target(TARGET_CH2_OSCILLATOR);
+                nav.down = target(TARGET_CH2_MOD_A);
+            }
+            TARGET_CH2_CUSTOM_SAMPLE => {
+                nav.up = target(TARGET_CH2_OSCILLATOR);
+                nav.down = target(TARGET_CH2_MOD_A);
+            }
+            TARGET_CH2_MOD_A => nav.up = target(ch2_last_detail),
+            _ => {}
+        }
+    }
+}
+
+fn selected_channel_oscillator(
+    selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    channel: u8,
+) -> usize {
+    selects
+        .iter()
+        .find(|(select, _)| select.channel == channel && select.field == FIELD_OSCILLATOR)
+        .map(|(_, select)| select.selected)
+        .unwrap_or(OSCILLATOR_SQUARE)
+}
+
+fn channel_detail_target(
+    oscillator: usize,
+    built_in_sample: u16,
+    custom_sample: u16,
+    default: u16,
+) -> u16 {
+    match oscillator {
+        OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample,
+        OSCILLATOR_CUSTOM_SAMPLER => custom_sample,
+        _ => default,
     }
 }
 
@@ -512,10 +610,10 @@ fn channel_one_controls(
         }
         Children [
             description(font.clone(), theme, "Channel 1"),
-            audio_select_row(font.clone(), theme, "Oscillator", 1, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH1_OSCILLATOR, UI_FOCUS_NONE, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, true),
-            built_in_sample_row(font.clone(), theme, 1, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
-            custom_sample_row(font.clone(), theme, 1, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            audio_select_row(font.clone(), theme, "Modulation 1", 1, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH1_MOD_A, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_MOD_B, TARGET_SAVE, UI_FOCUS_NONE, false),
+            audio_select_row(font.clone(), theme, "Oscillator", 1, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH1_OSCILLATOR, UI_FOCUS_NONE, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, true),
+            built_in_sample_row(font.clone(), theme, 1, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            custom_sample_row(font.clone(), theme, 1, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            audio_select_row(font.clone(), theme, "Modulation 1", 1, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH1_MOD_A, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR), TARGET_CH1_MOD_B, TARGET_SAVE, UI_FOCUS_NONE, false),
             audio_select_row(font, theme, "Modulation 2", 1, FIELD_MODULATION_B, modulation_config(selected_modulation(preset.modulation_b.as_deref().unwrap_or("Pitch Envelope"))), TARGET_CH1_MOD_B, TARGET_CH1_MOD_A, TARGET_CH2_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false),
         ]
     }
@@ -535,10 +633,10 @@ fn channel_two_controls(
         }
         Children [
             description(font.clone(), theme, "Channel 2"),
-            audio_select_row(font.clone(), theme, "Oscillator", 2, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH2_OSCILLATOR, TARGET_CH1_MOD_B, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
-            built_in_sample_row(font.clone(), theme, 2, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
-            custom_sample_row(font.clone(), theme, 2, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            audio_select_row(font, theme, "Modulation", 2, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH2_MOD_A, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH3_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
+            audio_select_row(font.clone(), theme, "Oscillator", 2, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH2_OSCILLATOR, TARGET_CH1_MOD_B, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, false),
+            built_in_sample_row(font.clone(), theme, 2, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            custom_sample_row(font.clone(), theme, 2, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
+            audio_select_row(font, theme, "Modulation", 2, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH2_MOD_A, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR), TARGET_CH3_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
         ]
     }
 }
@@ -602,13 +700,13 @@ fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                 button(font.clone(), "Delete", theme, UiFocusNav::default())
                 AudioDeleteButton
                 UiFocusId { id: TARGET_DELETE }
-                UiFocusNavIds { up: TARGET_SAVE, right: UI_FOCUS_NONE, down: TARGET_RESTORE, left: TARGET_CH1_MOD_B }
+                UiFocusNavIds { up: TARGET_SAVE, right: UI_FOCUS_NONE, down: TARGET_RESTORE, left: TARGET_CH1_OSCILLATOR }
             ),
             (
                 button(font, "Restore Defaults", theme, UiFocusNav::default())
                 AudioRestoreButton
                 UiFocusId { id: TARGET_RESTORE }
-                UiFocusNavIds { up: TARGET_DELETE, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_CH2_MOD_A }
+                UiFocusNavIds { up: TARGET_DELETE, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_CH1_OSCILLATOR }
             ),
         ]
     }

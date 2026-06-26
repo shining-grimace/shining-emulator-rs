@@ -18,6 +18,7 @@ pub use multi_select::*;
 pub use picking::*;
 pub use scroll::*;
 pub use text_input::*;
+pub use ui_input::UiInputCapture;
 pub use visual_state::*;
 
 /// Ordered UI interaction phases that run inside Bevy's [`Update`] schedule.
@@ -56,6 +57,7 @@ impl Plugin for UiInteractionsPlugin {
         app.init_resource::<focus::LastFocusedUiElement>()
             .init_resource::<Clipboard>()
             .init_resource::<ui_input::UiInputState>()
+            .init_resource::<ui_input::UiInputCapture>()
             .init_resource::<picking::UiPointerPressState>()
             .init_resource::<scroll::ScrollThumbDragState>()
             .add_message::<picking::UiPointerClicked>()
@@ -346,17 +348,22 @@ fn file_picker_hover_colours_may_need_update(
         (),
         (
             With<crate::ui_elements::file_picker::UiFilePicker>,
-            Changed<picking::HoveredUiElement>,
+            Or<(
+                Changed<picking::HoveredUiElement>,
+                Changed<focus::FocusedUiElement>,
+            )>,
         ),
     >,
     added_pickers: Query<(), Added<crate::ui_elements::file_picker::UiFilePicker>>,
     added_hover_fills: Query<(), Added<crate::ui_elements::file_picker::UiFilePickerHoverFill>>,
     mut removed_hover: RemovedComponents<picking::HoveredUiElement>,
+    mut removed_focus: RemovedComponents<focus::FocusedUiElement>,
 ) -> bool {
     !changed_pickers.is_empty()
         || !added_pickers.is_empty()
         || !added_hover_fills.is_empty()
         || removed_hover.read().next().is_some()
+        || removed_focus.read().next().is_some()
 }
 
 fn scroll_thumb_was_released(state: Res<scroll::ScrollThumbDragState>) -> bool {

@@ -5,7 +5,7 @@ use crate::ui_elements::list_view::VirtualListRow;
 use super::list_view::SuppressListItemFocusRedirect;
 use super::picking::{HoveredUiElement, UiPointerClicked};
 use super::scroll::UiScrollArea;
-use super::ui_input::{UiInputDirection, UiInputState};
+use super::ui_input::{UiInputCapture, UiInputDirection, UiInputState};
 use super::visual_state::{DisabledUiElement, UiElementKind};
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
@@ -267,12 +267,18 @@ pub(super) fn focus_pressed_element(
     mut commands: Commands,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut clicked: MessageReader<UiPointerClicked>,
+    capture: Res<UiInputCapture>,
     focusable: Query<&UiElementKind, (With<UiFocusNav>, Without<DisabledUiElement>)>,
     hovered: Query<Entity, With<HoveredUiElement>>,
     focused: Query<Entity, With<FocusedUiElement>>,
     nodes: Query<&Node>,
     parents: Query<&ChildOf>,
 ) {
+    if capture.active {
+        for _ in clicked.read() {}
+        return;
+    }
+
     let clicked = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
 
     if mouse_buttons.just_pressed(MouseButton::Left)

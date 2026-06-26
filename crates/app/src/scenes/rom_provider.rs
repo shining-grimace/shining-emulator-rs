@@ -27,7 +27,7 @@ use crate::ui_elements::file_picker::{UiFilePicker, directory_picker_with_value}
 use crate::ui_elements::info_message::{InfoMessage, info_message, set_latest_info_message};
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, IgnorePicking, InitialFocus, UI_FOCUS_NONE, UiFocusId,
-    UiFocusNav, UiFocusNavIds, UiMultiSelect, UiTextInput,
+    UiFocusNav, UiFocusNavIds, UiMultiSelect, UiSchedule, UiTextInput,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select_with_width};
 use crate::ui_elements::responsive::{
@@ -135,11 +135,13 @@ impl Plugin for RomProviderScenePlugin {
             )
             .add_systems(
                 Update,
-                (
-                    sync_provider_conditional_sections,
-                    finish_provider_test_connection,
-                )
-                    .run_if(in_state(AppState::RomProvider)),
+                sync_provider_conditional_sections
+                    .run_if(in_state(AppState::RomProvider))
+                    .before(UiSchedule::Focus),
+            )
+            .add_systems(
+                Update,
+                finish_provider_test_connection.run_if(in_state(AppState::RomProvider)),
             )
             .add_systems(
                 OnExit(AppState::RomProvider),
@@ -288,6 +290,7 @@ fn sync_provider_conditional_sections(
         Query<(&ProviderConditionalSection, &mut Node)>,
     )>,
     parents: Query<&ChildOf>,
+    mut navs: Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
 ) {
     let (provider_type, pagination_enabled) = {
         let node_query = nodes.p0();
@@ -306,6 +309,14 @@ fn sync_provider_conditional_sections(
             _ => Display::Flex,
         };
     }
+
+    apply_provider_focus_nav(
+        provider_type,
+        pagination_enabled,
+        &nodes.p0(),
+        &parents,
+        &mut navs,
+    );
 }
 
 fn display_for(visible: bool) -> Display {
@@ -313,6 +324,159 @@ fn display_for(visible: bool) -> Display {
         Display::Flex
     } else {
         Display::None
+    }
+}
+
+fn apply_provider_focus_nav(
+    provider_type: usize,
+    pagination_enabled: bool,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
+    navs: &mut Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
+) {
+    let target_entities = navs
+        .iter()
+        .filter(|(entity, _, _)| entity_visible(*entity, nodes, parents))
+        .map(|(entity, focus_id, _)| (focus_id.id, entity))
+        .collect::<Vec<_>>();
+    let target = |id| {
+        if id == UI_FOCUS_NONE {
+            return Entity::PLACEHOLDER;
+        }
+        target_entities
+            .iter()
+            .find_map(|(target_id, entity)| (*target_id == id).then_some(*entity))
+            .unwrap_or(Entity::PLACEHOLDER)
+    };
+
+    for (_, focus_id, mut nav) in navs.iter_mut() {
+        let nav_ids = provider_focus_nav_for(focus_id.id, provider_type, pagination_enabled);
+        *nav = UiFocusNav {
+            up: target(nav_ids.up),
+            right: target(nav_ids.right),
+            down: target(nav_ids.down),
+            left: target(nav_ids.left),
+        };
+    }
+}
+
+fn provider_focus_nav_for(
+    id: u16,
+    provider_type: usize,
+    pagination_enabled: bool,
+) -> UiFocusNavIds {
+    let api_target = if provider_type == 2 {
+        TARGET_API_URL
+    } else {
+        UI_FOCUS_NONE
+    };
+    let type_down = match provider_type {
+        0 => TARGET_LOCAL_DIR,
+        1 => TARGET_REMOTE_FILE_URL,
+        _ => TARGET_TEST,
+    };
+    let pagination_down = if pagination_enabled {
+        TARGET_PAGE_COUNT
+    } else {
+        TARGET_ID_PATH
+    };
+    let max_pages_down = if pagination_enabled {
+        TARGET_PAGE_PARAM
+    } else {
+        TARGET_FILENAME_PATH
+    };
+    let id_path_up = if pagination_enabled {
+        TARGET_PAGE_COUNT
+    } else {
+        TARGET_PAGINATION
+    };
+    let filename_path_up = if pagination_enabled {
+        TARGET_PAGE_PARAM
+    } else {
+        TARGET_MAX_PAGES
+    };
+
+    match id {
+        TARGET_NAME => focus_nav_ids(UI_FOCUS_NONE, api_target, TARGET_STATUS, UI_FOCUS_NONE),
+        TARGET_STATUS => focus_nav_ids(TARGET_NAME, api_target, TARGET_PRIORITY, UI_FOCUS_NONE),
+        TARGET_PRIORITY => focus_nav_ids(TARGET_STATUS, api_target, TARGET_TYPE, UI_FOCUS_NONE),
+        TARGET_TYPE => focus_nav_ids(TARGET_PRIORITY, api_target, type_down, UI_FOCUS_NONE),
+        TARGET_LOCAL_DIR => focus_nav_ids(TARGET_TYPE, UI_FOCUS_NONE, TARGET_SAVE, UI_FOCUS_NONE),
+        TARGET_REMOTE_FILE_URL => {
+            focus_nav_ids(TARGET_TYPE, UI_FOCUS_NONE, TARGET_SAVE, UI_FOCUS_NONE)
+        }
+        TARGET_TEST => focus_nav_ids(TARGET_TYPE, TARGET_SAVE, UI_FOCUS_NONE, UI_FOCUS_NONE),
+        TARGET_SAVE => focus_nav_ids(TARGET_TYPE, api_target, UI_FOCUS_NONE, TARGET_TEST),
+        TARGET_API_URL => focus_nav_ids(
+            UI_FOCUS_NONE,
+            UI_FOCUS_NONE,
+            TARGET_DOWNLOAD_URL,
+            TARGET_NAME,
+        ),
+        TARGET_DOWNLOAD_URL => focus_nav_ids(
+            TARGET_API_URL,
+            UI_FOCUS_NONE,
+            TARGET_ITEMS_PATH,
+            TARGET_NAME,
+        ),
+        TARGET_ITEMS_PATH => focus_nav_ids(
+            TARGET_DOWNLOAD_URL,
+            UI_FOCUS_NONE,
+            TARGET_PAGINATION,
+            TARGET_NAME,
+        ),
+        TARGET_PAGINATION => focus_nav_ids(
+            TARGET_ITEMS_PATH,
+            TARGET_MAX_PAGES,
+            pagination_down,
+            TARGET_NAME,
+        ),
+        TARGET_MAX_PAGES => focus_nav_ids(
+            TARGET_ITEMS_PATH,
+            UI_FOCUS_NONE,
+            max_pages_down,
+            TARGET_PAGINATION,
+        ),
+        TARGET_PAGE_COUNT => focus_nav_ids(
+            TARGET_PAGINATION,
+            TARGET_PAGE_PARAM,
+            TARGET_ID_PATH,
+            TARGET_NAME,
+        ),
+        TARGET_PAGE_PARAM => focus_nav_ids(
+            TARGET_MAX_PAGES,
+            UI_FOCUS_NONE,
+            TARGET_FILENAME_PATH,
+            TARGET_PAGE_COUNT,
+        ),
+        TARGET_ID_PATH => focus_nav_ids(
+            id_path_up,
+            TARGET_FILENAME_PATH,
+            TARGET_NAME_PATH,
+            TARGET_NAME,
+        ),
+        TARGET_FILENAME_PATH => focus_nav_ids(
+            filename_path_up,
+            UI_FOCUS_NONE,
+            TARGET_AUTHOR_PATH,
+            TARGET_ID_PATH,
+        ),
+        TARGET_NAME_PATH => focus_nav_ids(
+            TARGET_ID_PATH,
+            TARGET_AUTHOR_PATH,
+            TARGET_LICENSE_PATH,
+            TARGET_NAME,
+        ),
+        TARGET_AUTHOR_PATH => focus_nav_ids(
+            TARGET_FILENAME_PATH,
+            UI_FOCUS_NONE,
+            TARGET_LICENSE_PATH,
+            TARGET_NAME_PATH,
+        ),
+        TARGET_LICENSE_PATH => {
+            focus_nav_ids(TARGET_NAME_PATH, UI_FOCUS_NONE, UI_FOCUS_NONE, TARGET_NAME)
+        }
+        _ => focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
     }
 }
 
@@ -1018,7 +1182,7 @@ fn provider_focus_nav(id: u16) -> UiFocusNavIds {
             UI_FOCUS_NONE,
         ),
         TARGET_REMOTE_FILE_URL => {
-            focus_nav_ids(TARGET_LOCAL_DIR, TARGET_API_URL, TARGET_TEST, UI_FOCUS_NONE)
+            focus_nav_ids(TARGET_LOCAL_DIR, TARGET_API_URL, TARGET_SAVE, UI_FOCUS_NONE)
         }
         TARGET_TEST => focus_nav_ids(
             TARGET_REMOTE_FILE_URL,

@@ -10,6 +10,7 @@ use crate::ui_elements::back_button::UiBackButton;
 
 use super::multi_select::UiMultiSelectPopup;
 use super::scroll::{UiScrollArea, UiScrollContent};
+use super::ui_input::UiInputCapture;
 use super::visual_state::{ActivatedUiElement, UiElementKind};
 
 const TOUCH_TAP_SLOP_PIXELS: f32 = 18.0;
@@ -87,11 +88,19 @@ pub(super) fn setup_pointer_tracking(
 pub(super) fn resolve_pointer_activations(
     mut pointer_presses: MessageReader<Pointer<Press>>,
     mut pointer_releases: MessageReader<Pointer<Release>>,
+    capture: Res<UiInputCapture>,
     mut press_state: ResMut<UiPointerPressState>,
     interactive: Query<(), Or<(With<UiElementKind>, With<UiBackButton>)>>,
     parents: Query<&ChildOf>,
     mut clicked: MessageWriter<UiPointerClicked>,
 ) {
+    if capture.active {
+        for _ in pointer_presses.read() {}
+        for _ in pointer_releases.read() {}
+        press_state.primary_targets.clear();
+        return;
+    }
+
     let mut pressed_pointers = Vec::new();
     let mut press_targets = HashMap::new();
     for press in pointer_presses.read() {

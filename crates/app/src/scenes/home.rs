@@ -30,7 +30,8 @@ use crate::ui_elements::info_message::{
 };
 use crate::ui_elements::interactions::{
     ActivatedUiElement, DefaultFocusTarget, FocusedUiElement, InitialFocus, SelectedUiElement,
-    SuppressFocusAutoScroll, UiElementKind, UiFocusNav, UiListCellText, UiSchedule, UiScrollArea,
+    SuppressFocusAutoScroll, UI_FOCUS_NONE, UiElementKind, UiFocusId, UiFocusNav, UiFocusNavIds,
+    UiListCellText, UiSchedule, UiScrollArea,
 };
 use crate::ui_elements::list_view::{
     ListCellIndex, ListColumn, ListRow, ListViewConfig, VirtualListContent, VirtualListRow,
@@ -51,6 +52,11 @@ const HOME_ROM_COMPACT_LAST_PLAYED_WIDTH: f32 = 36.0;
 const HOME_CONTENT_MAX_WIDTH: f32 = 2200.0;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
 const HOME_POPUP_ESTIMATED_HEIGHT: f32 = 300.0;
+
+const TARGET_ROM_LIST: u16 = 0;
+const TARGET_ALL_SETTINGS: u16 = 1;
+const TARGET_PRIMARY_SORT: u16 = 2;
+const TARGET_SECONDARY_SORT: u16 = 3;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct SettingsButton;
@@ -403,7 +409,8 @@ fn home_scene(
                                         HomeRomList
                                         InitialFocus { enabled: true }
                                         DefaultFocusTarget
-                                        UiFocusNav { up: {Entity::PLACEHOLDER}, right: #AllSettings, down: {Entity::PLACEHOLDER}, left: {Entity::PLACEHOLDER} }
+                                        UiFocusId { id: TARGET_ROM_LIST }
+                                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_ALL_SETTINGS, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
                                     ),
                                     (
                                         info_message_text(font.clone(), theme, initial_status.to_string(), false)
@@ -486,7 +493,8 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                         #AllSettings
                         button_with_width(font.clone(), "All Settings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
                         SettingsButton
-                        UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
+                        UiFocusId { id: TARGET_ALL_SETTINGS }
+                        UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_PRIMARY_SORT, left: TARGET_ROM_LIST }
                     ),
                 ]
             ),
@@ -503,14 +511,16 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                         #PrimarySort
                         multi_select(font.clone(), theme, sort_select_config(0))
                         PrimarySortSelect
-                        UiFocusNav { up: #AllSettings, right: {Entity::PLACEHOLDER}, down: #SecondarySort, left: #RomList }
+                        UiFocusId { id: TARGET_PRIMARY_SORT }
+                        UiFocusNavIds { up: TARGET_ALL_SETTINGS, right: UI_FOCUS_NONE, down: TARGET_SECONDARY_SORT, left: TARGET_ROM_LIST }
                     ),
                     description(font.clone(), theme, "Then by:"),
                     (
                         #SecondarySort
                         multi_select(font, theme, sort_select_config(1))
                         SecondarySortSelect
-                        UiFocusNav { up: #PrimarySort, right: {Entity::PLACEHOLDER}, down: {Entity::PLACEHOLDER}, left: #RomList }
+                        UiFocusId { id: TARGET_SECONDARY_SORT }
+                        UiFocusNavIds { up: TARGET_PRIMARY_SORT, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_ROM_LIST }
                     ),
                 ]
             ),

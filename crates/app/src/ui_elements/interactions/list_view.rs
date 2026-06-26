@@ -27,12 +27,14 @@ pub struct UiListViewFocus {
 pub(super) struct SuppressListItemFocusRedirect;
 
 pub(super) fn remember_focused_list_item(
+    mut commands: Commands,
     focused_items: Query<
         (Entity, Option<&VirtualListRow>),
         (With<FocusedUiElement>, Added<FocusedUiElement>),
     >,
     mut lists: Query<(&mut UiListViewFocus, &Children)>,
     mut selections: Query<&mut VirtualListSelection>,
+    selected_items: Query<(Entity, Has<SelectedUiElement>), With<UiElementKind>>,
     parents: Query<&ChildOf>,
     child_query: Query<&Children>,
 ) {
@@ -45,6 +47,19 @@ pub(super) fn remember_focused_list_item(
             list.remembered_item = focused_item;
             if let Some(row) = virtual_row.filter(|row| row.item_index != usize::MAX) {
                 set_virtual_selection(focused_item, *row, &mut selections, &parents);
+            } else {
+                for (entity, selected) in &selected_items {
+                    if !contains_entity(children, entity, &child_query) {
+                        continue;
+                    }
+                    if entity == focused_item {
+                        if !selected {
+                            commands.entity(entity).insert(SelectedUiElement);
+                        }
+                    } else if selected {
+                        commands.entity(entity).remove::<SelectedUiElement>();
+                    }
+                }
             }
             return;
         }

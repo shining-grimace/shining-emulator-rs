@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use bevy::input::gamepad::GamepadButton;
 use bevy::input::keyboard::KeyCode;
@@ -166,26 +166,101 @@ pub fn sync_storage_mappings_from_runtime(
 
 pub fn ensure_essential_navigation_mappings(mapping: &mut InputDeviceMapping) -> bool {
     let mut changed = ensure_keyboard_quit_app_mapping(mapping);
-    let mut mapped_actions = mapping
-        .map
-        .iter()
-        .map(|entry| entry.map_to)
-        .collect::<HashSet<_>>();
-    let mut mapped_keys = mapping
-        .map
-        .iter()
-        .map(|entry| entry.key_id)
-        .collect::<HashSet<_>>();
-    for entry in default_navigation_entries(mapping.r#type) {
-        if !mapped_actions.contains(&entry.map_to) && !mapped_keys.contains(&entry.key_id) {
-            mapped_actions.insert(entry.map_to);
-            mapped_keys.insert(entry.key_id);
-            mapping.map.push(entry);
-            changed = true;
+
+    for (action, fallbacks) in navigation_fallbacks(mapping.r#type) {
+        if mapping.map.iter().any(|entry| entry.map_to == action) {
+            continue;
         }
+
+        let Some(key_id) = fallbacks
+            .iter()
+            .copied()
+            .find(|key_id| !mapping.map.iter().any(|entry| entry.key_id == *key_id))
+        else {
+            continue;
+        };
+
+        mapping.map.push(InputMapEntry {
+            key_id,
+            map_to: action,
+        });
+        changed = true;
     }
 
     changed
+}
+
+fn navigation_fallbacks(device_type: InputDeviceType) -> Vec<(InputAction, Vec<InputKeyId>)> {
+    match device_type {
+        InputDeviceType::Keyboard => vec![
+            (InputAction::QuitApp, vec![InputKeyId::Escape]),
+            (
+                InputAction::Dleft,
+                vec![InputKeyId::ArrowLeft, InputKeyId::KeyA],
+            ),
+            (
+                InputAction::Dright,
+                vec![InputKeyId::ArrowRight, InputKeyId::KeyD],
+            ),
+            (
+                InputAction::Dup,
+                vec![InputKeyId::ArrowUp, InputKeyId::KeyW],
+            ),
+            (
+                InputAction::Ddown,
+                vec![InputKeyId::ArrowDown, InputKeyId::KeyS],
+            ),
+            (
+                InputAction::A,
+                vec![InputKeyId::KeyX, InputKeyId::Enter, InputKeyId::Space],
+            ),
+            (
+                InputAction::B,
+                vec![
+                    InputKeyId::KeyZ,
+                    InputKeyId::KeyC,
+                    InputKeyId::KeyV,
+                    InputKeyId::Backspace,
+                ],
+            ),
+        ],
+        InputDeviceType::Controller => vec![
+            (
+                InputAction::Dleft,
+                vec![InputKeyId::DPadLeft, InputKeyId::LeftThumb],
+            ),
+            (
+                InputAction::Dright,
+                vec![InputKeyId::DPadRight, InputKeyId::RightThumb],
+            ),
+            (
+                InputAction::Dup,
+                vec![InputKeyId::DPadUp, InputKeyId::LeftTrigger],
+            ),
+            (
+                InputAction::Ddown,
+                vec![InputKeyId::DPadDown, InputKeyId::RightTrigger],
+            ),
+            (
+                InputAction::A,
+                vec![
+                    InputKeyId::East,
+                    InputKeyId::South,
+                    InputKeyId::North,
+                    InputKeyId::West,
+                ],
+            ),
+            (
+                InputAction::B,
+                vec![
+                    InputKeyId::South,
+                    InputKeyId::East,
+                    InputKeyId::West,
+                    InputKeyId::North,
+                ],
+            ),
+        ],
+    }
 }
 
 fn ensure_keyboard_quit_app_mapping(mapping: &mut InputDeviceMapping) -> bool {
@@ -207,67 +282,6 @@ fn ensure_keyboard_quit_app_mapping(mapping: &mut InputDeviceMapping) -> bool {
         true
     } else {
         false
-    }
-}
-
-fn default_navigation_entries(device_type: InputDeviceType) -> Vec<InputMapEntry> {
-    match device_type {
-        InputDeviceType::Keyboard => vec![
-            InputMapEntry {
-                key_id: InputKeyId::Escape,
-                map_to: InputAction::QuitApp,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::ArrowLeft,
-                map_to: InputAction::Dleft,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::ArrowRight,
-                map_to: InputAction::Dright,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::ArrowUp,
-                map_to: InputAction::Dup,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::ArrowDown,
-                map_to: InputAction::Ddown,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::KeyX,
-                map_to: InputAction::A,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::KeyZ,
-                map_to: InputAction::B,
-            },
-        ],
-        InputDeviceType::Controller => vec![
-            InputMapEntry {
-                key_id: InputKeyId::DPadLeft,
-                map_to: InputAction::Dleft,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadRight,
-                map_to: InputAction::Dright,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadUp,
-                map_to: InputAction::Dup,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::DPadDown,
-                map_to: InputAction::Ddown,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::East,
-                map_to: InputAction::A,
-            },
-            InputMapEntry {
-                key_id: InputKeyId::South,
-                map_to: InputAction::B,
-            },
-        ],
     }
 }
 
@@ -313,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn essential_navigation_mappings_do_not_duplicate_existing_keys() {
+    fn essential_navigation_mappings_use_next_fallback_when_default_key_is_taken() {
         let mut mapping = InputDeviceMapping {
             r#type: InputDeviceType::Keyboard,
             controller_model_id: None,
@@ -334,10 +348,31 @@ mod tests {
             1
         );
         assert!(
-            !mapping
+            mapping
                 .map
                 .iter()
-                .any(|entry| entry.map_to == InputAction::A)
+                .any(|entry| entry.key_id == InputKeyId::Enter && entry.map_to == InputAction::A)
+        );
+    }
+
+    #[test]
+    fn essential_navigation_mappings_repair_b_when_default_key_is_stolen() {
+        let mut mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Keyboard,
+            controller_model_id: None,
+            map: vec![InputMapEntry {
+                key_id: InputKeyId::KeyZ,
+                map_to: InputAction::A,
+            }],
+        };
+
+        assert!(ensure_essential_navigation_mappings(&mut mapping));
+
+        assert!(
+            mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::KeyC && entry.map_to == InputAction::B)
         );
     }
 
