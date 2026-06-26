@@ -134,7 +134,6 @@ c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
 - Think animations in menus: corrode away layouts on transition?
-- For drop-down selections, when the options are opened, clicking the main element again doesn't hide the options
 - In main Settings, the Edit Mappings button is less wide than the standard size of other elements
 - In main Settings, sections are not distinct because there's no margin between say input settings and audio settings; it might be nice to add more explainers, to mention the xBR algorithm is used for upscaling, and explain some other options, and consider moving input and audio options nearer the top (more frequently-updated things brought more into quick access)
 - The ROM list should have fewer columns on mobile so that the game names are more visible

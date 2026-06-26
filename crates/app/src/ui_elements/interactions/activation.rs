@@ -119,17 +119,20 @@ pub(super) fn activate_controls(
         commands.entity(entity).insert(ActivatedUiElement);
     }
 
-    for (entity, multi_select, _, children) in &mut multi_selects {
+    for (entity, multi_select, open, children) in &mut multi_selects {
         if clicked_entities.contains(&entity) {
-            set_open(&mut commands, entity, true);
-            focus_selected_option(
-                &mut commands,
-                &focused,
-                children,
-                multi_select.selected,
-                &options,
-                &child_query,
-            );
+            let next_open = !open;
+            set_open(&mut commands, entity, next_open);
+            if next_open {
+                focus_selected_option(
+                    &mut commands,
+                    &focused,
+                    children,
+                    multi_select.selected,
+                    &options,
+                    &child_query,
+                );
+            }
         }
     }
 
