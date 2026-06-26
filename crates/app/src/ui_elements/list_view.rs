@@ -28,6 +28,11 @@ pub struct ListRow {
     pub nav: UiFocusNav,
 }
 
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct ListRowIndex {
+    pub index: usize,
+}
+
 pub struct ListViewConfig {
     pub nav: UiFocusNav,
     pub scrollbar_nav: UiFocusNav,
@@ -70,7 +75,17 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
     let rows = config
         .rows
         .into_iter()
-        .map(|row| list_row(font.clone(), row, columns.clone(), theme, hover_background))
+        .enumerate()
+        .map(|(index, row)| {
+            list_row(
+                font.clone(),
+                index,
+                row,
+                columns.clone(),
+                theme,
+                hover_background,
+            )
+        })
         .collect::<Vec<_>>();
     let content_rows = config
         .virtual_total_rows
@@ -299,6 +314,7 @@ fn collect_list_cell_entities_recursive(
 
 fn list_row(
     font: Handle<Font>,
+    index: usize,
     row: ListRow,
     columns: Vec<ListColumn>,
     theme: ActiveTheme,
@@ -322,6 +338,7 @@ fn list_row(
         }
         Button
         BackgroundColor(Color::NONE)
+        ListRowIndex { index }
         UiFocusNav { up: {row.nav.up}, right: {row.nav.right}, down: {row.nav.down}, left: {row.nav.left} }
         UiElementKind::ListItem
         UiElementTheme::ListItem

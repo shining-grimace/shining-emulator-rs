@@ -3,10 +3,18 @@ use bevy::prelude::*;
 #[derive(Clone, Component, Debug)]
 pub(crate) struct CheatCode {
     pub(crate) description: String,
+    pub(crate) code: String,
+    pub(crate) code_type: CheatCodeType,
     pub(crate) address: u16,
     pub(crate) value: u8,
     pub(crate) compare: Option<u8>,
     pub(crate) enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CheatCodeType {
+    GameGenie,
+    GameShark,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -110,6 +118,7 @@ fn parse_game_shark(cleaned: &str) -> Option<(u16, u8)> {
 }
 
 pub(crate) fn parse_cheat_code(input: &str, description: String) -> Option<CheatCode> {
+    let code = input.trim().to_string();
     let cleaned: String = input
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
@@ -120,6 +129,8 @@ pub(crate) fn parse_cheat_code(input: &str, description: String) -> Option<Cheat
     if let Some((address, value)) = parse_game_shark(cleaned_str) {
         return Some(CheatCode {
             description,
+            code,
+            code_type: CheatCodeType::GameShark,
             address,
             value,
             compare: None,
@@ -131,6 +142,8 @@ pub(crate) fn parse_cheat_code(input: &str, description: String) -> Option<Cheat
         if let Some((address, value)) = parse_game_shark(&cleaned_str[2..]) {
             return Some(CheatCode {
                 description,
+                code,
+                code_type: CheatCodeType::GameShark,
                 address,
                 value,
                 compare: None,
@@ -142,6 +155,8 @@ pub(crate) fn parse_cheat_code(input: &str, description: String) -> Option<Cheat
     if let Some((address, value, compare)) = parse_game_genie(cleaned_str) {
         return Some(CheatCode {
             description,
+            code,
+            code_type: CheatCodeType::GameGenie,
             address,
             value,
             compare,

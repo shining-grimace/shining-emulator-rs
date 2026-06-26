@@ -7,6 +7,7 @@ use bevy::input::ButtonState;
 use bevy::math::Rect;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
 
 use crate::app_assets::AppAssets;
@@ -14,11 +15,11 @@ use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
     GAMEPLAY_ERROR_ICON_SIZE, LOADING_INDICATOR_GRID_SIZE, TOUCH_OVERLAY_MARGIN, UI_BODY_FONT_SIZE,
-    UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING,
+    UI_CONTENT_GAP, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING, UI_LIST_HEIGHT,
     UI_MULTI_SELECT_WIDTH, UI_SCREEN_PADDING,
 };
 use crate::game_boy::{
-    CheatCode, GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, apply_save_state,
+    CheatCode, CheatCodeType, GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, apply_save_state,
     encode_save_state, parse_cheat_code,
 };
 use crate::input::events::MappedInputEvent;
@@ -27,13 +28,15 @@ use crate::storage::LocalStorage;
 use crate::storage::input_mappings::InputAction;
 use crate::ui_elements::action_hint::action_hints_for_actions;
 use crate::ui_elements::choice_popup::{
-    ChoicePopupConfig, ChoicePopupContext, ChoicePopupOption, centered_choice_popup_position,
-    choice_popup_context_index, choice_popup_menu, despawn_choice_popups,
+    ChoicePopupConfig, ChoicePopupContext, ChoicePopupOption,
+    centered_scaled_choice_popup_position, choice_popup_context_index, choice_popup_menu,
+    despawn_choice_popups,
 };
 use crate::ui_elements::interactions::{
-    ActivatedUiElement, FocusedUiElement, IgnorePicking, LastFocusedUiElement, UiElementColors,
-    UiElementKind, UiElementLabel, UiFocusNav, UiTextInput,
+    ActivatedUiElement, FocusedUiElement, IgnorePicking, LastFocusedUiElement, SelectedUiElement,
+    UiElementColors, UiElementKind, UiElementLabel, UiFocusNav, UiTextInput,
 };
+use crate::ui_elements::list_view::{ListColumn, ListRow, ListRowIndex, ListViewConfig, list_view};
 use crate::ui_elements::loading_indicator::loading_indicator_scene;
 use crate::ui_elements::styles::{control_fill, hover_fill, ui_border, ui_padding, ui_radius};
 use crate::ui_elements::text_input::text_input_with_value_width;
@@ -45,13 +48,16 @@ const ERROR_ICON_X: f32 = 0.0;
 const ERROR_ICON_Y: f32 = 8.0;
 const ERROR_ICON_SIZE: f32 = 4.0;
 const GAMEPLAY_MENU_BUTTON_WIDTH: f32 = 104.0;
-const GAMEPLAY_MENU_POPUP_ESTIMATED_HEIGHT: f32 = 372.0;
-const CHEAT_CODES_POPUP_WIDTH: f32 = UI_MULTI_SELECT_WIDTH * 2.0;
+const GAMEPLAY_MENU_POPUP_ESTIMATED_HEIGHT: f32 = 408.0;
+const CHEAT_CODES_POPUP_TARGET_WIDTH: f32 = UI_MULTI_SELECT_WIDTH * 4.0;
+const CHEAT_CODES_POPUP_ESTIMATED_HEIGHT: f32 = 432.0;
+const CHEAT_CODES_POPUP_SCREEN_MARGIN: f32 = 16.0;
 const GAMEPLAY_MENU_CONTEXT_INDEX: usize = 0;
 const CHEAT_CODES_CONTEXT_INDEX: usize = 1;
 const CHEAT_OPTION_ADD: usize = 0;
-const CHEAT_OPTION_BACK: usize = 1;
-const CHEAT_OPTION_CLOSE: usize = 2;
+const CHEAT_OPTION_REMOVE: usize = 1;
+const CHEAT_OPTION_BACK: usize = 2;
+const CHEAT_OPTION_CLOSE: usize = 3;
 const FIRST_MANUAL_SAVE_SLOT: u8 = 0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -87,6 +93,16 @@ struct GameplayMenuActivationQueries<'w, 's> {
     focused: Query<'w, 's, Entity, With<FocusedUiElement>>,
     text_inputs: Query<'w, 's, &'static UiTextInput>,
     cheat_code_popup_roots: Query<'w, 's, Entity, With<CheatCodePopupRoot>>,
+    cheat_code_rows: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static ListRowIndex,
+            Has<SelectedUiElement>,
+            Has<FocusedUiElement>,
+        ),
+    >,
 }
 
 pub struct GameplayScenePlugin;
@@ -185,6 +201,7 @@ fn handle_gameplay_activation(
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
     queries: GameplayMenuActivationQueries,
+    ui_scale: Res<UiScale>,
     mut emulators: Query<&mut GameBoyCore, With<GameBoyEmulator>>,
     mut storage: ResMut<LocalStorage>,
     state: Res<State<AppState>>,
@@ -203,12 +220,18 @@ fn handle_gameplay_activation(
         clear_gameplay_ui_focus(&mut commands, &queries.focused, &mut last_focused);
         menu_pause.paused_by_menu = true;
         despawn_choice_popups(&mut commands, &queries.popup_roots);
-        let popup_position = centered_choice_popup_position(
+        let popup_position = centered_scaled_choice_popup_position(
             &queries.windows,
-            CHEAT_CODES_POPUP_WIDTH,
-            CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
+            &ui_scale,
+            UI_MULTI_SELECT_WIDTH,
+            GAMEPLAY_MENU_POPUP_ESTIMATED_HEIGHT,
         );
         commands.spawn_scene(gameplay_menu_popup_scene(&assets, *theme, popup_position));
+        return;
+    }
+
+    if queries.cheat_code_rows.get(entity).is_ok() && cheat_code_popup_contains(entity, &queries) {
+        select_cheat_code_row(&mut commands, entity, &queries);
         return;
     }
 
@@ -231,11 +254,23 @@ fn handle_gameplay_activation(
                     &mut emulators,
                     &assets,
                     theme,
+                    &ui_scale,
+                    &mut status,
+                );
+            }
+            CHEAT_OPTION_REMOVE => {
+                handle_remove_cheat_code(
+                    &mut commands,
+                    &queries,
+                    &mut emulators,
+                    &assets,
+                    *theme,
+                    &ui_scale,
                     &mut status,
                 );
             }
             CHEAT_OPTION_BACK => {
-                handle_cheat_codes_back(&mut commands, &assets, *theme, &queries);
+                handle_cheat_codes_back(&mut commands, &assets, *theme, &queries, &ui_scale);
             }
             CHEAT_OPTION_CLOSE => {
                 despawn_cheat_codes_popup(&mut commands, &queries);
@@ -265,7 +300,7 @@ fn handle_gameplay_activation(
                 .next()
                 .map(|e| e.cheats.codes.clone())
                 .unwrap_or_default();
-            spawn_cheat_codes_popup(&mut commands, &assets, *theme, &queries, &codes);
+            spawn_cheat_codes_popup(&mut commands, &assets, *theme, &queries, &ui_scale, &codes);
             return;
         }
         5 => {
@@ -704,22 +739,39 @@ fn spawn_cheat_codes_popup(
     assets: &AppAssets,
     theme: ActiveTheme,
     queries: &GameplayMenuActivationQueries,
+    ui_scale: &UiScale,
     cheat_codes: &[CheatCode],
 ) {
-    let popup_position = centered_choice_popup_position(
+    let popup_width = cheat_codes_popup_width(&queries.windows, ui_scale);
+    let popup_position = centered_scaled_choice_popup_position(
         &queries.windows,
-        UI_MULTI_SELECT_WIDTH,
+        ui_scale,
+        popup_width,
         CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
     );
     commands.spawn_scene(cheat_codes_popup_scene(
         assets,
         theme,
         popup_position,
+        popup_width,
         cheat_codes,
     ));
 }
 
-const CHEAT_CODES_POPUP_ESTIMATED_HEIGHT: f32 = 480.0;
+fn cheat_codes_popup_width(
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    ui_scale: &UiScale,
+) -> f32 {
+    let scale = ui_scale.0.max(f32::EPSILON);
+    let max_width = windows
+        .single()
+        .map(|window| window.width() / scale - 2.0 * CHEAT_CODES_POPUP_SCREEN_MARGIN)
+        .unwrap_or(CHEAT_CODES_POPUP_TARGET_WIDTH);
+
+    CHEAT_CODES_POPUP_TARGET_WIDTH
+        .min(max_width)
+        .max(UI_MULTI_SELECT_WIDTH)
+}
 
 fn despawn_cheat_codes_popup(commands: &mut Commands, queries: &GameplayMenuActivationQueries) {
     for root in &queries.cheat_code_popup_roots {
@@ -733,6 +785,7 @@ fn handle_add_cheat_code(
     emulators: &mut Query<&mut GameBoyCore, With<GameBoyEmulator>>,
     assets: &AppAssets,
     theme: Res<ActiveTheme>,
+    ui_scale: &UiScale,
     status: &mut GameBoyLoadStatus,
 ) {
     let Some(input) = queries.text_inputs.iter().next() else {
@@ -743,9 +796,36 @@ fn handle_add_cheat_code(
         return;
     }
 
-    let description = format!("Cheat {}", queries.text_inputs.iter().count() + 1);
+    let Some(mut emulator) = emulators.iter_mut().next() else {
+        status.set_error_message("The emulator is not available.");
+        return;
+    };
+
+    let description = format!("Cheat {}", emulator.cheats.codes.len() + 1);
     let Some(cheat_code) = parse_cheat_code(&code_text, description) else {
         status.set_error_message(format!("Could not parse cheat code: {code_text}"));
+        return;
+    };
+
+    emulator.cheats.codes.push(cheat_code);
+    let cheat_codes = emulator.cheats.codes.clone();
+
+    despawn_cheat_codes_popup(commands, queries);
+    status.set_ready();
+    spawn_cheat_codes_popup(commands, assets, *theme, queries, ui_scale, &cheat_codes);
+}
+
+fn handle_remove_cheat_code(
+    commands: &mut Commands,
+    queries: &GameplayMenuActivationQueries,
+    emulators: &mut Query<&mut GameBoyCore, With<GameBoyEmulator>>,
+    assets: &AppAssets,
+    theme: ActiveTheme,
+    ui_scale: &UiScale,
+    status: &mut GameBoyLoadStatus,
+) {
+    let Some(index) = selected_cheat_code_index(queries) else {
+        status.set_error_message("Select a cheat code to remove.");
         return;
     };
 
@@ -754,22 +834,65 @@ fn handle_add_cheat_code(
         return;
     };
 
-    emulator.cheats.codes.push(cheat_code);
+    if index >= emulator.cheats.codes.len() {
+        status.set_error_message("The selected cheat code is no longer available.");
+        return;
+    }
+
+    emulator.cheats.remove(index);
+    let cheat_codes = emulator.cheats.codes.clone();
+
     despawn_cheat_codes_popup(commands, queries);
     status.set_ready();
+    spawn_cheat_codes_popup(commands, assets, theme, queries, ui_scale, &cheat_codes);
+}
 
-    let cheat_codes = emulator.cheats.codes.clone();
-    let popup_position = centered_choice_popup_position(
-        &queries.windows,
-        CHEAT_CODES_POPUP_WIDTH,
-        CHEAT_CODES_POPUP_ESTIMATED_HEIGHT,
-    );
-    commands.spawn_scene(cheat_codes_popup_scene(
-        assets,
-        *theme,
-        popup_position,
-        &cheat_codes,
-    ));
+fn selected_cheat_code_index(queries: &GameplayMenuActivationQueries) -> Option<usize> {
+    selected_or_focused_cheat_code_index(queries, true)
+        .or_else(|| selected_or_focused_cheat_code_index(queries, false))
+}
+
+fn select_cheat_code_row(
+    commands: &mut Commands,
+    selected_entity: Entity,
+    queries: &GameplayMenuActivationQueries,
+) {
+    for (entity, _, _, _) in &queries.cheat_code_rows {
+        if !cheat_code_popup_contains(entity, queries) {
+            continue;
+        }
+        if entity == selected_entity {
+            commands.entity(entity).insert(SelectedUiElement);
+        } else {
+            commands.entity(entity).remove::<SelectedUiElement>();
+        }
+    }
+}
+
+fn selected_or_focused_cheat_code_index(
+    queries: &GameplayMenuActivationQueries,
+    require_selected: bool,
+) -> Option<usize> {
+    queries
+        .cheat_code_rows
+        .iter()
+        .find_map(|(entity, row, selected, focused)| {
+            let active = if require_selected { selected } else { focused };
+            (active && cheat_code_popup_contains(entity, queries)).then_some(row.index)
+        })
+}
+
+fn cheat_code_popup_contains(entity: Entity, queries: &GameplayMenuActivationQueries) -> bool {
+    queries.cheat_code_popup_roots.iter().any(|root| {
+        root == entity
+            || queries.child_query.get(root).is_ok_and(|children| {
+                crate::ui_elements::interactions::tree::contains_entity(
+                    children,
+                    entity,
+                    &queries.child_query,
+                )
+            })
+    })
 }
 
 fn handle_cheat_codes_back(
@@ -777,10 +900,12 @@ fn handle_cheat_codes_back(
     assets: &AppAssets,
     theme: ActiveTheme,
     queries: &GameplayMenuActivationQueries,
+    ui_scale: &UiScale,
 ) {
     despawn_cheat_codes_popup(commands, queries);
-    let popup_position = centered_choice_popup_position(
+    let popup_position = centered_scaled_choice_popup_position(
         &queries.windows,
+        ui_scale,
         UI_MULTI_SELECT_WIDTH,
         GAMEPLAY_MENU_POPUP_ESTIMATED_HEIGHT,
     );
@@ -791,6 +916,7 @@ fn cheat_codes_popup_scene(
     assets: &AppAssets,
     theme: ActiveTheme,
     position: Vec2,
+    width: f32,
     codes: &[CheatCode],
 ) -> impl Scene {
     let font = assets.ubuntu_mono_font.clone();
@@ -802,7 +928,7 @@ fn cheat_codes_popup_scene(
             position_type: PositionType::Absolute,
             left: px(position.x),
             top: px(position.y),
-            width: px(CHEAT_CODES_POPUP_WIDTH),
+            width: px(width),
             border: ui_border(),
             border_radius: ui_radius(),
             padding: ui_padding(),
@@ -822,7 +948,7 @@ fn cheat_codes_popup_scene(
                 String::new(),
                 theme,
                 UiFocusNav::default(),
-                px(CHEAT_CODES_POPUP_WIDTH - 2.0 * UI_INNER_PADDING),
+                px(width - 2.0 * UI_INNER_PADDING),
             ),
             cheat_codes_list_container(font.clone(), theme, codes),
             cheat_codes_button_row(font.clone(), theme),
@@ -838,13 +964,14 @@ fn cheat_codes_list_container(
     bsn! {
         Node {
             width: percent(100),
+            height: px(UI_LIST_HEIGHT),
             flex_direction: FlexDirection::Column,
             row_gap: px(6.0),
-            max_height: px(200.0),
+            max_height: px(UI_LIST_HEIGHT),
             overflow: Overflow::clip(),
         }
         Children [
-            {cheat_codes_list(font, theme, codes)}
+            cheat_codes_list(font, theme, codes),
         ]
     }
 }
@@ -861,6 +988,7 @@ fn cheat_codes_button_row(font: Handle<Font>, theme: ActiveTheme) -> impl Scene 
         }
         Children [
             cheat_codes_add_button(font.clone(), theme, background, hover_background),
+            cheat_codes_remove_button(font.clone(), theme, background, hover_background),
             cheat_codes_back_button(font.clone(), theme, background, hover_background),
             cheat_codes_close_button(font, theme, background, hover_background),
         ]
@@ -897,6 +1025,50 @@ fn cheat_codes_add_button(
         Children [
             (
                 Text("Add Code")
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                UiElementLabel
+                IgnorePicking
+                TextLayout::new(Justify::Center, LineBreak::NoWrap)
+            ),
+        ]
+    }
+}
+
+fn cheat_codes_remove_button(
+    font: Handle<Font>,
+    theme: ActiveTheme,
+    background: Color,
+    hover_background: Color,
+) -> impl Scene {
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            flex_basis: px(0.0),
+            width: percent(100),
+            height: px(UI_ELEMENT_HEIGHT),
+            border: ui_border(),
+            border_radius: ui_radius(),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        Button
+        ChoicePopupOption { option_index: {CHEAT_OPTION_REMOVE} }
+        BorderColor::all(theme.primary)
+        UiThemeBorderColor::Primary
+        BackgroundColor({background})
+        UiFocusNav { up: Entity::PLACEHOLDER, right: Entity::PLACEHOLDER, down: Entity::PLACEHOLDER, left: Entity::PLACEHOLDER }
+        UiElementKind::Button
+        UiElementTheme::Control
+        UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
+        Children [
+            (
+                Text("Remove")
                 TextFont {
                     font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
                     font_size: px(UI_CONTROL_FONT_SIZE),
@@ -999,48 +1171,59 @@ fn cheat_codes_close_button(
     }
 }
 
-fn cheat_codes_list(
-    font: Handle<Font>,
-    theme: ActiveTheme,
-    codes: &[CheatCode],
-) -> Vec<Box<dyn SceneList>> {
-    if codes.is_empty() {
-        return vec![Box::new(bsn_list![
-            Text("No cheat codes entered.")
-            TextFont {
-                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                font_size: px(UI_BODY_FONT_SIZE),
-            }
-            TextColor({theme.tertiary})
-            UiThemeTextColor::Tertiary
-            TextLayout::new(Justify::Center, LineBreak::WordBoundary)
-        ]) as Box<dyn SceneList>];
+fn cheat_codes_list(font: Handle<Font>, theme: ActiveTheme, codes: &[CheatCode]) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: px(UI_LIST_HEIGHT),
+            max_height: px(UI_LIST_HEIGHT),
+            min_height: px(0.0),
+        }
+        Children [
+            list_view(font, theme, ListViewConfig {
+                nav: UiFocusNav::default(),
+                scrollbar_nav: UiFocusNav::default(),
+                columns: vec![
+                    ListColumn { heading: "Type", width_percent: 24.0 },
+                    ListColumn { heading: "Code", width_percent: 34.0 },
+                    ListColumn { heading: "Effect", width_percent: 42.0 },
+                ],
+                rows: cheat_code_rows(codes),
+                virtual_total_rows: None,
+            })
+        ]
     }
+}
 
-    codes
-        .iter()
-        .enumerate()
-        .map(|(_i, code)| {
-            let font = font.clone();
-            let status = if code.enabled { "ON" } else { "OFF" };
-            let label_text = format!(
-                "[{status}] {:04X}:{:02X}{}",
-                code.address,
-                code.value,
-                if code.compare.is_some() { " (cmp)" } else { "" }
-            );
-            Box::new(bsn_list![
-                Text({label_text})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                TextLayout::new(Justify::Left, LineBreak::NoWrap)
-            ]) as Box<dyn SceneList>
-        })
-        .collect()
+fn cheat_code_rows(codes: &[CheatCode]) -> Vec<ListRow> {
+    codes.iter().map(cheat_code_row).collect()
+}
+
+fn cheat_code_row(code: &CheatCode) -> ListRow {
+    let status = if code.enabled { "ON" } else { "OFF" };
+    let effect = match code.compare {
+        Some(compare) => format!(
+            "{status} {:04X}<-{:02X} if {:02X}",
+            code.address, code.value, compare
+        ),
+        None => format!("{status} {:04X}<-{:02X}", code.address, code.value),
+    };
+
+    ListRow {
+        cells: vec![
+            cheat_code_type_label(code.code_type).to_string(),
+            code.code.clone(),
+            effect,
+        ],
+        nav: UiFocusNav::default(),
+    }
+}
+
+fn cheat_code_type_label(code_type: CheatCodeType) -> &'static str {
+    match code_type {
+        CheatCodeType::GameGenie => "Game Genie",
+        CheatCodeType::GameShark => "GameShark",
+    }
 }
 
 fn cheat_codes_popup_label(font: Handle<Font>, theme: ActiveTheme, text: &str) -> impl Scene {

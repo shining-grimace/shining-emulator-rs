@@ -2,6 +2,7 @@ use bevy::asset::HandleTemplate;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
 
 use crate::app_theme::ActiveTheme;
@@ -140,9 +141,28 @@ pub fn centered_choice_popup_position(
     width: f32,
     estimated_height: f32,
 ) -> Vec2 {
+    centered_choice_popup_position_for_scale(windows, 1.0, width, estimated_height)
+}
+
+pub fn centered_scaled_choice_popup_position(
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    ui_scale: &UiScale,
+    width: f32,
+    estimated_height: f32,
+) -> Vec2 {
+    centered_choice_popup_position_for_scale(windows, ui_scale.0, width, estimated_height)
+}
+
+fn centered_choice_popup_position_for_scale(
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    ui_scale: f32,
+    width: f32,
+    estimated_height: f32,
+) -> Vec2 {
+    let scale = ui_scale.max(f32::EPSILON);
     let window_size = windows
         .single()
-        .map(|window| Vec2::new(window.width(), window.height()))
+        .map(|window| Vec2::new(window.width(), window.height()) / scale)
         .unwrap_or(Vec2::new(width, estimated_height));
 
     let centered = Vec2::new(

@@ -20,9 +20,9 @@ use crate::game_boy::frame_renderer::{
 pub struct GameBoyPlugin;
 
 pub(crate) use emulator::{
-    CheatCode, GameBoyAudioBalance, GameBoyAudioChannel, GameBoyAudioCommand, GameBoyAudioEvent,
-    GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, GameBoyRomLoadRequest, apply_save_state,
-    encode_save_state, parse_cheat_code,
+    CheatCode, CheatCodeType, GameBoyAudioBalance, GameBoyAudioChannel, GameBoyAudioCommand,
+    GameBoyAudioEvent, GameBoyCore, GameBoyEmulator, GameBoyLoadStatus, GameBoyRomLoadRequest,
+    apply_save_state, encode_save_state, parse_cheat_code,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, SystemSet)]
