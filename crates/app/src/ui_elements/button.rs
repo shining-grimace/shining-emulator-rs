@@ -16,12 +16,22 @@ pub fn button(
     theme: ActiveTheme,
     nav: UiFocusNav,
 ) -> impl Scene {
+    button_with_width(font, label, theme, nav, px(UI_BUTTON_WIDTH))
+}
+
+pub fn button_with_width(
+    font: Handle<Font>,
+    label: impl Into<String>,
+    theme: ActiveTheme,
+    nav: UiFocusNav,
+    width: Val,
+) -> impl Scene {
     let label = label.into();
     let background = control_fill(&theme);
     let hover_background = hover_fill(&theme);
     bsn! {
         Node {
-            width: px(UI_BUTTON_WIDTH),
+            width: {width},
             height: px(UI_ELEMENT_HEIGHT),
             border: ui_border(),
             border_radius: ui_radius(),

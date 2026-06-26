@@ -135,8 +135,6 @@ c. Finalise all assets (app icons, hero images, audio samples, menu music)
 Known issues:
 - Think animations in menus: corrode away layouts on transition?
 - In main Settings, the Edit Mappings button is less wide than the standard size of other elements
-- In main Settings, sections are not distinct because there's no margin between say input settings and audio settings; it might be nice to add more explainers, to mention the xBR algorithm is used for upscaling, and explain some other options, and consider moving input and audio options nearer the top (more frequently-updated things brought more into quick access)
-- The ROM list should have fewer columns on mobile so that the game names are more visible
 - "rhythm-land" reports that this is an inaccurate emulator
 - Audio needs to be tweaked to match a good reference video
 - The audio doesn't loop, but reaches the end and stops

@@ -18,7 +18,7 @@ use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
 use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult, sync_provider};
 use crate::ui_elements::action_hint::action_hints;
-use crate::ui_elements::button::button;
+use crate::ui_elements::button::button_with_width;
 use crate::ui_elements::choice_popup::{
     ChoicePopupConfig, ChoicePopupContext, ChoicePopupOption, centered_choice_popup_position,
     choice_popup_context_index, choice_popup_menu, despawn_choice_popups, inside_choice_popup,
@@ -45,7 +45,7 @@ use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 
 const HOME_ROM_COLUMN_COUNT: usize = 5;
 const HOME_ROM_COLUMN_WIDTHS: [f32; HOME_ROM_COLUMN_COUNT] = [31.0, 20.0, 17.0, 14.0, 18.0];
-const HOME_ROM_COMPACT_LIST_WIDTH: f32 = 640.0;
+const HOME_ROM_COMPACT_LIST_WIDTH: f32 = 800.0;
 const HOME_ROM_COMPACT_NAME_WIDTH: f32 = 64.0;
 const HOME_ROM_COMPACT_LAST_PLAYED_WIDTH: f32 = 36.0;
 const HOME_CONTENT_MAX_WIDTH: f32 = 2200.0;
@@ -484,7 +484,7 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
                 Children [
                     (
                         #AllSettings
-                        button(font.clone(), "All Settings", theme, UiFocusNav::default())
+                        button_with_width(font.clone(), "All Settings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
                         SettingsButton
                         UiFocusNav { up: {Entity::PLACEHOLDER}, right: {Entity::PLACEHOLDER}, down: #PrimarySort, left: #RomList }
                     ),

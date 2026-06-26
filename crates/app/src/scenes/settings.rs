@@ -12,9 +12,9 @@ use crate::audio::preset_graph::{
     apply_audio_preset_to_playback, default_audio_preset, load_audio_preset,
 };
 use crate::dimensions::{
-    UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING,
-    UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING, UI_SECONDARY_COLUMN_PERCENT, UI_SECTION_GAP,
-    UI_WIDE_CONTENT_WIDTH,
+    UI_BUTTON_ROW_GAP, UI_CONTENT_GAP, UI_CONTROL_GAP, UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP,
+    UI_PORTRAIT_SCREEN_PADDING, UI_PRIMARY_COLUMN_PERCENT, UI_SCREEN_PADDING,
+    UI_SECONDARY_COLUMN_PERCENT, UI_SECTION_GAP, UI_WIDE_CONTENT_WIDTH,
 };
 use crate::input::selection::{
     InputMappingEditTarget, PrimaryInputDevice, mapping_label, selected_mapping_index,
@@ -24,7 +24,7 @@ use crate::storage::LocalStorage;
 use crate::storage::provider_sync::{ProviderSyncTaskResult, ProviderSyncTaskState};
 use crate::storage::providers::RomProvider;
 use crate::ui_elements::action_hint::action_hints_with_labels;
-use crate::ui_elements::button::button;
+use crate::ui_elements::button::{button, button_with_width};
 use crate::ui_elements::description::description;
 use crate::ui_elements::info_message::{InfoMessage, info_message_text, set_latest_info_message};
 use crate::ui_elements::interactions::{
@@ -629,11 +629,11 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_OVERLAY => focus_nav_ids(
             UI_FOCUS_NONE,
             TARGET_PROVIDER_LIST,
-            TARGET_MODEL,
+            TARGET_FONT_SIZE,
             UI_FOCUS_NONE,
         ),
         TARGET_MODEL => focus_nav_ids(
-            TARGET_OVERLAY,
+            TARGET_UPSCALING,
             TARGET_PROVIDER_LIST,
             TARGET_SGB,
             UI_FOCUS_NONE,
@@ -641,17 +641,17 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_SGB => focus_nav_ids(
             TARGET_MODEL,
             TARGET_PROVIDER_LIST,
-            TARGET_UPSCALING,
+            UI_FOCUS_NONE,
             UI_FOCUS_NONE,
         ),
         TARGET_UPSCALING => focus_nav_ids(
-            TARGET_SGB,
+            TARGET_CREATE_MAPPING,
             TARGET_PROVIDER_LIST,
-            TARGET_FONT_SIZE,
+            TARGET_MODEL,
             UI_FOCUS_NONE,
         ),
         TARGET_FONT_SIZE => focus_nav_ids(
-            TARGET_UPSCALING,
+            TARGET_OVERLAY,
             TARGET_PROVIDER_LIST,
             TARGET_THEME,
             UI_FOCUS_NONE,
@@ -683,19 +683,19 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_DELETE_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_EDIT_MAPPING,
-            UI_FOCUS_NONE,
+            TARGET_UPSCALING,
             UI_FOCUS_NONE,
         ),
         TARGET_EDIT_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_CREATE_MAPPING,
-            UI_FOCUS_NONE,
+            TARGET_UPSCALING,
             TARGET_DELETE_MAPPING,
         ),
         TARGET_CREATE_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_PROVIDER_LIST,
-            UI_FOCUS_NONE,
+            TARGET_UPSCALING,
             TARGET_EDIT_MAPPING,
         ),
         TARGET_PROVIDER_LIST => focus_nav_ids(
@@ -883,60 +883,6 @@ fn settings_left_column(
                 }
                 ResponsiveFieldRow { gap: 18.0 }
                 Children [
-                    description(font.clone(), theme, "Emulated Model"),
-                    (
-                        multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
-                        SettingsSelect { field: FIELD_EMULATION_MODEL }
-                        UiFocusId { id: TARGET_MODEL }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_MODEL).up}, right: {settings_focus_nav(TARGET_MODEL).right}, down: {settings_focus_nav(TARGET_MODEL).down}, left: {settings_focus_nav(TARGET_MODEL).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Enable Super GameBoy Border"),
-                    (
-                        multi_select(font.clone(), theme, yes_no_config(settings.sgb_overlay_enable as usize))
-                        SettingsSelect { field: FIELD_SGB_OVERLAY_ENABLE }
-                        UiFocusId { id: TARGET_SGB }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_SGB).up}, right: {settings_focus_nav(TARGET_SGB).right}, down: {settings_focus_nav(TARGET_SGB).down}, left: {settings_focus_nav(TARGET_SGB).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Image Upscaling"),
-                    (
-                        multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
-                        SettingsSelect { field: FIELD_UPSCALING_MODE }
-                        UiFocusId { id: TARGET_UPSCALING }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_UPSCALING).up}, right: {settings_focus_nav(TARGET_UPSCALING).right}, down: {settings_focus_nav(TARGET_UPSCALING).down}, left: {settings_focus_nav(TARGET_UPSCALING).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
                     description(font.clone(), theme, "Font Size"),
                     (
                         multi_select(font.clone(), theme, font_size_config(settings.font_size as usize))
@@ -989,13 +935,14 @@ fn settings_left_column(
                 }
                 Children [
                     (
-                        button(font.clone(), "Edit Mappings", theme, UiFocusNav::default())
+                        button_with_width(font.clone(), "Edit Mappings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
                         EditPrimaryMappingButton
                         UiFocusId { id: TARGET_EDIT_MAPPINGS }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPINGS).left} }
                     )
                 ]
-            )
+            ),
+            description(font.clone(), theme, "The primary input device will be used for showing action hints in the UI."),
             (
                 Node {
                     width: percent(100),
@@ -1018,7 +965,6 @@ fn settings_left_column(
                 Node {
                     width: percent(100),
                     column_gap: px(UI_BUTTON_ROW_GAP),
-                    padding: UiRect::bottom(px(120.0)),
                 }
                 ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
                 Children [
@@ -1039,6 +985,62 @@ fn settings_left_column(
                         CreateAudioPresetButton
                         UiFocusId { id: TARGET_CREATE_MAPPING }
                         UiFocusNavIds { up: {settings_focus_nav(TARGET_CREATE_MAPPING).up}, right: {settings_focus_nav(TARGET_CREATE_MAPPING).right}, down: {settings_focus_nav(TARGET_CREATE_MAPPING).down}, left: {settings_focus_nav(TARGET_CREATE_MAPPING).left} }
+                    ),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(18.0),
+                }
+                ResponsiveFieldRow { gap: 18.0 }
+                Children [
+                    description(font.clone(), theme, "Image Upscaling"),
+                    (
+                        multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
+                        SettingsSelect { field: FIELD_UPSCALING_MODE }
+                        UiFocusId { id: TARGET_UPSCALING }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_UPSCALING).up}, right: {settings_focus_nav(TARGET_UPSCALING).right}, down: {settings_focus_nav(TARGET_UPSCALING).down}, left: {settings_focus_nav(TARGET_UPSCALING).left} }
+                    ),
+                ]
+            ),
+            description(font.clone(), theme, "Image upscaling enhances pixel art using the xBR algorithms."),
+            (
+                Node {
+                    width: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(18.0),
+                }
+                ResponsiveFieldRow { gap: 18.0 }
+                Children [
+                    description(font.clone(), theme, "Emulated Model"),
+                    (
+                        multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
+                        SettingsSelect { field: FIELD_EMULATION_MODEL }
+                        UiFocusId { id: TARGET_MODEL }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_MODEL).up}, right: {settings_focus_nav(TARGET_MODEL).right}, down: {settings_focus_nav(TARGET_MODEL).down}, left: {settings_focus_nav(TARGET_MODEL).left} }
+                    ),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(18.0),
+                    padding: UiRect::bottom(px(120.0)),
+                }
+                ResponsiveFieldRow { gap: 18.0 }
+                Children [
+                    description(font.clone(), theme, "Enable Super GameBoy Border"),
+                    (
+                        multi_select(font.clone(), theme, yes_no_config(settings.sgb_overlay_enable as usize))
+                        SettingsSelect { field: FIELD_SGB_OVERLAY_ENABLE }
+                        UiFocusId { id: TARGET_SGB }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_SGB).up}, right: {settings_focus_nav(TARGET_SGB).right}, down: {settings_focus_nav(TARGET_SGB).down}, left: {settings_focus_nav(TARGET_SGB).left} }
                     ),
                 ]
             ),
