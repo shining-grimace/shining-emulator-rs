@@ -9,7 +9,7 @@ use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
     UI_CONTENT_GAP, UI_FIELD_GAP, UI_MULTI_SELECT_WIDTH, UI_PANEL_GAP, UI_PORTRAIT_SCREEN_PADDING,
     UI_SCREEN_PADDING, UI_SCROLL_CONTENT_BOTTOM_PADDING, UI_SIDEBAR_GROUP_GAP, UI_SIDEBAR_TOP_GAP,
-    UI_SIDEBAR_WIDTH, UI_WIDE_CONTENT_WIDTH,
+    UI_SIDEBAR_WIDTH,
 };
 use crate::game_boy::GameBoyRomLoadRequest;
 use crate::input::selection::PrimaryInputDevice;
@@ -33,9 +33,9 @@ use crate::ui_elements::interactions::{
     SuppressFocusAutoScroll, UiElementKind, UiFocusNav, UiListCellText, UiSchedule, UiScrollArea,
 };
 use crate::ui_elements::list_view::{
-    ListColumn, ListRow, ListViewConfig, VirtualListContent, VirtualListRow, VirtualListScrollArea,
-    VirtualListWindow, collect_list_item_entities, list_view, set_list_row_cells,
-    virtual_list_content_height, virtual_list_rows, virtual_list_window,
+    ListCellIndex, ListColumn, ListRow, ListViewConfig, VirtualListContent, VirtualListRow,
+    VirtualListScrollArea, VirtualListWindow, collect_list_item_entities, list_view,
+    set_list_row_cells, virtual_list_content_height, virtual_list_rows, virtual_list_window,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
 use crate::ui_elements::responsive::{
@@ -44,6 +44,11 @@ use crate::ui_elements::responsive::{
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 
 const HOME_ROM_COLUMN_COUNT: usize = 5;
+const HOME_ROM_COLUMN_WIDTHS: [f32; HOME_ROM_COLUMN_COUNT] = [31.0, 20.0, 17.0, 14.0, 18.0];
+const HOME_ROM_COMPACT_LIST_WIDTH: f32 = 640.0;
+const HOME_ROM_COMPACT_NAME_WIDTH: f32 = 64.0;
+const HOME_ROM_COMPACT_LAST_PLAYED_WIDTH: f32 = 36.0;
+const HOME_CONTENT_MAX_WIDTH: f32 = 2200.0;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
 const HOME_POPUP_ESTIMATED_HEIGHT: f32 = 300.0;
 
@@ -84,6 +89,12 @@ impl Plugin for HomeScenePlugin {
             .add_systems(
                 PreUpdate,
                 apply_home_side_panel_layout.run_if(in_state(AppState::Home)),
+            )
+            .add_systems(
+                Update,
+                apply_home_rom_list_columns
+                    .before(UiSchedule::Widgets)
+                    .run_if(in_state(AppState::Home)),
             )
             .add_systems(
                 Update,
@@ -357,7 +368,7 @@ fn home_scene(
             (
                 Node {
                     width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
+                    max_width: px(HOME_CONTENT_MAX_WIDTH),
                     height: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
@@ -526,23 +537,23 @@ fn rom_list_config(roms: &[HomeRom]) -> ListViewConfig {
         columns: vec![
             ListColumn {
                 heading: "Name",
-                width_percent: 31.0,
+                width_percent: HOME_ROM_COLUMN_WIDTHS[0],
             },
             ListColumn {
                 heading: "Origin",
-                width_percent: 20.0,
+                width_percent: HOME_ROM_COLUMN_WIDTHS[1],
             },
             ListColumn {
                 heading: "Author",
-                width_percent: 17.0,
+                width_percent: HOME_ROM_COLUMN_WIDTHS[2],
             },
             ListColumn {
                 heading: "License",
-                width_percent: 14.0,
+                width_percent: HOME_ROM_COLUMN_WIDTHS[3],
             },
             ListColumn {
-                heading: "Last played",
-                width_percent: 18.0,
+                heading: "Last Played",
+                width_percent: HOME_ROM_COLUMN_WIDTHS[4],
             },
         ],
         rows: virtual_rom_rows(roms),
@@ -572,6 +583,68 @@ fn rom_row(rom: &HomeRom) -> ListRow {
         ],
         nav: UiFocusNav::default(),
     }
+}
+
+fn apply_home_rom_list_columns(
+    lists: Query<(Entity, &ComputedNode), With<HomeRomList>>,
+    mut cells: Query<(Entity, &ListCellIndex, &mut Node)>,
+    parents: Query<&ChildOf>,
+) {
+    let Some((list_entity, list_node)) = lists.iter().next() else {
+        return;
+    };
+    let list_width = list_node.size().x;
+    let compact = list_width > 0.0 && list_width < HOME_ROM_COMPACT_LIST_WIDTH;
+
+    for (entity, column, mut node) in &mut cells {
+        if !entity_has_ancestor(entity, list_entity, &parents) {
+            continue;
+        }
+
+        let (display, width_percent) = home_rom_column_layout(column.index, compact);
+        let width = percent(width_percent);
+        if node.display != display {
+            node.display = display;
+        }
+        if node.width != width {
+            node.width = width;
+        }
+    }
+}
+
+fn home_rom_column_layout(column: usize, compact: bool) -> (Display, f32) {
+    if compact {
+        match column {
+            0 => (Display::Flex, HOME_ROM_COMPACT_NAME_WIDTH),
+            4 => (Display::Flex, HOME_ROM_COMPACT_LAST_PLAYED_WIDTH),
+            _ => (
+                Display::None,
+                HOME_ROM_COLUMN_WIDTHS
+                    .get(column)
+                    .copied()
+                    .unwrap_or_default(),
+            ),
+        }
+    } else {
+        (
+            Display::Flex,
+            HOME_ROM_COLUMN_WIDTHS
+                .get(column)
+                .copied()
+                .unwrap_or_default(),
+        )
+    }
+}
+
+fn entity_has_ancestor(entity: Entity, ancestor: Entity, parents: &Query<&ChildOf>) -> bool {
+    let mut current = entity;
+    while let Ok(parent) = parents.get(current) {
+        if parent.0 == ancestor {
+            return true;
+        }
+        current = parent.0;
+    }
+    false
 }
 
 fn bind_home_rom_rows(
@@ -1020,8 +1093,283 @@ fn home_rom_from_metadata(
 
 fn last_played_label(timestamp: u64) -> String {
     if timestamp == 0 {
-        String::new()
+        return String::new();
+    }
+
+    let Some(played) = local_timestamp(timestamp) else {
+        return String::new();
+    };
+    let Some(now) = current_local_timestamp() else {
+        return played.date_label();
+    };
+
+    if played.date == now.date {
+        format!("Today, {}", played.time_label())
+    } else if played.date.days_since_unix_epoch() + 1 == now.date.days_since_unix_epoch() {
+        format!("Yesterday, {}", played.time_label())
     } else {
-        format!("Played {timestamp}")
+        played.date_label()
+    }
+}
+
+fn current_local_timestamp() -> Option<LocalTimestamp> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| local_timestamp(duration.as_secs()))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LocalTimestamp {
+    date: CalendarDate,
+    hour: u8,
+    minute: u8,
+}
+
+impl LocalTimestamp {
+    fn time_label(self) -> String {
+        let suffix = if self.hour < 12 { "AM" } else { "PM" };
+        let hour = match self.hour % 12 {
+            0 => 12,
+            hour => hour,
+        };
+        format!("{hour:02}:{:02} {suffix}", self.minute)
+    }
+
+    fn date_label(self) -> String {
+        self.date.label()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CalendarDate {
+    year: i32,
+    month: u8,
+    day: u8,
+}
+
+impl CalendarDate {
+    fn label(self) -> String {
+        let month = month_name(self.month);
+        let suffix = ordinal_suffix(self.day);
+        format!("{month} {}{suffix}, {}", self.day, self.year)
+    }
+
+    fn days_since_unix_epoch(self) -> i64 {
+        days_from_civil(self.year, u32::from(self.month), u32::from(self.day))
+    }
+}
+
+fn month_name(month: u8) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "",
+    }
+}
+
+fn ordinal_suffix(day: u8) -> &'static str {
+    match day % 100 {
+        11..=13 => "th",
+        _ => match day % 10 {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        },
+    }
+}
+
+#[cfg(any(unix, target_os = "android"))]
+fn local_timestamp(timestamp: u64) -> Option<LocalTimestamp> {
+    let timestamp = libc::time_t::try_from(timestamp).ok()?;
+    let mut time = std::mem::MaybeUninit::<libc::tm>::uninit();
+    // SAFETY: `localtime_r` writes to the provided `tm` pointer when it returns non-null.
+    let time = unsafe {
+        if libc::localtime_r(&timestamp, time.as_mut_ptr()).is_null() {
+            return None;
+        }
+        time.assume_init()
+    };
+
+    Some(LocalTimestamp {
+        date: CalendarDate {
+            year: time.tm_year + 1900,
+            month: u8::try_from(time.tm_mon + 1).ok()?,
+            day: u8::try_from(time.tm_mday).ok()?,
+        },
+        hour: u8::try_from(time.tm_hour).ok()?,
+        minute: u8::try_from(time.tm_min).ok()?,
+    })
+}
+
+#[cfg(not(any(unix, target_os = "android")))]
+fn local_timestamp(timestamp: u64) -> Option<LocalTimestamp> {
+    utc_timestamp(timestamp)
+}
+
+#[cfg(not(any(unix, target_os = "android")))]
+fn utc_timestamp(timestamp: u64) -> Option<LocalTimestamp> {
+    let days = i64::try_from(timestamp / 86_400).ok()?;
+    let seconds = timestamp % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    Some(LocalTimestamp {
+        date: CalendarDate {
+            year,
+            month: u8::try_from(month).ok()?,
+            day: u8::try_from(day).ok()?,
+        },
+        hour: u8::try_from(seconds / 3_600).ok()?,
+        minute: u8::try_from(seconds % 3_600 / 60).ok()?,
+    })
+}
+
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month = i64::from(month);
+    let day = i64::from(day);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+#[cfg(not(any(unix, target_os = "android")))]
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let days = days + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    let year = year + i64::from(month <= 2);
+
+    (year as i32, month as u32, day as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compact_home_rom_columns_show_name_and_last_played_only() {
+        let layouts = (0..HOME_ROM_COLUMN_COUNT)
+            .map(|column| home_rom_column_layout(column, true))
+            .collect::<Vec<_>>();
+
+        assert_eq!(layouts[0], (Display::Flex, HOME_ROM_COMPACT_NAME_WIDTH));
+        assert_eq!(layouts[1].0, Display::None);
+        assert_eq!(layouts[2].0, Display::None);
+        assert_eq!(layouts[3].0, Display::None);
+        assert_eq!(
+            layouts[4],
+            (Display::Flex, HOME_ROM_COMPACT_LAST_PLAYED_WIDTH)
+        );
+    }
+
+    #[test]
+    fn wide_home_rom_columns_show_all_columns() {
+        for column in 0..HOME_ROM_COLUMN_COUNT {
+            assert_eq!(
+                home_rom_column_layout(column, false),
+                (Display::Flex, HOME_ROM_COLUMN_WIDTHS[column])
+            );
+        }
+    }
+
+    #[test]
+    fn last_played_time_label_uses_twelve_hour_clock() {
+        assert_eq!(
+            LocalTimestamp {
+                date: CalendarDate {
+                    year: 2026,
+                    month: 6,
+                    day: 26
+                },
+                hour: 0,
+                minute: 5,
+            }
+            .time_label(),
+            "12:05 AM"
+        );
+        assert_eq!(
+            LocalTimestamp {
+                date: CalendarDate {
+                    year: 2026,
+                    month: 6,
+                    day: 26
+                },
+                hour: 15,
+                minute: 42,
+            }
+            .time_label(),
+            "03:42 PM"
+        );
+    }
+
+    #[test]
+    fn older_last_played_date_uses_user_friendly_date_label() {
+        assert_eq!(
+            CalendarDate {
+                year: 2026,
+                month: 6,
+                day: 26
+            }
+            .label(),
+            "June 26th, 2026"
+        );
+    }
+
+    #[test]
+    fn older_last_played_date_uses_correct_ordinal_suffixes() {
+        let day_label = |day| {
+            CalendarDate {
+                year: 2026,
+                month: 1,
+                day,
+            }
+            .label()
+        };
+
+        assert_eq!(day_label(1), "January 1st, 2026");
+        assert_eq!(day_label(2), "January 2nd, 2026");
+        assert_eq!(day_label(3), "January 3rd, 2026");
+        assert_eq!(day_label(11), "January 11th, 2026");
+        assert_eq!(day_label(12), "January 12th, 2026");
+        assert_eq!(day_label(13), "January 13th, 2026");
+        assert_eq!(day_label(21), "January 21st, 2026");
+    }
+
+    #[test]
+    fn calendar_day_numbers_are_consecutive_across_month_boundary() {
+        let june_30 = CalendarDate {
+            year: 2026,
+            month: 6,
+            day: 30,
+        }
+        .days_since_unix_epoch();
+        let july_1 = CalendarDate {
+            year: 2026,
+            month: 7,
+            day: 1,
+        }
+        .days_since_unix_epoch();
+
+        assert_eq!(june_30 + 1, july_1);
     }
 }

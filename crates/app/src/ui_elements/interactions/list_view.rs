@@ -1,5 +1,6 @@
 use bevy::picking::Pickable;
 use bevy::prelude::*;
+use bevy::text::TextLayoutInfo;
 use bevy::ui::UiGlobalTransform;
 
 use crate::dimensions::UI_LIST_ROW_HEIGHT;
@@ -11,12 +12,10 @@ use super::tree::contains_entity;
 use super::ui_input::{UiInputDirection, UiInputState};
 use super::visual_state::{DisabledUiElement, SelectedUiElement, UiElementKind};
 
-const MONOSPACE_CHARACTER_WIDTH_RATIO: f32 = 0.62;
-
 #[derive(Clone, Component, Debug, FromTemplate)]
 pub struct UiListCellText {
     pub value: String,
-    pub font_size: f32,
+    pub average_character_width: f32,
 }
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
@@ -186,28 +185,39 @@ pub(super) fn navigate_virtual_list_by_keys(
 }
 
 pub(super) fn update_list_cell_text(
-    cells: Query<
-        (&ComputedNode, &UiListCellText, &Children),
-        Or<(Changed<ComputedNode>, Changed<UiListCellText>)>,
-    >,
-    mut texts: Query<&mut Text>,
+    mut cells: Query<(&ComputedNode, &mut UiListCellText, &Children)>,
+    mut texts: Query<(&mut Text, &TextLayoutInfo)>,
 ) {
-    for (node, cell, children) in &cells {
+    for (node, mut cell, children) in &mut cells {
         let width = node.size().x;
         if width <= 0.0 {
             continue;
         }
 
-        let value = ellipsize(&cell.value, width, cell.font_size);
         for child in children {
-            let Ok(mut text) = texts.get_mut(*child) else {
+            let Ok((mut text, layout)) = texts.get_mut(*child) else {
                 continue;
             };
+
+            if text.0 == cell.value {
+                update_average_character_width(&mut cell, layout);
+            }
+
+            let value = ellipsize(&cell.value, width, cell.average_character_width);
             if text.0 != value {
-                text.0 = value.clone();
+                text.0 = value;
             }
         }
     }
+}
+
+fn update_average_character_width(cell: &mut UiListCellText, layout: &TextLayoutInfo) {
+    let char_count = cell.value.chars().count();
+    if char_count == 0 || layout.size.x <= 0.0 {
+        return;
+    }
+
+    cell.average_character_width = layout.size.x / char_count as f32;
 }
 
 pub(super) fn update_list_item_pickability(
@@ -837,10 +847,30 @@ mod tests {
                 > 0.0
         );
     }
+
+    #[test]
+    fn ellipsize_keeps_full_value_when_it_fits() {
+        assert_eq!(ellipsize("Last Played", 110.0, 10.0), "Last Played");
+    }
+
+    #[test]
+    fn ellipsize_adds_suffix_at_available_width() {
+        assert_eq!(
+            ellipsize("abcdefghijklmnopqrstuvwxyz", 100.0, 10.0),
+            "abcdefg..."
+        );
+    }
+
+    #[test]
+    fn ellipsize_leaves_text_unmodified_until_width_is_known() {
+        assert_eq!(
+            ellipsize("abcdefghijklmnopqrstuvwxyz", 100.0, 0.0),
+            "abcdefghijklmnopqrstuvwxyz"
+        );
+    }
 }
 
-fn ellipsize(value: &str, available_width: f32, font_size: f32) -> String {
-    let character_width = font_size * MONOSPACE_CHARACTER_WIDTH_RATIO;
+fn ellipsize(value: &str, available_width: f32, character_width: f32) -> String {
     if character_width <= 0.0 {
         return value.to_string();
     }

@@ -33,6 +33,11 @@ pub struct ListRowIndex {
     pub index: usize,
 }
 
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct ListCellIndex {
+    pub index: usize,
+}
+
 pub struct ListViewConfig {
     pub nav: UiFocusNav,
     pub scrollbar_nav: UiFocusNav,
@@ -324,7 +329,16 @@ fn list_row(
         .cells
         .into_iter()
         .zip(columns)
-        .map(|(label, column)| list_cell(font.clone(), label, theme.primary, column.width_percent))
+        .enumerate()
+        .map(|(index, (label, column))| {
+            list_cell(
+                font.clone(),
+                index,
+                label,
+                theme.primary,
+                column.width_percent,
+            )
+        })
         .collect::<Vec<_>>();
 
     bsn! {
@@ -357,9 +371,11 @@ fn list_header(
 ) -> impl Scene {
     let cells = columns
         .into_iter()
-        .map(|column| {
+        .enumerate()
+        .map(|(index, column)| {
             list_cell(
                 font.clone(),
+                index,
                 column.heading.to_string(),
                 theme.primary,
                 column.width_percent,
@@ -383,13 +399,20 @@ fn list_header(
     }
 }
 
-fn list_cell(font: Handle<Font>, label: String, colour: Color, width_percent: f32) -> impl Scene {
+fn list_cell(
+    font: Handle<Font>,
+    index: usize,
+    label: String,
+    colour: Color,
+    width_percent: f32,
+) -> impl Scene {
     bsn! {
         Node {
             width: percent(width_percent),
             overflow: Overflow::clip(),
         }
-        UiListCellText { value: {label.clone()}, font_size: UI_BODY_FONT_SIZE }
+        ListCellIndex { index }
+        UiListCellText { value: {label.clone()}, average_character_width: 0.0 }
         IgnorePicking
         Children [
             (
