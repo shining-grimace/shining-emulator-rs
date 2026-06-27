@@ -283,7 +283,7 @@ fn back_navigation_target(state: AppState) -> Option<AppState> {
 }
 
 fn back_input_enabled(state: AppState) -> bool {
-    !matches!(state, AppState::Gameplay | AppState::InputMapping)
+    !matches!(state, AppState::Gameplay)
 }
 
 #[cfg(test)]
@@ -341,6 +341,11 @@ mod tests {
     #[test]
     fn back_input_is_disabled_for_gameplay() {
         assert!(!back_input_enabled(AppState::Gameplay));
+    }
+
+    #[test]
+    fn back_input_is_enabled_for_input_mapping_when_not_capturing() {
+        assert!(back_input_enabled(AppState::InputMapping));
     }
 
     #[test]

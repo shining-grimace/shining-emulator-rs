@@ -11,13 +11,16 @@ use crate::input::controller::{
 use crate::input::events::MappedInputEvent;
 use crate::input::game_boy::{GameBoyButton, GameBoyInputState};
 use crate::input::mappings::RuntimeInputMappings;
+use crate::input::selection::{PrimaryInputDevice, selected_mapping_index};
 use crate::storage::LocalStorage;
+use crate::storage::input_mappings::{InputDeviceMapping, InputDeviceType};
 
 pub(super) fn register_connected_controllers(
     mut connection_events: MessageReader<GamepadConnectionEvent>,
     mut controllers: ResMut<ConnectedControllers>,
     mut storage: ResMut<LocalStorage>,
     mut runtime_mappings: ResMut<RuntimeInputMappings>,
+    mut primary_input: ResMut<PrimaryInputDevice>,
 ) {
     let mut mappings_changed = false;
 
@@ -38,9 +41,29 @@ pub(super) fn register_connected_controllers(
                 if ensure_controller_mapping(&mut storage.data.input_mappings, &model_id) {
                     mappings_changed = true;
                 }
+                select_connected_controller_mapping(
+                    &mut primary_input,
+                    &storage.data.input_mappings,
+                    &model_id,
+                );
             }
             GamepadConnection::Disconnected => {
+                let removed_model_id = controllers
+                    .controller(event.gamepad)
+                    .map(|controller| controller.model_id.clone());
                 controllers.remove(event.gamepad);
+                if removed_model_id.as_deref().is_some_and(|model_id| {
+                    primary_input_matches_model(&primary_input, &storage, model_id)
+                }) && removed_model_id
+                    .as_deref()
+                    .is_none_or(|model_id| !controllers.contains_model_id(model_id))
+                {
+                    select_available_input_mapping(
+                        &mut primary_input,
+                        &storage.data.input_mappings,
+                        &controllers,
+                    );
+                }
             }
         }
     }
@@ -51,6 +74,61 @@ pub(super) fn register_connected_controllers(
         }
         runtime_mappings.rebuild(&storage.data.input_mappings);
     }
+}
+
+fn select_connected_controller_mapping(
+    primary_input: &mut PrimaryInputDevice,
+    mappings: &[InputDeviceMapping],
+    model_id: &str,
+) {
+    let selected_is_keyboard_or_missing = mappings
+        .get(primary_input.mapping_index)
+        .is_none_or(|mapping| mapping.r#type == InputDeviceType::Keyboard);
+    if !selected_is_keyboard_or_missing {
+        return;
+    }
+
+    if let Some(index) = controller_mapping_index(mappings, model_id) {
+        primary_input.mapping_index = index;
+    }
+}
+
+fn select_available_input_mapping(
+    primary_input: &mut PrimaryInputDevice,
+    mappings: &[InputDeviceMapping],
+    controllers: &ConnectedControllers,
+) {
+    if let Some(model_id) = controllers.first_model_id()
+        && let Some(index) = controller_mapping_index(mappings, model_id)
+    {
+        primary_input.mapping_index = index;
+        return;
+    }
+
+    primary_input.mapping_index = mappings
+        .iter()
+        .position(|mapping| mapping.r#type == InputDeviceType::Keyboard)
+        .unwrap_or(0);
+}
+
+fn primary_input_matches_model(
+    primary_input: &PrimaryInputDevice,
+    storage: &LocalStorage,
+    model_id: &str,
+) -> bool {
+    storage
+        .data
+        .input_mappings
+        .get(selected_mapping_index(primary_input, storage))
+        .and_then(|mapping| mapping.controller_model_id.as_deref())
+        == Some(model_id)
+}
+
+fn controller_mapping_index(mappings: &[InputDeviceMapping], model_id: &str) -> Option<usize> {
+    mappings.iter().position(|mapping| {
+        mapping.r#type == InputDeviceType::Controller
+            && mapping.controller_model_id.as_deref() == Some(model_id)
+    })
 }
 
 pub(super) fn collect_keyboard_input(

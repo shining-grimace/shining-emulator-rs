@@ -191,7 +191,7 @@ fn capture_mapping_input(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut keyboard_events: MessageReader<KeyboardInput>,
     mut controller_events: MessageReader<GamepadButtonStateChangedEvent>,
-    focused_buttons: Query<&MappingActionButton, With<FocusedUiElement>>,
+    _focused_buttons: Query<&MappingActionButton, With<FocusedUiElement>>,
     hovered_buttons: Query<&MappingActionButton, With<HoveredUiElement>>,
     mut storage: ResMut<LocalStorage>,
     target: Res<InputMappingEditTarget>,
@@ -247,6 +247,12 @@ fn capture_mapping_input(
         let Some(key_id) = pressed_key else {
             return;
         };
+        if b_pressed {
+            capture.action = None;
+            capture.armed = false;
+            ui_capture.active = false;
+            return;
+        }
 
         set_action_mapping(
             &mut storage.data.input_mappings[index],
@@ -262,21 +268,6 @@ fn capture_mapping_input(
         capture.action = None;
         capture.armed = false;
         ui_capture.active = false;
-    } else if b_pressed {
-        ui_capture.active = false;
-        let Some(button) = focused_buttons.iter().next() else {
-            return;
-        };
-        if index >= storage.data.input_mappings.len() {
-            return;
-        }
-        set_action_mapping(&mut storage.data.input_mappings[index], button.action, None);
-        persist_mapping_change(
-            &mut storage,
-            &mut runtime_mappings,
-            &mut messages,
-            "Input mappings could not be saved.",
-        );
     } else {
         ui_capture.active = false;
     }
@@ -505,7 +496,7 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
                     height: px(18.0),
                 }
             ),
-            description(font, theme, "Other actions can be mapped to buttons, or left unassigned. Use the button assigned to the A key to map the next button press to the given action (and B to cancel), or press B to unset an action."),
+            description(font, theme, "Other actions can be mapped to buttons, or left unassigned. Use the button assigned to the A key to map the next button press to the given action, or press B while listening to cancel."),
         ]
     }
 }
@@ -624,19 +615,19 @@ fn right_column(
             font.clone(),
             theme,
             mapping.clone(),
-            InputAction::SpeedUp,
-            "Speed Up",
-            TARGET_SPEED_UP,
-            right_nav(TARGET_SPEED_UP),
+            InputAction::SpeedDown,
+            "Speed Down",
+            TARGET_SPEED_DOWN,
+            right_nav(TARGET_SPEED_DOWN),
         ),
         mapping_row(
             font.clone(),
             theme,
             mapping.clone(),
-            InputAction::SpeedDown,
-            "Speed Down",
-            TARGET_SPEED_DOWN,
-            right_nav(TARGET_SPEED_DOWN),
+            InputAction::SpeedUp,
+            "Speed Up",
+            TARGET_SPEED_UP,
+            right_nav(TARGET_SPEED_UP),
         ),
         mapping_row(
             font.clone(),
@@ -1070,11 +1061,11 @@ mod tests {
         assert_eq!(right_nav(TARGET_SAVE_STATE).left, TARGET_RESET);
         assert_eq!(right_nav(TARGET_LOAD_STATE).left, TARGET_RESET);
 
-        assert_eq!(centre_nav(TARGET_A).right, TARGET_SPEED_UP);
-        assert_eq!(right_nav(TARGET_SPEED_UP).left, TARGET_A);
+        assert_eq!(centre_nav(TARGET_A).right, TARGET_SPEED_DOWN);
+        assert_eq!(right_nav(TARGET_SPEED_DOWN).left, TARGET_A);
 
-        assert_eq!(centre_nav(TARGET_B).right, TARGET_SPEED_DOWN);
-        assert_eq!(right_nav(TARGET_SPEED_DOWN).left, TARGET_B);
+        assert_eq!(centre_nav(TARGET_B).right, TARGET_SPEED_UP);
+        assert_eq!(right_nav(TARGET_SPEED_UP).left, TARGET_B);
 
         assert_eq!(centre_nav(TARGET_START).right, TARGET_PAUSE);
         assert_eq!(right_nav(TARGET_PAUSE).left, TARGET_START);
@@ -1106,8 +1097,8 @@ fn left_nav(target: u16) -> UiFocusNavIds {
 
 fn centre_nav(target: u16) -> UiFocusNavIds {
     match target {
-        TARGET_A => nav(TARGET_RESET, TARGET_SPEED_UP, TARGET_B, TARGET_DPAD_UP),
-        TARGET_B => nav(TARGET_A, TARGET_SPEED_DOWN, TARGET_START, TARGET_DPAD_DOWN),
+        TARGET_A => nav(TARGET_RESET, TARGET_SPEED_DOWN, TARGET_B, TARGET_DPAD_UP),
+        TARGET_B => nav(TARGET_A, TARGET_SPEED_UP, TARGET_START, TARGET_DPAD_DOWN),
         TARGET_START => nav(TARGET_B, TARGET_PAUSE, TARGET_SELECT, TARGET_DPAD_LEFT),
         TARGET_SELECT => nav(
             TARGET_START,
@@ -1137,18 +1128,13 @@ fn right_nav(target: u16) -> UiFocusNavIds {
         TARGET_LOAD_STATE => nav(
             TARGET_SAVE_STATE,
             UI_FOCUS_NONE,
-            TARGET_SPEED_UP,
+            TARGET_SPEED_DOWN,
             TARGET_RESET,
         ),
-        TARGET_SPEED_UP => nav(
-            TARGET_LOAD_STATE,
-            UI_FOCUS_NONE,
-            TARGET_SPEED_DOWN,
-            TARGET_A,
-        ),
-        TARGET_SPEED_DOWN => nav(TARGET_SPEED_UP, UI_FOCUS_NONE, TARGET_PAUSE, TARGET_B),
+        TARGET_SPEED_DOWN => nav(TARGET_LOAD_STATE, UI_FOCUS_NONE, TARGET_SPEED_UP, TARGET_A),
+        TARGET_SPEED_UP => nav(TARGET_SPEED_DOWN, UI_FOCUS_NONE, TARGET_PAUSE, TARGET_B),
         TARGET_PAUSE => nav(
-            TARGET_SPEED_DOWN,
+            TARGET_SPEED_UP,
             UI_FOCUS_NONE,
             TARGET_QUIT_APP,
             TARGET_START,

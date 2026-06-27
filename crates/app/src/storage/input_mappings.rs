@@ -172,9 +172,16 @@ pub(crate) fn default_keyboard_mapping() -> InputDeviceMapping {
 }
 
 pub(crate) fn default_controller_mapping(model_id: impl Into<String>) -> InputDeviceMapping {
+    let model_id = model_id.into();
+    let (a_key_id, b_key_id) = if is_xbox_360_controller_model_id(&model_id) {
+        (InputKeyId::South, InputKeyId::West)
+    } else {
+        (InputKeyId::East, InputKeyId::South)
+    };
+
     InputDeviceMapping {
         r#type: InputDeviceType::Controller,
-        controller_model_id: Some(model_id.into()),
+        controller_model_id: Some(model_id),
         map: vec![
             InputMapEntry {
                 key_id: InputKeyId::DPadLeft,
@@ -193,12 +200,12 @@ pub(crate) fn default_controller_mapping(model_id: impl Into<String>) -> InputDe
                 map_to: InputAction::Ddown,
             },
             InputMapEntry {
-                key_id: InputKeyId::South,
-                map_to: InputAction::B,
+                key_id: a_key_id,
+                map_to: InputAction::A,
             },
             InputMapEntry {
-                key_id: InputKeyId::East,
-                map_to: InputAction::A,
+                key_id: b_key_id,
+                map_to: InputAction::B,
             },
             InputMapEntry {
                 key_id: InputKeyId::Start,
@@ -229,5 +236,37 @@ pub(crate) fn default_controller_mapping(model_id: impl Into<String>) -> InputDe
                 map_to: InputAction::PauseAndResume,
             },
         ],
+    }
+}
+
+pub(crate) fn is_xbox_360_controller_model_id(model_id: &str) -> bool {
+    let lower = model_id.to_ascii_lowercase();
+    lower.contains("xbox 360")
+        || lower.contains("x-box 360")
+        || lower.starts_with("045e:028e:")
+        || lower.starts_with("045e:028f:")
+        || lower.starts_with("045e:0719:")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xbox_360_default_maps_physical_a_to_emulated_a_and_x_to_emulated_b() {
+        let mapping = default_controller_mapping("045e:028e:Xbox 360 Controller");
+
+        assert!(
+            mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::South && entry.map_to == InputAction::A)
+        );
+        assert!(
+            mapping
+                .map
+                .iter()
+                .any(|entry| entry.key_id == InputKeyId::West && entry.map_to == InputAction::B)
+        );
     }
 }

@@ -22,6 +22,13 @@ impl ConnectedControllers {
             .any(|controller| controller.model_id == model_id)
     }
 
+    pub(crate) fn first_model_id(&self) -> Option<&str> {
+        self.devices
+            .values()
+            .next()
+            .map(|controller| controller.model_id.as_str())
+    }
+
     pub(super) fn insert(&mut self, controller: ConnectedController) {
         self.devices.insert(controller.entity, controller);
     }
