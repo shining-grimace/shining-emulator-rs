@@ -23,7 +23,6 @@ pub enum UiThemeTextColor {
     Primary,
     Secondary,
     Tertiary,
-    Black,
 }
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -125,7 +124,6 @@ fn update_ui_theme_colours(
             UiThemeTextColor::Primary => theme.primary,
             UiThemeTextColor::Secondary => theme.secondary,
             UiThemeTextColor::Tertiary => theme.tertiary,
-            UiThemeTextColor::Black => Color::BLACK,
         };
         text_colour.0.set_alpha(alpha);
     }

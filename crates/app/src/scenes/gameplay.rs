@@ -115,6 +115,7 @@ impl Plugin for GameplayScenePlugin {
                 Update,
                 (
                     return_home_from_gameplay,
+                    handle_gameplay_save_state_input,
                     resume_after_gameplay_menu_dismissal,
                     update_gameplay_error_overlay,
                 )
@@ -147,6 +148,29 @@ fn return_home_from_gameplay(
     {
         auto_save_gameplay_from_query(&mut storage, &emulators);
         next_state.set(AppState::Home);
+    }
+}
+
+fn handle_gameplay_save_state_input(
+    mut input_events: MessageReader<MappedInputEvent>,
+    mut emulators: Query<&mut GameBoyCore, With<GameBoyEmulator>>,
+    mut storage: ResMut<LocalStorage>,
+    mut status: ResMut<GameBoyLoadStatus>,
+) {
+    for event in input_events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+
+        match event.action {
+            InputAction::SaveState0 => {
+                create_manual_save(&mut emulators, &mut storage, &mut status);
+            }
+            InputAction::LoadState0 => {
+                restore_manual_save(&mut emulators, &storage, &mut status);
+            }
+            _ => {}
+        }
     }
 }
 

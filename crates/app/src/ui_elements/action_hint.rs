@@ -14,13 +14,30 @@ use crate::storage::input_mappings::{
     InputAction, InputDeviceMapping, InputDeviceType, InputKeyId,
 };
 use crate::ui_elements::interactions::IgnorePicking;
-use crate::ui_elements::theme::{UiThemeImageColor, UiThemeTextColor};
+use crate::ui_elements::theme::UiThemeTextColor;
 
 const ICON_TEXTURE_SIZE: f32 = 1024.0;
 const ICON_GRID_UNITS: f32 = 16.0;
 const GENERIC_BUTTON_ICON_X: f32 = 12.0;
 const GENERIC_BUTTON_ICON_Y: f32 = 0.0;
 const GENERIC_BUTTON_ICON_SIZE: f32 = 4.0;
+const XBOX_BUTTON_X_X: f32 = 8.0;
+const XBOX_BUTTON_X_Y: f32 = 8.0;
+const XBOX_BUTTON_Y_X: f32 = 10.0;
+const XBOX_BUTTON_Y_Y: f32 = 8.0;
+const XBOX_BUTTON_A_X: f32 = 8.0;
+const XBOX_BUTTON_A_Y: f32 = 10.0;
+const XBOX_BUTTON_B_X: f32 = 10.0;
+const XBOX_BUTTON_B_Y: f32 = 10.0;
+const PLAYSTATION_BUTTON_SQUARE_X: f32 = 12.0;
+const PLAYSTATION_BUTTON_SQUARE_Y: f32 = 8.0;
+const PLAYSTATION_BUTTON_TRIANGLE_X: f32 = 14.0;
+const PLAYSTATION_BUTTON_TRIANGLE_Y: f32 = 8.0;
+const PLAYSTATION_BUTTON_CROSS_X: f32 = 12.0;
+const PLAYSTATION_BUTTON_CROSS_Y: f32 = 10.0;
+const PLAYSTATION_BUTTON_CIRCLE_X: f32 = 14.0;
+const PLAYSTATION_BUTTON_CIRCLE_Y: f32 = 10.0;
+const PLATFORM_FACE_BUTTON_ICON_SIZE: f32 = 2.0;
 const TRIGGER_ICON_X: f32 = 8.0;
 const TRIGGER_ICON_Y: f32 = 4.0;
 const SHOULDER_ICON_X: f32 = 12.0;
@@ -29,8 +46,6 @@ const SELECT_ICON_X: f32 = 8.0;
 const SELECT_ICON_Y: f32 = 0.0;
 const START_ICON_X: f32 = 8.0;
 const START_ICON_Y: f32 = 2.0;
-const META_ICON_X: f32 = 0.0;
-const META_ICON_Y: f32 = 4.0;
 const SMALL_ICON_SIZE: f32 = 4.0;
 
 pub fn action_hints(
@@ -107,8 +122,18 @@ fn action_hint(
     label: &'static str,
 ) -> impl Scene {
     let key_font = font.clone();
+    let background_icons = icons.clone();
+    let foreground_icons = icons;
     let key_label = key.label;
-    let key_rect = key.rect;
+    let background_rect = key.background_rect;
+    let background_tint = key.background_tint.resolve(&theme);
+    let foreground_rect = key.foreground_rect.unwrap_or_else(generic_button_rect);
+    let foreground_tint = key.foreground_tint.resolve(&theme);
+    let foreground_display = if key.foreground_rect.is_some() {
+        Display::Flex
+    } else {
+        Display::None
+    };
     let text_display = if key_label.is_empty() {
         Display::None
     } else {
@@ -129,15 +154,42 @@ fn action_hint(
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                 }
-                ImageNode {
-                    image: HandleTemplate::Handle(icons),
-                    color: {theme.primary},
-                    rect: {Some(key_rect)},
-                }
                 ActionHintIcon { action: {action} }
-                UiThemeImageColor::Primary
                 IgnorePicking
                 Children [
+                    (
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: px(0.0),
+                            top: px(0.0),
+                            width: percent(100),
+                            height: percent(100),
+                        }
+                        ImageNode {
+                            image: HandleTemplate::Handle(background_icons),
+                            color: {background_tint},
+                            rect: {Some(background_rect)},
+                        }
+                        ActionHintBackgroundIcon
+                        IgnorePicking
+                    ),
+                    (
+                        Node {
+                            display: {foreground_display},
+                            position_type: PositionType::Absolute,
+                            left: px(0.0),
+                            top: px(0.0),
+                            width: percent(100),
+                            height: percent(100),
+                        }
+                        ImageNode {
+                            image: HandleTemplate::Handle(foreground_icons),
+                            color: {foreground_tint},
+                            rect: {Some(foreground_rect)},
+                        }
+                        ActionHintForegroundIcon
+                        IgnorePicking
+                    ),
                     (
                         Text({key_label})
                         Node {
@@ -147,8 +199,8 @@ fn action_hint(
                             font: FontSourceTemplate::Handle(HandleTemplate::Handle(key_font)),
                             font_size: px(UI_BODY_FONT_SIZE),
                         }
-                        TextColor(Color::BLACK)
-                        UiThemeTextColor::Black
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
                         ActionHintKeyLabel
                         IgnorePicking
                     )
@@ -174,6 +226,12 @@ struct ActionHintIcon {
 }
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct ActionHintBackgroundIcon;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct ActionHintForegroundIcon;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct ActionHintRoot;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
@@ -182,19 +240,68 @@ struct ActionHintKeyLabel;
 #[derive(Clone)]
 struct ActionKeyHint {
     label: String,
-    rect: Rect,
+    background_rect: Rect,
+    background_tint: ActionHintTint,
+    foreground_rect: Option<Rect>,
+    foreground_tint: ActionHintTint,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ActionHintTint {
+    Primary,
+    White,
+}
+
+impl ActionHintTint {
+    fn resolve(self, theme: &ActiveTheme) -> Color {
+        match self {
+            Self::Primary => theme.primary,
+            Self::White => Color::WHITE,
+        }
+    }
 }
 
 fn sync_action_hints(
     storage: Option<Res<LocalStorage>>,
     primary_input: Option<Res<PrimaryInputDevice>>,
     controllers: Option<Res<ConnectedControllers>>,
-    mut roots: Query<&mut Node, (With<ActionHintRoot>, Without<ActionHintKeyLabel>)>,
-    mut icons: Query<(&ActionHintIcon, &mut ImageNode, &Children)>,
-    mut labels: Query<(&mut Text, &mut Node), (With<ActionHintKeyLabel>, Without<ActionHintRoot>)>,
+    theme: Option<Res<ActiveTheme>>,
+    mut roots: Query<
+        &mut Node,
+        (
+            With<ActionHintRoot>,
+            Without<ActionHintKeyLabel>,
+            Without<ActionHintForegroundIcon>,
+        ),
+    >,
+    hints: Query<(&ActionHintIcon, &Children)>,
+    mut backgrounds: Query<
+        &mut ImageNode,
+        (
+            With<ActionHintBackgroundIcon>,
+            Without<ActionHintForegroundIcon>,
+        ),
+    >,
+    mut foregrounds: Query<
+        (&mut ImageNode, &mut Node),
+        (
+            With<ActionHintForegroundIcon>,
+            Without<ActionHintBackgroundIcon>,
+            Without<ActionHintKeyLabel>,
+            Without<ActionHintRoot>,
+        ),
+    >,
+    mut labels: Query<
+        (&mut Text, &mut Node),
+        (
+            With<ActionHintKeyLabel>,
+            Without<ActionHintRoot>,
+            Without<ActionHintForegroundIcon>,
+        ),
+    >,
 ) {
-    let (Some(storage), Some(primary_input), Some(controllers)) =
-        (storage, primary_input, controllers)
+    let (Some(storage), Some(primary_input), Some(controllers), Some(theme)) =
+        (storage, primary_input, controllers, theme)
     else {
         return;
     };
@@ -208,10 +315,23 @@ fn sync_action_hints(
     }
 
     let mapping = selected_mapping(&primary_input, &storage);
-    for (icon, mut image, children) in &mut icons {
+    for (icon, children) in &hints {
         let key = action_key_hint(mapping, icon.action);
-        image.rect = Some(key.rect);
+        let foreground_display = if key.foreground_rect.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
         for child in children {
+            if let Ok(mut background) = backgrounds.get_mut(*child) {
+                background.rect = Some(key.background_rect);
+                background.color = key.background_tint.resolve(&theme);
+            }
+            if let Ok((mut foreground, mut node)) = foregrounds.get_mut(*child) {
+                foreground.rect = Some(key.foreground_rect.unwrap_or_else(generic_button_rect));
+                foreground.color = key.foreground_tint.resolve(&theme);
+                node.display = foreground_display;
+            }
             if let Ok((mut text, mut node)) = labels.get_mut(*child) {
                 text.0 = key.label.clone();
                 node.display = if key.label.is_empty() {
@@ -236,18 +356,31 @@ fn action_key_hint(mapping: Option<&InputDeviceMapping>, action: InputAction) ->
         .unwrap_or(InputDeviceType::Keyboard);
 
     match (device_type, key_id) {
-        (InputDeviceType::Controller, Some(key_id)) => ActionKeyHint {
-            label: String::new(),
-            rect: controller_icon_rect(key_id),
-        },
-        (_, Some(key_id)) => ActionKeyHint {
-            label: key_id_label(key_id),
-            rect: generic_button_rect(),
-        },
-        _ => ActionKeyHint {
-            label: String::new(),
-            rect: generic_button_rect(),
-        },
+        (InputDeviceType::Controller, Some(key_id)) => controller_action_key_hint(mapping, key_id),
+        (_, Some(key_id)) => labelled_generic_button_hint(key_id_label(key_id)),
+        _ => unlabelled_generic_button_hint(),
+    }
+}
+
+fn controller_action_key_hint(
+    mapping: Option<&InputDeviceMapping>,
+    key_id: InputKeyId,
+) -> ActionKeyHint {
+    if let Some(face_button) = platform_face_button_hint(mapping, key_id) {
+        return face_button;
+    }
+
+    let label = controller_key_id_label(key_id);
+    if label.is_empty() {
+        icon_only_hint(controller_icon_rect(key_id), ActionHintTint::Primary)
+    } else {
+        ActionKeyHint {
+            label,
+            background_rect: controller_icon_rect(key_id),
+            background_tint: ActionHintTint::Primary,
+            foreground_rect: None,
+            foreground_tint: ActionHintTint::Primary,
+        }
     }
 }
 
@@ -305,6 +438,118 @@ fn key_id_label(key_id: InputKeyId) -> String {
     .to_string()
 }
 
+fn controller_key_id_label(key_id: InputKeyId) -> String {
+    match key_id {
+        InputKeyId::LeftTrigger => "LB",
+        InputKeyId::RightTrigger => "RB",
+        InputKeyId::LeftTrigger2 => "LT",
+        InputKeyId::RightTrigger2 => "RT",
+        InputKeyId::Mode => "Home",
+        InputKeyId::LeftThumb => "L3",
+        InputKeyId::RightThumb => "R3",
+        _ => "",
+    }
+    .to_string()
+}
+
+fn labelled_generic_button_hint(label: String) -> ActionKeyHint {
+    ActionKeyHint {
+        label,
+        background_rect: generic_button_rect(),
+        background_tint: ActionHintTint::Primary,
+        foreground_rect: None,
+        foreground_tint: ActionHintTint::Primary,
+    }
+}
+
+fn unlabelled_generic_button_hint() -> ActionKeyHint {
+    ActionKeyHint {
+        label: String::new(),
+        background_rect: generic_button_rect(),
+        background_tint: ActionHintTint::Primary,
+        foreground_rect: None,
+        foreground_tint: ActionHintTint::Primary,
+    }
+}
+
+fn icon_only_hint(rect: Rect, tint: ActionHintTint) -> ActionKeyHint {
+    ActionKeyHint {
+        label: String::new(),
+        background_rect: rect,
+        background_tint: tint,
+        foreground_rect: None,
+        foreground_tint: ActionHintTint::White,
+    }
+}
+
+fn platform_face_button_hint(
+    mapping: Option<&InputDeviceMapping>,
+    key_id: InputKeyId,
+) -> Option<ActionKeyHint> {
+    let platform = mapping
+        .and_then(|mapping| mapping.controller_model_id.as_deref())
+        .map(controller_button_platform)
+        .unwrap_or(ControllerButtonPlatform::Xbox);
+
+    match (platform, key_id) {
+        (ControllerButtonPlatform::Xbox, InputKeyId::South) => {
+            Some(platform_button_hint(xbox_button_a_rect()))
+        }
+        (ControllerButtonPlatform::Xbox, InputKeyId::East) => {
+            Some(platform_button_hint(xbox_button_b_rect()))
+        }
+        (ControllerButtonPlatform::Xbox, InputKeyId::North) => {
+            Some(platform_button_hint(xbox_button_y_rect()))
+        }
+        (ControllerButtonPlatform::Xbox, InputKeyId::West) => {
+            Some(platform_button_hint(xbox_button_x_rect()))
+        }
+        (ControllerButtonPlatform::PlayStation, InputKeyId::South) => {
+            Some(platform_button_hint(playstation_button_cross_rect()))
+        }
+        (ControllerButtonPlatform::PlayStation, InputKeyId::East) => {
+            Some(platform_button_hint(playstation_button_circle_rect()))
+        }
+        (ControllerButtonPlatform::PlayStation, InputKeyId::North) => {
+            Some(platform_button_hint(playstation_button_triangle_rect()))
+        }
+        (ControllerButtonPlatform::PlayStation, InputKeyId::West) => {
+            Some(platform_button_hint(playstation_button_square_rect()))
+        }
+        _ => None,
+    }
+}
+
+fn platform_button_hint(foreground_rect: Rect) -> ActionKeyHint {
+    ActionKeyHint {
+        label: String::new(),
+        background_rect: generic_button_rect(),
+        background_tint: ActionHintTint::Primary,
+        foreground_rect: Some(foreground_rect),
+        foreground_tint: ActionHintTint::White,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ControllerButtonPlatform {
+    Xbox,
+    PlayStation,
+}
+
+fn controller_button_platform(model_id: &str) -> ControllerButtonPlatform {
+    let lower = model_id.to_ascii_lowercase();
+    if lower.contains("playstation")
+        || lower.contains("dualshock")
+        || lower.contains("dualsense")
+        || lower.contains("wireless controller")
+        || lower.contains("sony")
+    {
+        ControllerButtonPlatform::PlayStation
+    } else {
+        ControllerButtonPlatform::Xbox
+    }
+}
+
 fn generic_button_rect() -> Rect {
     icon_grid_rect(
         GENERIC_BUTTON_ICON_X,
@@ -316,6 +561,10 @@ fn generic_button_rect() -> Rect {
 
 fn controller_icon_rect(key_id: InputKeyId) -> Rect {
     match key_id {
+        InputKeyId::South => xbox_button_a_rect(),
+        InputKeyId::East => xbox_button_b_rect(),
+        InputKeyId::North => xbox_button_y_rect(),
+        InputKeyId::West => xbox_button_x_rect(),
         InputKeyId::DPadLeft
         | InputKeyId::DPadRight
         | InputKeyId::DPadUp
@@ -334,11 +583,80 @@ fn controller_icon_rect(key_id: InputKeyId) -> Rect {
             SMALL_ICON_SIZE,
             SMALL_ICON_SIZE,
         ),
-        InputKeyId::Mode | InputKeyId::LeftThumb | InputKeyId::RightThumb => {
-            icon_grid_rect(META_ICON_X, META_ICON_Y, SMALL_ICON_SIZE, SMALL_ICON_SIZE)
-        }
         _ => generic_button_rect(),
     }
+}
+
+fn xbox_button_x_rect() -> Rect {
+    icon_grid_rect(
+        XBOX_BUTTON_X_X,
+        XBOX_BUTTON_X_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn xbox_button_y_rect() -> Rect {
+    icon_grid_rect(
+        XBOX_BUTTON_Y_X,
+        XBOX_BUTTON_Y_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn xbox_button_a_rect() -> Rect {
+    icon_grid_rect(
+        XBOX_BUTTON_A_X,
+        XBOX_BUTTON_A_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn xbox_button_b_rect() -> Rect {
+    icon_grid_rect(
+        XBOX_BUTTON_B_X,
+        XBOX_BUTTON_B_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn playstation_button_square_rect() -> Rect {
+    icon_grid_rect(
+        PLAYSTATION_BUTTON_SQUARE_X,
+        PLAYSTATION_BUTTON_SQUARE_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn playstation_button_triangle_rect() -> Rect {
+    icon_grid_rect(
+        PLAYSTATION_BUTTON_TRIANGLE_X,
+        PLAYSTATION_BUTTON_TRIANGLE_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn playstation_button_cross_rect() -> Rect {
+    icon_grid_rect(
+        PLAYSTATION_BUTTON_CROSS_X,
+        PLAYSTATION_BUTTON_CROSS_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
+}
+
+fn playstation_button_circle_rect() -> Rect {
+    icon_grid_rect(
+        PLAYSTATION_BUTTON_CIRCLE_X,
+        PLAYSTATION_BUTTON_CIRCLE_Y,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+        PLATFORM_FACE_BUTTON_ICON_SIZE,
+    )
 }
 
 fn icon_grid_rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
@@ -360,5 +678,70 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(ActionHintPlugin);
         app.update();
+    }
+
+    #[test]
+    fn controller_home_hint_uses_generic_button_with_label() {
+        let hint = action_key_hint(
+            Some(&InputDeviceMapping {
+                r#type: InputDeviceType::Controller,
+                controller_model_id: Some("controller".to_string()),
+                map: vec![crate::storage::input_mappings::InputMapEntry {
+                    key_id: InputKeyId::Mode,
+                    map_to: InputAction::PauseAndResume,
+                }],
+            }),
+            InputAction::PauseAndResume,
+        );
+
+        assert_eq!(hint.label, "Home");
+        assert_eq!(hint.background_rect, generic_button_rect());
+        assert!(hint.foreground_rect.is_none());
+    }
+
+    #[test]
+    fn xbox_face_button_hints_use_tinted_circle_background_and_platform_icon() {
+        let hint = controller_action_key_hint(None, InputKeyId::West);
+
+        assert!(hint.label.is_empty());
+        assert_eq!(hint.background_rect, generic_button_rect());
+        assert_eq!(hint.background_tint, ActionHintTint::Primary);
+        assert_eq!(hint.foreground_rect, Some(xbox_button_x_rect()));
+    }
+
+    #[test]
+    fn playstation_face_button_hints_use_tinted_circle_background_and_platform_icon() {
+        let mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Controller,
+            controller_model_id: Some("Sony DualSense Wireless Controller".to_string()),
+            map: Vec::new(),
+        };
+
+        let hint = controller_action_key_hint(Some(&mapping), InputKeyId::South);
+
+        assert!(hint.label.is_empty());
+        assert_eq!(hint.background_rect, generic_button_rect());
+        assert_eq!(hint.background_tint, ActionHintTint::Primary);
+        assert_eq!(hint.foreground_rect, Some(playstation_button_cross_rect()));
+    }
+
+    #[test]
+    fn keyboard_letter_hint_uses_tinted_circle_background() {
+        let hint = action_key_hint(
+            Some(&InputDeviceMapping {
+                r#type: InputDeviceType::Keyboard,
+                controller_model_id: None,
+                map: vec![crate::storage::input_mappings::InputMapEntry {
+                    key_id: InputKeyId::KeyX,
+                    map_to: InputAction::A,
+                }],
+            }),
+            InputAction::A,
+        );
+
+        assert_eq!(hint.label, "X");
+        assert_eq!(hint.background_rect, generic_button_rect());
+        assert_eq!(hint.background_tint, ActionHintTint::Primary);
+        assert!(hint.foreground_rect.is_none());
     }
 }
