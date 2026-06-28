@@ -135,11 +135,12 @@ c. Finalise all assets (app icons, hero images, audio samples, menu music)
 Known issues:
 - Think animations in menus: corrode away layouts on transition?
 - "rhythm-land" reports that this is an inaccurate emulator
+- Audio keeps running, holding the current notes, when the game is paused
 - Audio needs to be tweaked to match a good reference video
-- The audio doesn't loop, but reaches the end and stops
 - On Android, the menu music shows audio channels that are not a well-volume-balanced mix
 - On Android, emulation seems to keep running when the app gets backgrounded
-- Controllers haven't been tested on any platform
+- On Android, the app goes blank on screen rotation
+- Controllers haven't been tested on Android
 - Windows hasn't been tested
 
 # Stage 9 - Polish & Embellishments
@@ -149,12 +150,10 @@ Polish everything, and add extra unnecessary things for charm and replayability.
 NOTE: Move some of these up?
 
 Steps:
-a. Integrate the Bevy Inspector EGUI plugin, with its visibility toggled on
-   press of the left Ctrl key, conditionally in debug builds only
-b. Consider accessibility
-c. Consider multi language support
-d. Consider compatibility with libretro cores
-e. Revise the Homebrew Hub integration: are we using it within its terms, and can the ROM list use the most highly-regarded ROMs only?
+a. Consider accessibility
+b. Consider multi language support
+c. Consider compatibility with libretro cores
+d. Revise the Homebrew Hub integration: are we using it within its terms, and can the ROM list use the most highly-regarded ROMs only?
 e. Check is vsync enabled, or any other possible cause of high CPU usage in settings
 f. Make sure all dead-code annotations are removed
 g. Consider animations: UI trees fading in/out on screen change, popup UIs scaling

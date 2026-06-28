@@ -8,14 +8,20 @@ use crate::circuit_board::utils::active_rect;
 use crate::dimensions::{
     GAME_BOY_FRAME_BUFFER_BYTES, GAME_BOY_RGB_CHANNELS, GAME_BOY_RGBA_CHANNELS,
     GAME_BOY_SCREEN_HEIGHT, GAME_BOY_SCREEN_HEIGHT_U32, GAME_BOY_SCREEN_WIDTH,
-    GAME_BOY_SCREEN_WIDTH_U32, GAME_BOY_TEXTURE_BYTES, SGB_GAME_BOY_X_OFFSET,
-    SGB_GAME_BOY_Y_OFFSET, SGB_SCREEN_HEIGHT, SGB_SCREEN_HEIGHT_U32, SGB_SCREEN_WIDTH,
-    SGB_SCREEN_WIDTH_U32, SGB_TEXTURE_BYTES,
+    GAME_BOY_SCREEN_WIDTH_U32, GAME_BOY_TEXTURE_BYTES, GAMEPLAY_MENU_BUTTON_CLEARANCE,
+    GAMEPLAY_TOUCH_OVERLAY_MARGIN, SGB_GAME_BOY_X_OFFSET, SGB_GAME_BOY_Y_OFFSET, SGB_SCREEN_HEIGHT,
+    SGB_SCREEN_HEIGHT_U32, SGB_SCREEN_WIDTH, SGB_SCREEN_WIDTH_U32, SGB_TEXTURE_BYTES,
+    TOUCH_OVERLAY_MARGIN, UI_ELEMENT_HEIGHT,
 };
 use crate::game_boy::emulator::SgbState;
 use crate::game_boy::frame_buffer::{GameBoyFrameRing, GameBoyFrameSequence};
 use crate::game_boy::xbr_upscaler;
 use crate::game_boy::{GameBoyCore, GameBoyEmulator};
+use crate::input::controller::ConnectedControllers;
+use crate::input::selection::{PrimaryInputDevice, selected_mapping_has_available_device};
+use crate::input::touch_overlay::{
+    should_show_touch_controller_overlay, touch_controller_overlay_top_offset,
+};
 use crate::storage::LocalStorage;
 
 const GAME_BOY_FRAME_Z: f32 = -40.0;
@@ -23,6 +29,12 @@ const GAME_BOY_TEXTURE_CLEAR_PIXEL: [u8; GAME_BOY_RGBA_CHANNELS] = [0, 0, 0, u8:
 
 #[derive(Component)]
 pub(super) struct GameBoyFrameDisplay;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GameBoyFrameLayout {
+    size: Vec2,
+    translation: Vec2,
+}
 
 #[derive(Debug, Default, Resource)]
 pub(super) struct GameBoyFrameTexture {
@@ -62,6 +74,8 @@ pub(super) fn spawn_game_boy_frame_display(
     texture: ResMut<GameBoyFrameTexture>,
     mut images: ResMut<Assets<Image>>,
     storage: Res<LocalStorage>,
+    primary_input: Res<PrimaryInputDevice>,
+    controllers: Res<ConnectedControllers>,
     windows: Query<&Window, With<PrimaryWindow>>,
     emulators: Query<&GameBoyCore, With<GameBoyEmulator>>,
     displays: Query<(), With<GameBoyFrameDisplay>>,
@@ -77,16 +91,26 @@ pub(super) fn spawn_game_boy_frame_display(
     let Some(handle) = texture.handle.clone() else {
         return;
     };
+    let layout = gameplay_frame_layout(
+        &windows,
+        extent,
+        touch_overlay_reserve_action_hints(&storage, &primary_input, &controllers),
+        should_show_touch_controller_overlay(&storage),
+    );
 
     commands.spawn((
         GameBoyFrameDisplay,
         DespawnOnExit::<crate::app_state::AppState>(crate::app_state::AppState::Gameplay),
         Sprite {
             image: handle,
-            custom_size: gameplay_frame_size(&windows, extent),
+            custom_size: layout.map(|layout| layout.size),
             ..default()
         },
-        Transform::from_xyz(0.0, 0.0, GAME_BOY_FRAME_Z),
+        Transform::from_translation(
+            layout
+                .map(|layout| layout.translation.extend(GAME_BOY_FRAME_Z))
+                .unwrap_or(Vec3::new(0.0, 0.0, GAME_BOY_FRAME_Z)),
+        ),
     ));
 }
 
@@ -160,12 +184,23 @@ pub(super) fn update_game_boy_frame_texture(
 pub(super) fn resize_game_boy_frame_display(
     windows: Query<&Window, With<PrimaryWindow>>,
     storage: Res<LocalStorage>,
+    primary_input: Res<PrimaryInputDevice>,
+    controllers: Res<ConnectedControllers>,
     emulators: Query<&GameBoyCore, With<GameBoyEmulator>>,
-    mut displays: Query<&mut Sprite, With<GameBoyFrameDisplay>>,
+    mut displays: Query<(&mut Sprite, &mut Transform), With<GameBoyFrameDisplay>>,
 ) {
-    let size = gameplay_frame_size(&windows, active_frame_extent(&storage, &emulators));
-    for mut sprite in &mut displays {
-        sprite.custom_size = size;
+    let layout = gameplay_frame_layout(
+        &windows,
+        active_frame_extent(&storage, &emulators),
+        touch_overlay_reserve_action_hints(&storage, &primary_input, &controllers),
+        should_show_touch_controller_overlay(&storage),
+    );
+    for (mut sprite, mut transform) in &mut displays {
+        sprite.custom_size = layout.map(|layout| layout.size);
+        if let Some(layout) = layout {
+            transform.translation.x = layout.translation.x;
+            transform.translation.y = layout.translation.y;
+        }
     }
 }
 
@@ -230,18 +265,63 @@ fn clear_game_boy_screen_image(texture: &mut GameBoyFrameTexture, images: &mut A
     }
 }
 
-fn gameplay_frame_size(
+fn gameplay_frame_layout(
     windows: &Query<&Window, With<PrimaryWindow>>,
     extent: FrameExtent,
-) -> Option<Vec2> {
+    reserve_action_hints: bool,
+    touch_overlay_visible: bool,
+) -> Option<GameBoyFrameLayout> {
     let Ok(window) = windows.single() else {
         return None;
     };
 
-    aspect_fit_size(
-        active_rect(Vec2::new(window.width(), window.height())).size(),
+    Some(gameplay_frame_layout_for_window_size(
+        Vec2::new(window.width(), window.height()),
         extent,
-    )
+        reserve_action_hints,
+        touch_overlay_visible,
+    ))
+}
+
+fn gameplay_frame_layout_for_window_size(
+    window_size: Vec2,
+    extent: FrameExtent,
+    reserve_action_hints: bool,
+    touch_overlay_visible: bool,
+) -> GameBoyFrameLayout {
+    let rect =
+        gameplay_frame_available_rect(window_size, reserve_action_hints, touch_overlay_visible);
+    let size = aspect_fit_size(rect.size(), extent).unwrap_or(Vec2::ZERO);
+    let translation = if touch_overlay_visible && window_size.x < window_size.y {
+        Vec2::new(0.0, rect.min.y + size.y * 0.5)
+    } else {
+        rect.center()
+    };
+
+    GameBoyFrameLayout { size, translation }
+}
+
+fn gameplay_frame_available_rect(
+    window_size: Vec2,
+    reserve_action_hints: bool,
+    touch_overlay_visible: bool,
+) -> Rect {
+    let rect = active_rect(window_size);
+    if !touch_overlay_visible || window_size.x >= window_size.y {
+        return rect;
+    }
+
+    let controls_top =
+        -window_size.y * 0.5 + touch_controller_overlay_top_offset(reserve_action_hints);
+    let top = gameplay_menu_clearance_y(window_size).min(rect.max.y);
+    let bottom = (controls_top + GAMEPLAY_TOUCH_OVERLAY_MARGIN)
+        .max(rect.min.y)
+        .min(top);
+    Rect::new(rect.min.x, bottom, rect.max.x, top)
+}
+
+fn gameplay_menu_clearance_y(window_size: Vec2) -> f32 {
+    window_size.y * 0.5 - TOUCH_OVERLAY_MARGIN - UI_ELEMENT_HEIGHT - GAMEPLAY_MENU_BUTTON_CLEARANCE
 }
 
 fn aspect_fit_size(window_size: Vec2, extent: FrameExtent) -> Option<Vec2> {
@@ -276,6 +356,14 @@ fn active_sgb_border<'a>(
     emulators
         .iter()
         .find(|emulator| emulator.rom.properties.sgb_flag)
+}
+
+fn touch_overlay_reserve_action_hints(
+    storage: &LocalStorage,
+    primary_input: &PrimaryInputDevice,
+    controllers: &ConnectedControllers,
+) -> bool {
+    selected_mapping_has_available_device(primary_input, storage, controllers)
 }
 
 fn copy_rgb_frame_to_rgba_texture(rgb: &[u8], rgba: &mut [u8]) -> bool {
@@ -592,6 +680,66 @@ mod tests {
 
         assert!((size.x - 768.0).abs() < 0.001);
         assert_eq!(size.y, 672.0);
+    }
+
+    #[test]
+    fn portrait_frame_sits_above_touch_overlay_controls() {
+        let window_size = Vec2::new(500.0, 1000.0);
+        let layout =
+            gameplay_frame_layout_for_window_size(window_size, FrameExtent::GameBoy, true, true);
+        let controls_top = -window_size.y * 0.5 + touch_controller_overlay_top_offset(true);
+        let frame_bottom = layout.translation.y - layout.size.y * 0.5;
+        let frame_top = layout.translation.y + layout.size.y * 0.5;
+
+        assert!((frame_bottom - (controls_top + GAMEPLAY_TOUCH_OVERLAY_MARGIN)).abs() < 0.001);
+        assert!(frame_top <= gameplay_menu_clearance_y(window_size) + 0.001);
+    }
+
+    #[test]
+    fn tall_portrait_frame_shrinks_to_fit_below_gameplay_menu() {
+        let window_size = Vec2::new(700.0, 800.0);
+        let layout =
+            gameplay_frame_layout_for_window_size(window_size, FrameExtent::GameBoy, true, true);
+        let frame_top = layout.translation.y + layout.size.y * 0.5;
+
+        assert!(frame_top <= gameplay_menu_clearance_y(window_size) + 0.001);
+    }
+
+    #[test]
+    fn landscape_frame_stays_centred_with_touch_overlay_visible() {
+        let layout = gameplay_frame_layout_for_window_size(
+            Vec2::new(1280.0, 720.0),
+            FrameExtent::GameBoy,
+            true,
+            true,
+        );
+
+        assert_eq!(layout.translation, Vec2::ZERO);
+        assert!((layout.size.x - 746.6667).abs() < 0.001);
+        assert_eq!(layout.size.y, 672.0);
+    }
+
+    #[test]
+    fn portrait_without_touch_overlay_uses_centred_active_rect() {
+        let layout = gameplay_frame_layout_for_window_size(
+            Vec2::new(700.0, 800.0),
+            FrameExtent::GameBoy,
+            true,
+            false,
+        );
+
+        assert_eq!(layout.translation, Vec2::ZERO);
+    }
+
+    #[test]
+    fn cramped_portrait_frame_does_not_extend_past_active_top() {
+        let window_size = Vec2::new(320.0, 360.0);
+        let layout =
+            gameplay_frame_layout_for_window_size(window_size, FrameExtent::GameBoy, true, true);
+        let frame_top = layout.translation.y + layout.size.y * 0.5;
+
+        assert!(frame_top <= active_rect(window_size).max.y);
+        assert!(frame_top <= gameplay_menu_clearance_y(window_size));
     }
 
     #[test]

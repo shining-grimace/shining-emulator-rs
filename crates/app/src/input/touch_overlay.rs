@@ -5,7 +5,7 @@ use bevy::color::Alpha;
 use bevy::input::ButtonState;
 use bevy::math::Rect;
 use bevy::picking::{
-    events::{Cancel, DragEnter, DragLeave, DragOver, Pointer, Press, Release},
+    events::{Cancel, Drag, DragEnd, DragEnter, DragLeave, DragOver, Pointer, Press, Release},
     pointer::{PointerButton, PointerId},
 };
 use bevy::prelude::*;
@@ -14,7 +14,7 @@ use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
-    ACTION_HINT_ICON_SIZE, TOUCH_OVERLAY_DPAD_CLUSTER_HEIGHT, TOUCH_OVERLAY_DPAD_CLUSTER_SIZE,
+    ACTION_HINT_ICON_SIZE, TOUCH_OVERLAY_BOUNDARY_EXTENSION, TOUCH_OVERLAY_DPAD_CLUSTER_SIZE,
     TOUCH_OVERLAY_DPAD_ICON_LONG, TOUCH_OVERLAY_DPAD_ICON_SHORT, TOUCH_OVERLAY_FACE_BUTTON_GAP,
     TOUCH_OVERLAY_FACE_BUTTON_SIZE, TOUCH_OVERLAY_FACE_ICON_SIZE, TOUCH_OVERLAY_MARGIN,
     TOUCH_OVERLAY_SYSTEM_BUTTON_GAP, TOUCH_OVERLAY_SYSTEM_BUTTON_HEIGHT,
@@ -47,11 +47,16 @@ const START_ICON_Y: f32 = 2.0;
 const SYSTEM_ICON_WIDTH: f32 = 4.0;
 const SYSTEM_ICON_HEIGHT: f32 = 2.0;
 const INACTIVE_ICON_ALPHA: f32 = 0.78;
+const DPAD_SECTOR_COUNT: f32 = 8.0;
+const FACE_BUTTON_VISUAL_SCALE: f32 = 1.5;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct TouchControllerButton {
     pub action: InputAction,
 }
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+pub struct TouchControllerDPad;
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct TouchControllerButtonIcon {
@@ -73,9 +78,28 @@ pub(super) struct TouchControllerOverlayInput {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct TouchPointerState {
-    primary_action: InputAction,
-    hover_action: Option<InputAction>,
+enum TouchPointerState {
+    Button {
+        primary_action: InputAction,
+        hover_action: Option<InputAction>,
+    },
+    DPad {
+        start_position: Vec2,
+        logical_size: Vec2,
+        actions: DPadTouchActions,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct DPadTouchActions {
+    horizontal: Option<InputAction>,
+    vertical: Option<InputAction>,
+}
+
+impl DPadTouchActions {
+    fn iter(self) -> impl Iterator<Item = InputAction> {
+        [self.horizontal, self.vertical].into_iter().flatten()
+    }
 }
 
 pub(crate) fn should_show_touch_controller_overlay(storage: &LocalStorage) -> bool {
@@ -94,7 +118,7 @@ pub(crate) fn touch_controller_overlay(
     } else {
         Display::None
     };
-    let bottom = overlay_bottom_offset(reserve_action_hints);
+    let bottom = touch_controller_overlay_bottom_offset(reserve_action_hints);
     let dpad_icons = icons.clone();
     let face_icons = icons.clone();
     let system_icons = icons;
@@ -147,12 +171,20 @@ pub(super) fn despawn_touch_controller_overlay(
     }
 }
 
-fn overlay_bottom_offset(reserve_action_hints: bool) -> f32 {
+pub(crate) fn touch_controller_overlay_bottom_offset(reserve_action_hints: bool) -> f32 {
     if reserve_action_hints {
         UI_SCREEN_PADDING + ACTION_HINT_ICON_SIZE + TOUCH_OVERLAY_MARGIN
     } else {
         TOUCH_OVERLAY_MARGIN
     }
+}
+
+pub(crate) fn touch_controller_overlay_top_offset(reserve_action_hints: bool) -> f32 {
+    touch_controller_overlay_bottom_offset(reserve_action_hints)
+        + TOUCH_OVERLAY_DPAD_CLUSTER_SIZE
+        + TOUCH_OVERLAY_SYSTEM_ROW_GAP
+        + TOUCH_OVERLAY_SYSTEM_BUTTON_HEIGHT
+        + TOUCH_OVERLAY_BOUNDARY_EXTENSION
 }
 
 fn dpad_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) -> impl Scene {
@@ -165,55 +197,78 @@ fn dpad_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) -> impl S
     let vertical_width = TOUCH_OVERLAY_DPAD_ICON_SHORT;
     let vertical_height = TOUCH_OVERLAY_DPAD_ICON_LONG;
     let cluster_width = TOUCH_OVERLAY_DPAD_CLUSTER_SIZE;
-    let cluster_height = TOUCH_OVERLAY_DPAD_CLUSTER_HEIGHT;
+    let cluster_height = TOUCH_OVERLAY_DPAD_CLUSTER_SIZE;
+    let boundary_extension = TOUCH_OVERLAY_BOUNDARY_EXTENSION;
 
     bsn! {
         Node {
             position_type: PositionType::Absolute,
-            left: px(TOUCH_OVERLAY_MARGIN),
-            bottom: px(bottom),
-            width: px(cluster_width),
-            height: px(cluster_height),
+            left: px(TOUCH_OVERLAY_MARGIN - boundary_extension),
+            bottom: px(bottom - boundary_extension),
+            width: px(cluster_width + boundary_extension * 2.0),
+            height: px(cluster_height + boundary_extension * 2.0),
         }
+        Button
+        TouchControllerDPad
         Children [
             (
                 Node {
                     position_type: PositionType::Absolute,
-                    left: px((cluster_width - vertical_width) * 0.5),
-                    top: px(0.0),
+                    left: px(boundary_extension + (cluster_width - vertical_width) * 0.5),
+                    top: px(boundary_extension),
+                    width: px(vertical_width),
+                    height: px(vertical_height),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
+                IgnorePicking
                 Children [
-                    touch_button(up_icons, theme, InputAction::Dup, vertical_width, vertical_height)
+                    touch_icon(up_icons, theme, InputAction::Dup)
                 ]
             ),
             (
                 Node {
                     position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px((cluster_height - horizontal_height) * 0.5),
+                    left: px(boundary_extension),
+                    top: px(boundary_extension + (cluster_height - horizontal_height) * 0.5),
+                    width: px(horizontal_width),
+                    height: px(horizontal_height),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
+                IgnorePicking
                 Children [
-                    touch_button(left_icons, theme, InputAction::Dleft, horizontal_width, horizontal_height)
+                    touch_icon(left_icons, theme, InputAction::Dleft)
                 ]
             ),
             (
                 Node {
                     position_type: PositionType::Absolute,
-                    right: px(0.0),
-                    top: px((cluster_height - horizontal_height) * 0.5),
+                    right: px(boundary_extension),
+                    top: px(boundary_extension + (cluster_height - horizontal_height) * 0.5),
+                    width: px(horizontal_width),
+                    height: px(horizontal_height),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
+                IgnorePicking
                 Children [
-                    touch_button(right_icons, theme, InputAction::Dright, horizontal_width, horizontal_height)
+                    touch_icon(right_icons, theme, InputAction::Dright)
                 ]
             ),
             (
                 Node {
                     position_type: PositionType::Absolute,
-                    left: px((cluster_width - vertical_width) * 0.5),
-                    bottom: px(0.0),
+                    left: px(boundary_extension + (cluster_width - vertical_width) * 0.5),
+                    bottom: px(boundary_extension),
+                    width: px(vertical_width),
+                    height: px(vertical_height),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
+                IgnorePicking
                 Children [
-                    touch_button(down_icons, theme, InputAction::Ddown, vertical_width, vertical_height)
+                    touch_icon(down_icons, theme, InputAction::Ddown)
                 ]
             ),
         ]
@@ -223,11 +278,11 @@ fn dpad_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) -> impl S
 fn face_button_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) -> impl Scene {
     let b_icons = icons.clone();
     let a_icons = icons;
-    let size = TOUCH_OVERLAY_FACE_BUTTON_SIZE;
+    let size = TOUCH_OVERLAY_FACE_BUTTON_SIZE * FACE_BUTTON_VISUAL_SCALE;
     let gap = TOUCH_OVERLAY_FACE_BUTTON_GAP;
     let width = size * 2.0 + gap;
-    let height = TOUCH_OVERLAY_DPAD_CLUSTER_HEIGHT;
-    let a_bottom = (TOUCH_OVERLAY_DPAD_CLUSTER_HEIGHT - size) * 0.5;
+    let height = TOUCH_OVERLAY_DPAD_CLUSTER_SIZE;
+    let a_bottom = (TOUCH_OVERLAY_DPAD_CLUSTER_SIZE - size) * 0.5;
     let b_bottom = 0.0;
 
     bsn! {
@@ -246,7 +301,15 @@ fn face_button_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) ->
                     bottom: px(b_bottom),
                 }
                 Children [
-                    touch_button(b_icons, theme, InputAction::B, size, size)
+                    touch_button(
+                        b_icons,
+                        theme,
+                        InputAction::B,
+                        size,
+                        size,
+                        0.0,
+                        FACE_BUTTON_VISUAL_SCALE
+                    )
                 ]
             ),
             (
@@ -256,7 +319,15 @@ fn face_button_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) ->
                     bottom: px(a_bottom),
                 }
                 Children [
-                    touch_button(a_icons, theme, InputAction::A, size, size)
+                    touch_button(
+                        a_icons,
+                        theme,
+                        InputAction::A,
+                        size,
+                        size,
+                        0.0,
+                        FACE_BUTTON_VISUAL_SCALE
+                    )
                 ]
             ),
         ]
@@ -269,7 +340,7 @@ fn system_button_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) 
     let width = TOUCH_OVERLAY_SYSTEM_BUTTON_WIDTH;
     let height = TOUCH_OVERLAY_SYSTEM_BUTTON_HEIGHT;
     let gap = TOUCH_OVERLAY_SYSTEM_BUTTON_GAP;
-    let face_size = TOUCH_OVERLAY_DPAD_CLUSTER_HEIGHT;
+    let face_size = TOUCH_OVERLAY_DPAD_CLUSTER_SIZE;
     let row_width = width * 2.0 + gap;
 
     bsn! {
@@ -282,8 +353,24 @@ fn system_button_cluster(icons: Handle<Image>, theme: ActiveTheme, bottom: f32) 
             column_gap: px(gap),
         }
         Children [
-            touch_button(select_icons, theme, InputAction::Select, width, height),
-            touch_button(start_icons, theme, InputAction::Start, width, height),
+            touch_button(
+                select_icons,
+                theme,
+                InputAction::Select,
+                width,
+                height,
+                TOUCH_OVERLAY_BOUNDARY_EXTENSION,
+                1.0
+            ),
+            touch_button(
+                start_icons,
+                theme,
+                InputAction::Start,
+                width,
+                height,
+                TOUCH_OVERLAY_BOUNDARY_EXTENSION,
+                1.0
+            ),
         ]
     }
 }
@@ -294,44 +381,71 @@ fn touch_button(
     action: InputAction,
     width: f32,
     height: f32,
+    boundary_extension: f32,
+    icon_scale: f32,
 ) -> impl Scene {
-    let icon = touch_overlay_icon(action);
     bsn! {
         Node {
             width: px(width),
             height: px(height),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
         }
-        Button
-        TouchControllerButton { action: {action} }
+        IgnorePicking
         Children [
             (
                 Node {
-                    width: px(icon.frame_width),
-                    height: px(icon.frame_height),
+                    position_type: PositionType::Absolute,
+                    left: px(-boundary_extension),
+                    top: px(-boundary_extension),
+                    width: px(width + boundary_extension * 2.0),
+                    height: px(height + boundary_extension * 2.0),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                 }
-                TouchControllerButtonIconFrame { action: {action} }
-                IgnorePicking
-                UiTransform::from_rotation(Rot2::radians(icon.rotation))
+                Button
+                TouchControllerButton { action: {action} }
                 Children [
-                    (
-                        Node {
-                            width: px(icon.width),
-                            height: px(icon.height),
-                        }
-                        TouchControllerButtonIcon { action: {action} }
-                        IgnorePicking
-                        ImageNode {
-                            image: {HandleTemplate::Handle(icons)},
-                            color: {theme.primary.with_alpha(INACTIVE_ICON_ALPHA)},
-                            rect: {Some(icon.rect)},
-                        }
-                    )
+                    touch_icon_scaled(icons, theme, action, icon_scale)
                 ]
-            ),
+            )
+        ]
+    }
+}
+
+fn touch_icon(icons: Handle<Image>, theme: ActiveTheme, action: InputAction) -> impl Scene {
+    touch_icon_scaled(icons, theme, action, 1.0)
+}
+
+fn touch_icon_scaled(
+    icons: Handle<Image>,
+    theme: ActiveTheme,
+    action: InputAction,
+    scale: f32,
+) -> impl Scene {
+    let icon = touch_overlay_icon(action);
+    bsn! {
+        Node {
+            width: px(icon.frame_width * scale),
+            height: px(icon.frame_height * scale),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        TouchControllerButtonIconFrame { action: {action} }
+        IgnorePicking
+        UiTransform::from_rotation(Rot2::radians(icon.rotation))
+        Children [
+            (
+                Node {
+                    width: px(icon.width * scale),
+                    height: px(icon.height * scale),
+                }
+                TouchControllerButtonIcon { action: {action} }
+                IgnorePicking
+                ImageNode {
+                    image: {HandleTemplate::Handle(icons)},
+                    color: {theme.primary.with_alpha(INACTIVE_ICON_ALPHA)},
+                    rect: {Some(icon.rect)},
+                }
+            )
         ]
     }
 }
@@ -426,12 +540,15 @@ fn icon_grid_rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 
 pub(super) fn collect_touch_controller_overlay_input(
     mut presses: MessageReader<Pointer<Press>>,
+    mut drags: MessageReader<Pointer<Drag>>,
+    mut drag_ends: MessageReader<Pointer<DragEnd>>,
     mut drag_enters: MessageReader<Pointer<DragEnter>>,
     mut drag_overs: MessageReader<Pointer<DragOver>>,
     mut drag_leaves: MessageReader<Pointer<DragLeave>>,
     mut releases: MessageReader<Pointer<Release>>,
     mut cancels: MessageReader<Pointer<Cancel>>,
     buttons: Query<&TouchControllerButton>,
+    dpads: Query<&ComputedNode, With<TouchControllerDPad>>,
     mut state: ResMut<TouchControllerOverlayInput>,
     mut mapped_events: MessageWriter<MappedInputEvent>,
 ) {
@@ -439,40 +556,68 @@ pub(super) fn collect_touch_controller_overlay_input(
         if press.button != PointerButton::Primary {
             continue;
         }
-        let Ok(button) = buttons.get(press.entity) else {
+        if let Ok(button) = buttons.get(press.entity) {
+            state.press_button_pointer(press.pointer_id, button.action, &mut mapped_events);
+        } else if let Ok(node) = dpads.get(press.entity) {
+            state.press_dpad_pointer(
+                press.pointer_id,
+                press.hit.position,
+                node,
+                &mut mapped_events,
+            );
+        }
+    }
+
+    for drag in drags.read() {
+        if drag.button != PointerButton::Primary || dpads.get(drag.entity).is_err() {
             continue;
-        };
-        state.press_pointer(press.pointer_id, button.action, &mut mapped_events);
+        }
+        state.drag_dpad_pointer(drag.pointer_id, drag.distance, &mut mapped_events);
+    }
+
+    for drag_end in drag_ends.read() {
+        if drag_end.button == PointerButton::Primary && dpads.get(drag_end.entity).is_ok() {
+            state.release_pointer(drag_end.pointer_id, &mut mapped_events);
+        }
     }
 
     for drag_enter in drag_enters.read() {
         if drag_enter.button != PointerButton::Primary {
             continue;
         }
-        let Ok(button) = buttons.get(drag_enter.entity) else {
-            continue;
-        };
-        state.set_hover_action(drag_enter.pointer_id, button.action, &mut mapped_events);
+        if let Ok(button) = buttons.get(drag_enter.entity) {
+            state.set_hover_action(drag_enter.pointer_id, button.action, &mut mapped_events);
+        } else if dpads.get(drag_enter.entity).is_ok() {
+            state.set_dpad_actions(
+                drag_enter.pointer_id,
+                dpad_actions_from_hit_position(drag_enter.hit.position),
+                &mut mapped_events,
+            );
+        }
     }
 
     for drag_over in drag_overs.read() {
         if drag_over.button != PointerButton::Primary {
             continue;
         }
-        let Ok(button) = buttons.get(drag_over.entity) else {
-            continue;
-        };
-        state.set_hover_action(drag_over.pointer_id, button.action, &mut mapped_events);
+        if let Ok(button) = buttons.get(drag_over.entity) {
+            state.set_hover_action(drag_over.pointer_id, button.action, &mut mapped_events);
+        } else if dpads.get(drag_over.entity).is_ok() {
+            state.set_dpad_actions(
+                drag_over.pointer_id,
+                dpad_actions_from_hit_position(drag_over.hit.position),
+                &mut mapped_events,
+            );
+        }
     }
 
     for drag_leave in drag_leaves.read() {
         if drag_leave.button != PointerButton::Primary {
             continue;
         }
-        let Ok(button) = buttons.get(drag_leave.entity) else {
-            continue;
-        };
-        state.release_hover_action(drag_leave.pointer_id, button.action, &mut mapped_events);
+        if let Ok(button) = buttons.get(drag_leave.entity) {
+            state.release_hover_action(drag_leave.pointer_id, button.action, &mut mapped_events);
+        }
     }
 
     for release in releases.read() {
@@ -521,30 +666,142 @@ fn action_pressed(input: &GameBoyInputState, action: InputAction) -> bool {
     }
 }
 
+fn dpad_actions_from_hit_position(position: Option<Vec3>) -> DPadTouchActions {
+    position
+        .map(|position| dpad_actions_from_delta(position.truncate()))
+        .unwrap_or_default()
+}
+
+fn dpad_actions_from_drag(
+    start_position: Vec2,
+    distance: Vec2,
+    logical_size: Vec2,
+) -> DPadTouchActions {
+    let safe_size = logical_size.max(Vec2::splat(f32::EPSILON));
+    dpad_actions_from_delta(start_position + distance / safe_size)
+}
+
+fn dpad_actions_from_delta(delta: Vec2) -> DPadTouchActions {
+    if delta.length_squared() <= f32::EPSILON {
+        return DPadTouchActions::default();
+    }
+
+    let sector_width = std::f32::consts::TAU / DPAD_SECTOR_COUNT;
+    let angle = (-delta.y).atan2(delta.x);
+    let sector = ((angle + sector_width * 0.5).rem_euclid(std::f32::consts::TAU) / sector_width)
+        .floor() as u8;
+
+    match sector {
+        0 => DPadTouchActions::horizontal(InputAction::Dright),
+        1 => DPadTouchActions::diagonal(InputAction::Dright, InputAction::Dup),
+        2 => DPadTouchActions::vertical(InputAction::Dup),
+        3 => DPadTouchActions::diagonal(InputAction::Dleft, InputAction::Dup),
+        4 => DPadTouchActions::horizontal(InputAction::Dleft),
+        5 => DPadTouchActions::diagonal(InputAction::Dleft, InputAction::Ddown),
+        6 => DPadTouchActions::vertical(InputAction::Ddown),
+        _ => DPadTouchActions::diagonal(InputAction::Dright, InputAction::Ddown),
+    }
+}
+
+impl DPadTouchActions {
+    fn horizontal(action: InputAction) -> Self {
+        Self {
+            horizontal: Some(action),
+            vertical: None,
+        }
+    }
+
+    fn vertical(action: InputAction) -> Self {
+        Self {
+            horizontal: None,
+            vertical: Some(action),
+        }
+    }
+
+    fn diagonal(horizontal: InputAction, vertical: InputAction) -> Self {
+        Self {
+            horizontal: Some(horizontal),
+            vertical: Some(vertical),
+        }
+    }
+}
+
 impl TouchControllerOverlayInput {
-    fn press_pointer(
+    fn press_button_pointer(
         &mut self,
         pointer_id: PointerId,
         action: InputAction,
         mapped_events: &mut MessageWriter<MappedInputEvent>,
     ) {
-        if self
-            .pressed_pointers
-            .get(&pointer_id)
-            .is_some_and(|state| state.primary_action == action)
-        {
+        if self.pressed_pointers.get(&pointer_id).is_some_and(|state| {
+            matches!(
+                state,
+                TouchPointerState::Button {
+                    primary_action,
+                    hover_action: None,
+                } if *primary_action == action
+            )
+        }) {
             return;
         }
         self.release_pointer(pointer_id, mapped_events);
 
         self.pressed_pointers.insert(
             pointer_id,
-            TouchPointerState {
+            TouchPointerState::Button {
                 primary_action: action,
                 hover_action: None,
             },
         );
         self.press_action(action, mapped_events);
+    }
+
+    fn press_dpad_pointer(
+        &mut self,
+        pointer_id: PointerId,
+        position: Option<Vec3>,
+        node: &ComputedNode,
+        mapped_events: &mut MessageWriter<MappedInputEvent>,
+    ) {
+        let start_position = position
+            .map(|position| position.truncate())
+            .unwrap_or_default();
+        let logical_size = node.size() * node.inverse_scale_factor();
+        let actions = dpad_actions_from_delta(start_position);
+
+        self.release_pointer(pointer_id, mapped_events);
+        self.pressed_pointers.insert(
+            pointer_id,
+            TouchPointerState::DPad {
+                start_position,
+                logical_size,
+                actions,
+            },
+        );
+        for action in actions.iter() {
+            self.press_action(action, mapped_events);
+        }
+    }
+
+    fn drag_dpad_pointer(
+        &mut self,
+        pointer_id: PointerId,
+        distance: Vec2,
+        mapped_events: &mut MessageWriter<MappedInputEvent>,
+    ) {
+        let Some(TouchPointerState::DPad {
+            start_position,
+            logical_size,
+            ..
+        }) = self.pressed_pointers.get(&pointer_id).copied()
+        else {
+            return;
+        };
+        self.set_dpad_actions(
+            pointer_id,
+            dpad_actions_from_drag(start_position, distance, logical_size),
+            mapped_events,
+        );
     }
 
     fn set_hover_action(
@@ -556,13 +813,21 @@ impl TouchControllerOverlayInput {
         let Some(pointer_state) = self.pressed_pointers.get_mut(&pointer_id) else {
             return;
         };
-        if pointer_state.hover_action == Some(action) {
+        let TouchPointerState::Button {
+            primary_action,
+            hover_action,
+        } = pointer_state
+        else {
+            return;
+        };
+
+        if *hover_action == Some(action) {
             return;
         }
 
-        let previous_action = pointer_state.hover_action;
-        let next_action = (pointer_state.primary_action != action).then_some(action);
-        pointer_state.hover_action = next_action;
+        let previous_action = *hover_action;
+        let next_action = (*primary_action != action).then_some(action);
+        *hover_action = next_action;
 
         if let Some(previous_action) = previous_action {
             self.release_action(previous_action, mapped_events);
@@ -581,11 +846,46 @@ impl TouchControllerOverlayInput {
         let Some(pointer_state) = self.pressed_pointers.get_mut(&pointer_id) else {
             return;
         };
-        if pointer_state.hover_action != Some(action) {
+        let TouchPointerState::Button { hover_action, .. } = pointer_state else {
+            return;
+        };
+
+        if *hover_action != Some(action) {
             return;
         }
-        pointer_state.hover_action = None;
+        *hover_action = None;
         self.release_action(action, mapped_events);
+    }
+
+    fn set_dpad_actions(
+        &mut self,
+        pointer_id: PointerId,
+        next_actions: DPadTouchActions,
+        mapped_events: &mut MessageWriter<MappedInputEvent>,
+    ) {
+        let Some(TouchPointerState::DPad { actions, .. }) =
+            self.pressed_pointers.get_mut(&pointer_id)
+        else {
+            return;
+        };
+        if *actions == next_actions {
+            return;
+        }
+
+        let previous_actions = *actions;
+        *actions = next_actions;
+        for action in previous_actions
+            .iter()
+            .filter(|action| !next_actions.iter().any(|next| next == *action))
+        {
+            self.release_action(action, mapped_events);
+        }
+        for action in next_actions
+            .iter()
+            .filter(|action| !previous_actions.iter().any(|previous| previous == *action))
+        {
+            self.press_action(action, mapped_events);
+        }
     }
 
     fn press_action(
@@ -609,10 +909,22 @@ impl TouchControllerOverlayInput {
         mapped_events: &mut MessageWriter<MappedInputEvent>,
     ) {
         if let Some(pointer_state) = self.pressed_pointers.remove(&pointer_id) {
-            if let Some(hover_action) = pointer_state.hover_action {
-                self.release_action(hover_action, mapped_events);
+            match pointer_state {
+                TouchPointerState::Button {
+                    primary_action,
+                    hover_action,
+                } => {
+                    if let Some(hover_action) = hover_action {
+                        self.release_action(hover_action, mapped_events);
+                    }
+                    self.release_action(primary_action, mapped_events);
+                }
+                TouchPointerState::DPad { actions, .. } => {
+                    for action in actions.iter() {
+                        self.release_action(action, mapped_events);
+                    }
+                }
             }
-            self.release_action(pointer_state.primary_action, mapped_events);
         }
     }
 
@@ -725,5 +1037,143 @@ mod tests {
             assert_eq!(icon.frame_width, TOUCH_OVERLAY_DPAD_ICON_LONG);
             assert_eq!(icon.frame_height, TOUCH_OVERLAY_DPAD_ICON_LONG);
         }
+    }
+
+    #[test]
+    fn dpad_touch_angles_map_to_cardinals_and_diagonals() {
+        assert_dpad_actions(Vec2::new(1.0, 0.0), &[InputAction::Dright]);
+        assert_dpad_actions(
+            Vec2::new(1.0, -1.0),
+            &[InputAction::Dright, InputAction::Dup],
+        );
+        assert_dpad_actions(Vec2::new(0.0, -1.0), &[InputAction::Dup]);
+        assert_dpad_actions(
+            Vec2::new(-1.0, -1.0),
+            &[InputAction::Dleft, InputAction::Dup],
+        );
+        assert_dpad_actions(Vec2::new(-1.0, 0.0), &[InputAction::Dleft]);
+        assert_dpad_actions(
+            Vec2::new(-1.0, 1.0),
+            &[InputAction::Dleft, InputAction::Ddown],
+        );
+        assert_dpad_actions(Vec2::new(0.0, 1.0), &[InputAction::Ddown]);
+        assert_dpad_actions(
+            Vec2::new(1.0, 1.0),
+            &[InputAction::Dright, InputAction::Ddown],
+        );
+    }
+
+    #[test]
+    fn dpad_touch_center_has_no_direction() {
+        assert_dpad_actions(Vec2::ZERO, &[]);
+    }
+
+    #[test]
+    fn dpad_drag_keeps_tracking_outside_the_square() {
+        let size = Vec2::splat(144.0);
+
+        assert_eq!(
+            dpad_actions_from_drag(Vec2::ZERO, Vec2::new(288.0, 0.0), size)
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![InputAction::Dright]
+        );
+        assert_eq!(
+            dpad_actions_from_drag(Vec2::new(-0.25, 0.0), Vec2::new(-288.0, 288.0), size)
+                .iter()
+                .collect::<Vec<_>>(),
+            vec![InputAction::Dleft, InputAction::Ddown]
+        );
+    }
+
+    #[test]
+    fn dpad_cluster_has_one_square_touch_target() {
+        let mut app = App::new();
+        app.add_plugins((
+            TaskPoolPlugin::default(),
+            AssetPlugin::default(),
+            ScenePlugin::default(),
+        ));
+
+        app.world_mut()
+            .spawn_scene(touch_controller_overlay(
+                Handle::default(),
+                crate::app_theme::active_theme_for_setting(crate::app_theme::MINIMAL_THEME_SETTING),
+                true,
+                AppState::Home,
+                false,
+            ))
+            .expect("touch overlay scene should spawn");
+
+        let world = app.world_mut();
+        let mut dpads = world.query::<&TouchControllerDPad>();
+        assert_eq!(dpads.iter(world).count(), 1);
+
+        let mut buttons = world.query::<&TouchControllerButton>();
+        let button_actions = buttons
+            .iter(world)
+            .map(|button| button.action)
+            .collect::<Vec<_>>();
+        assert_eq!(button_actions.len(), 4);
+        assert!(!button_actions.contains(&InputAction::Dleft));
+        assert!(!button_actions.contains(&InputAction::Dright));
+        assert!(!button_actions.contains(&InputAction::Dup));
+        assert!(!button_actions.contains(&InputAction::Ddown));
+    }
+
+    #[test]
+    fn touch_targets_include_boundary_extension() {
+        let mut app = App::new();
+        app.add_plugins((
+            TaskPoolPlugin::default(),
+            AssetPlugin::default(),
+            ScenePlugin::default(),
+        ));
+
+        app.world_mut()
+            .spawn_scene(touch_controller_overlay(
+                Handle::default(),
+                crate::app_theme::active_theme_for_setting(crate::app_theme::MINIMAL_THEME_SETTING),
+                true,
+                AppState::Home,
+                false,
+            ))
+            .expect("touch overlay scene should spawn");
+
+        let world = app.world_mut();
+        let mut dpads = world.query_filtered::<&Node, With<TouchControllerDPad>>();
+        let dpad = dpads
+            .single(world)
+            .expect("touch overlay should have one d-pad target");
+        assert_eq!(
+            dpad.width,
+            px(TOUCH_OVERLAY_DPAD_CLUSTER_SIZE + TOUCH_OVERLAY_BOUNDARY_EXTENSION * 2.0)
+        );
+        assert_eq!(
+            dpad.height,
+            px(TOUCH_OVERLAY_DPAD_CLUSTER_SIZE + TOUCH_OVERLAY_BOUNDARY_EXTENSION * 2.0)
+        );
+
+        let mut buttons = world.query::<(&TouchControllerButton, &Node)>();
+        for (button, node) in buttons.iter(world) {
+            let (width, height) = match button.action {
+                InputAction::A | InputAction::B => {
+                    let size = TOUCH_OVERLAY_FACE_BUTTON_SIZE * FACE_BUTTON_VISUAL_SCALE;
+                    (size, size)
+                }
+                InputAction::Start | InputAction::Select => (
+                    TOUCH_OVERLAY_SYSTEM_BUTTON_WIDTH + TOUCH_OVERLAY_BOUNDARY_EXTENSION * 2.0,
+                    TOUCH_OVERLAY_SYSTEM_BUTTON_HEIGHT + TOUCH_OVERLAY_BOUNDARY_EXTENSION * 2.0,
+                ),
+                _ => continue,
+            };
+            assert_eq!(node.width, px(width));
+            assert_eq!(node.height, px(height));
+        }
+    }
+
+    fn assert_dpad_actions(delta: Vec2, expected: &[InputAction]) {
+        let actual = dpad_actions_from_delta(delta).iter().collect::<Vec<_>>();
+        assert_eq!(actual, expected);
     }
 }
