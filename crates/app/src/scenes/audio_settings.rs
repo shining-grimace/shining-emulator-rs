@@ -3,6 +3,7 @@ use std::fs;
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::window::PrimaryWindow;
 use bevy_midi_graph::{MidiFileSource, MidiGraphAudioContext, Sf2FileSource, WaveFileSource};
 
 use crate::app_assets::AppAssets;
@@ -259,18 +260,18 @@ fn handle_audio_settings_activation(
 }
 
 fn sync_audio_conditional_sections(
-    selects: Query<(&AudioSelect, &UiMultiSelect), Changed<UiMultiSelect>>,
-    all_selects: Query<(&AudioSelect, &UiMultiSelect)>,
-    mut sections: Query<(&AudioConditionalSection, &mut Node)>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    selects: Query<(&AudioSelect, &UiMultiSelect)>,
+    mut nodes: ParamSet<(Query<&Node>, Query<(&AudioConditionalSection, &mut Node)>)>,
+    parents: Query<&ChildOf>,
     mut navs: Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
 ) {
-    if selects
+    let portrait = windows
         .iter()
-        .any(|(select, _)| select.field == FIELD_OSCILLATOR)
-    {
-        apply_audio_conditional_sections(&all_selects, &mut sections);
-        apply_audio_focus_nav(&all_selects, &mut navs);
-    }
+        .next()
+        .is_some_and(|window| window.width() < window.height());
+    apply_audio_conditional_sections(&selects, &mut nodes.p1());
+    apply_audio_focus_nav(&selects, &nodes.p0(), &parents, &mut navs, portrait);
 }
 
 fn apply_audio_conditional_sections(
@@ -304,10 +305,14 @@ fn display_for(visible: bool) -> Display {
 
 fn apply_audio_focus_nav(
     selects: &Query<(&AudioSelect, &UiMultiSelect)>,
+    nodes: &Query<&Node>,
+    parents: &Query<&ChildOf>,
     navs: &mut Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
+    portrait: bool,
 ) {
     let target_entities = navs
         .iter()
+        .filter(|(entity, _, _)| entity_visible(*entity, nodes, parents))
         .map(|(entity, focus_id, _)| (focus_id.id, entity))
         .collect::<Vec<_>>();
     let target = |id| {
@@ -346,31 +351,216 @@ fn apply_audio_focus_nav(
         TARGET_CH2_CUSTOM_SAMPLE,
         TARGET_CH2_OSCILLATOR,
     );
+    let ch4_oscillator = selected_channel_oscillator(selects, 4);
+    let ch4_first_detail = channel_detail_target(
+        ch4_oscillator,
+        TARGET_CH4_BUILT_IN_SAMPLE,
+        TARGET_CH4_CUSTOM_SAMPLE,
+        TARGET_SAVE,
+    );
+    let ch4_last_detail = channel_detail_target(
+        ch4_oscillator,
+        TARGET_CH4_BUILT_IN_SAMPLE,
+        TARGET_CH4_CUSTOM_SAMPLE,
+        TARGET_CH4_OSCILLATOR,
+    );
 
     for (_, focus_id, mut nav) in navs.iter_mut() {
-        match focus_id.id {
-            TARGET_CH1_OSCILLATOR => nav.down = target(ch1_first_detail),
-            TARGET_CH1_BUILT_IN_SAMPLE => {
-                nav.up = target(TARGET_CH1_OSCILLATOR);
-                nav.down = target(TARGET_CH1_MOD_A);
-            }
-            TARGET_CH1_CUSTOM_SAMPLE => {
-                nav.up = target(TARGET_CH1_OSCILLATOR);
-                nav.down = target(TARGET_CH1_MOD_A);
-            }
-            TARGET_CH1_MOD_A => nav.up = target(ch1_last_detail),
-            TARGET_CH2_OSCILLATOR => nav.down = target(ch2_first_detail),
-            TARGET_CH2_BUILT_IN_SAMPLE => {
-                nav.up = target(TARGET_CH2_OSCILLATOR);
-                nav.down = target(TARGET_CH2_MOD_A);
-            }
-            TARGET_CH2_CUSTOM_SAMPLE => {
-                nav.up = target(TARGET_CH2_OSCILLATOR);
-                nav.down = target(TARGET_CH2_MOD_A);
-            }
-            TARGET_CH2_MOD_A => nav.up = target(ch2_last_detail),
-            _ => {}
+        let nav_ids = audio_focus_nav_for(
+            focus_id.id,
+            ch1_first_detail,
+            ch1_last_detail,
+            ch2_first_detail,
+            ch2_last_detail,
+            ch4_first_detail,
+            ch4_last_detail,
+            portrait,
+        );
+        *nav = UiFocusNav {
+            up: target(nav_ids.up),
+            right: target(nav_ids.right),
+            down: target(nav_ids.down),
+            left: target(nav_ids.left),
+        };
+    }
+}
+
+fn audio_focus_nav_for(
+    id: u16,
+    ch1_first_detail: u16,
+    ch1_last_detail: u16,
+    ch2_first_detail: u16,
+    ch2_last_detail: u16,
+    ch4_first_detail: u16,
+    ch4_last_detail: u16,
+    portrait: bool,
+) -> UiFocusNavIds {
+    if portrait {
+        return audio_portrait_focus_nav_for(
+            id,
+            ch1_first_detail,
+            ch1_last_detail,
+            ch2_first_detail,
+            ch2_last_detail,
+            ch4_first_detail,
+            ch4_last_detail,
+        );
+    }
+
+    match id {
+        TARGET_CH1_OSCILLATOR => {
+            focus_nav_ids(UI_FOCUS_NONE, TARGET_SAVE, ch1_first_detail, UI_FOCUS_NONE)
         }
+        TARGET_CH1_BUILT_IN_SAMPLE | TARGET_CH1_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH1_OSCILLATOR,
+            TARGET_SAVE,
+            TARGET_CH1_MOD_A,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH1_MOD_A => focus_nav_ids(
+            ch1_last_detail,
+            TARGET_SAVE,
+            TARGET_CH1_MOD_B,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH1_MOD_B => focus_nav_ids(
+            TARGET_CH1_MOD_A,
+            TARGET_SAVE,
+            TARGET_CH2_OSCILLATOR,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_OSCILLATOR => focus_nav_ids(
+            TARGET_CH1_MOD_B,
+            TARGET_SAVE,
+            ch2_first_detail,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_BUILT_IN_SAMPLE | TARGET_CH2_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH2_OSCILLATOR,
+            TARGET_SAVE,
+            TARGET_CH2_MOD_A,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_MOD_A => focus_nav_ids(
+            ch2_last_detail,
+            TARGET_SAVE,
+            TARGET_CH3_SAMPLE,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH3_SAMPLE => focus_nav_ids(
+            TARGET_CH2_MOD_A,
+            TARGET_SAVE,
+            TARGET_CH4_OSCILLATOR,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH4_OSCILLATOR => focus_nav_ids(
+            TARGET_CH3_SAMPLE,
+            TARGET_SAVE,
+            ch4_first_detail,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH4_BUILT_IN_SAMPLE | TARGET_CH4_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH4_OSCILLATOR,
+            TARGET_SAVE,
+            UI_FOCUS_NONE,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_SAVE => focus_nav_ids(
+            UI_FOCUS_NONE,
+            UI_FOCUS_NONE,
+            TARGET_DELETE,
+            TARGET_CH1_OSCILLATOR,
+        ),
+        TARGET_DELETE => focus_nav_ids(
+            TARGET_SAVE,
+            UI_FOCUS_NONE,
+            TARGET_RESTORE,
+            TARGET_CH1_OSCILLATOR,
+        ),
+        TARGET_RESTORE => focus_nav_ids(
+            TARGET_DELETE,
+            UI_FOCUS_NONE,
+            UI_FOCUS_NONE,
+            TARGET_CH1_OSCILLATOR,
+        ),
+        _ => focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
+    }
+}
+
+fn audio_portrait_focus_nav_for(
+    id: u16,
+    ch1_first_detail: u16,
+    ch1_last_detail: u16,
+    ch2_first_detail: u16,
+    ch2_last_detail: u16,
+    ch4_first_detail: u16,
+    ch4_last_detail: u16,
+) -> UiFocusNavIds {
+    match id {
+        TARGET_CH1_OSCILLATOR => focus_nav_ids(
+            UI_FOCUS_NONE,
+            UI_FOCUS_NONE,
+            ch1_first_detail,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH1_BUILT_IN_SAMPLE | TARGET_CH1_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH1_OSCILLATOR,
+            UI_FOCUS_NONE,
+            TARGET_CH1_MOD_A,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH1_MOD_A => focus_nav_ids(
+            ch1_last_detail,
+            UI_FOCUS_NONE,
+            TARGET_CH1_MOD_B,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH1_MOD_B => focus_nav_ids(
+            TARGET_CH1_MOD_A,
+            UI_FOCUS_NONE,
+            TARGET_CH2_OSCILLATOR,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_OSCILLATOR => focus_nav_ids(
+            TARGET_CH1_MOD_B,
+            UI_FOCUS_NONE,
+            ch2_first_detail,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_BUILT_IN_SAMPLE | TARGET_CH2_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH2_OSCILLATOR,
+            UI_FOCUS_NONE,
+            TARGET_CH2_MOD_A,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH2_MOD_A => focus_nav_ids(
+            ch2_last_detail,
+            UI_FOCUS_NONE,
+            TARGET_CH3_SAMPLE,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH3_SAMPLE => focus_nav_ids(
+            TARGET_CH2_MOD_A,
+            UI_FOCUS_NONE,
+            TARGET_CH4_OSCILLATOR,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH4_OSCILLATOR => focus_nav_ids(
+            TARGET_CH3_SAMPLE,
+            UI_FOCUS_NONE,
+            ch4_first_detail,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_CH4_BUILT_IN_SAMPLE | TARGET_CH4_CUSTOM_SAMPLE => focus_nav_ids(
+            TARGET_CH4_OSCILLATOR,
+            UI_FOCUS_NONE,
+            TARGET_SAVE,
+            UI_FOCUS_NONE,
+        ),
+        TARGET_SAVE => focus_nav_ids(ch4_last_detail, UI_FOCUS_NONE, TARGET_DELETE, UI_FOCUS_NONE),
+        TARGET_DELETE => focus_nav_ids(TARGET_SAVE, UI_FOCUS_NONE, TARGET_RESTORE, UI_FOCUS_NONE),
+        TARGET_RESTORE => focus_nav_ids(TARGET_DELETE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
+        _ => focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
     }
 }
 
@@ -396,6 +586,29 @@ fn channel_detail_target(
         OSCILLATOR_CUSTOM_SAMPLER => custom_sample,
         _ => default,
     }
+}
+
+fn focus_nav_ids(up: u16, right: u16, down: u16, left: u16) -> UiFocusNavIds {
+    UiFocusNavIds {
+        up,
+        right,
+        down,
+        left,
+    }
+}
+
+fn entity_visible(entity: Entity, nodes: &Query<&Node>, parents: &Query<&ChildOf>) -> bool {
+    let mut current = Some(entity);
+    while let Some(entity) = current {
+        if nodes
+            .get(entity)
+            .is_ok_and(|node| node.display == Display::None)
+        {
+            return false;
+        }
+        current = parents.get(entity).ok().map(|parent| parent.0);
+    }
+    true
 }
 
 fn set_audio_preset_apply_error_message(

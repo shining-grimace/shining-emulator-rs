@@ -737,6 +737,41 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
     }
 }
 
+fn settings_portrait_focus_nav(id: u16) -> UiFocusNavIds {
+    let order = [
+        TARGET_OVERLAY,
+        TARGET_FONT_SIZE,
+        TARGET_THEME,
+        TARGET_PRIMARY_INPUT,
+        TARGET_EDIT_MAPPINGS,
+        TARGET_AUDIO_PRESET,
+        TARGET_DELETE_MAPPING,
+        TARGET_EDIT_MAPPING,
+        TARGET_CREATE_MAPPING,
+        TARGET_UPSCALING,
+        TARGET_MODEL,
+        TARGET_SGB,
+        TARGET_PROVIDER_LIST,
+        TARGET_PROVIDER_SYNC,
+        TARGET_PROVIDER_DELETE,
+        TARGET_PROVIDER_EDIT,
+        TARGET_PROVIDER_CREATE,
+    ];
+    let Some(index) = order.iter().position(|target| *target == id) else {
+        return focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE);
+    };
+    focus_nav_ids(
+        index
+            .checked_sub(1)
+            .and_then(|index| order.get(index))
+            .copied()
+            .unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+        order.get(index + 1).copied().unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+    )
+}
+
 fn focus_nav_ids(up: u16, right: u16, down: u16, left: u16) -> UiFocusNavIds {
     UiFocusNavIds {
         up,
@@ -844,6 +879,7 @@ fn settings_left_column(
     settings: crate::storage::data::GeneralSettings,
     input_config: MultiSelectConfig,
     audio_config: MultiSelectConfig,
+    focus_nav: fn(u16) -> UiFocusNavIds,
 ) -> impl Scene {
     bsn! {
         Node {
@@ -867,7 +903,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, button_overlay_config(settings.force_button_overlay as usize))
                         SettingsSelect { field: FIELD_FORCE_BUTTON_OVERLAY }
                         UiFocusId { id: TARGET_OVERLAY }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_OVERLAY).up}, right: {settings_focus_nav(TARGET_OVERLAY).right}, down: {settings_focus_nav(TARGET_OVERLAY).down}, left: {settings_focus_nav(TARGET_OVERLAY).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_OVERLAY).up}, right: {focus_nav(TARGET_OVERLAY).right}, down: {focus_nav(TARGET_OVERLAY).down}, left: {focus_nav(TARGET_OVERLAY).left} }
                         InitialFocus { enabled: true }
                         DefaultFocusTarget
                     ),
@@ -888,7 +924,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, font_size_config(settings.font_size as usize))
                         SettingsSelect { field: FIELD_FONT_SIZE }
                         UiFocusId { id: TARGET_FONT_SIZE }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_FONT_SIZE).up}, right: {settings_focus_nav(TARGET_FONT_SIZE).right}, down: {settings_focus_nav(TARGET_FONT_SIZE).down}, left: {settings_focus_nav(TARGET_FONT_SIZE).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_FONT_SIZE).up}, right: {focus_nav(TARGET_FONT_SIZE).right}, down: {focus_nav(TARGET_FONT_SIZE).down}, left: {focus_nav(TARGET_FONT_SIZE).left} }
                     ),
                 ]
             ),
@@ -906,7 +942,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, theme_config(settings.ui_theme as usize))
                         SettingsSelect { field: FIELD_UI_THEME }
                         UiFocusId { id: TARGET_THEME }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_THEME).up}, right: {settings_focus_nav(TARGET_THEME).right}, down: {settings_focus_nav(TARGET_THEME).down}, left: {settings_focus_nav(TARGET_THEME).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_THEME).up}, right: {focus_nav(TARGET_THEME).right}, down: {focus_nav(TARGET_THEME).down}, left: {focus_nav(TARGET_THEME).left} }
                     ),
                 ]
             ),
@@ -924,7 +960,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, input_config)
                         SettingsSelect { field: FIELD_PRIMARY_INPUT }
                         UiFocusId { id: TARGET_PRIMARY_INPUT }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PRIMARY_INPUT).up}, right: {settings_focus_nav(TARGET_PRIMARY_INPUT).right}, down: {settings_focus_nav(TARGET_PRIMARY_INPUT).down}, left: {settings_focus_nav(TARGET_PRIMARY_INPUT).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_PRIMARY_INPUT).up}, right: {focus_nav(TARGET_PRIMARY_INPUT).right}, down: {focus_nav(TARGET_PRIMARY_INPUT).down}, left: {focus_nav(TARGET_PRIMARY_INPUT).left} }
                     ),
                 ]
             ),
@@ -938,7 +974,7 @@ fn settings_left_column(
                         button_with_width(font.clone(), "Edit Mappings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
                         EditPrimaryMappingButton
                         UiFocusId { id: TARGET_EDIT_MAPPINGS }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPINGS).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {focus_nav(TARGET_EDIT_MAPPINGS).left} }
                     )
                 ]
             ),
@@ -957,7 +993,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, audio_config)
                         SettingsSelect { field: FIELD_AUDIO_PRESET }
                         UiFocusId { id: TARGET_AUDIO_PRESET }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_AUDIO_PRESET).up}, right: {settings_focus_nav(TARGET_AUDIO_PRESET).right}, down: {settings_focus_nav(TARGET_AUDIO_PRESET).down}, left: {settings_focus_nav(TARGET_AUDIO_PRESET).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_AUDIO_PRESET).up}, right: {focus_nav(TARGET_AUDIO_PRESET).right}, down: {focus_nav(TARGET_AUDIO_PRESET).down}, left: {focus_nav(TARGET_AUDIO_PRESET).left} }
                     ),
                 ]
             ),
@@ -972,19 +1008,19 @@ fn settings_left_column(
                         button(font.clone(), "Delete", theme, UiFocusNav::default())
                         DeleteAudioPresetButton
                         UiFocusId { id: TARGET_DELETE_MAPPING }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_DELETE_MAPPING).up}, right: {settings_focus_nav(TARGET_DELETE_MAPPING).right}, down: {settings_focus_nav(TARGET_DELETE_MAPPING).down}, left: {settings_focus_nav(TARGET_DELETE_MAPPING).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_DELETE_MAPPING).up}, right: {focus_nav(TARGET_DELETE_MAPPING).right}, down: {focus_nav(TARGET_DELETE_MAPPING).down}, left: {focus_nav(TARGET_DELETE_MAPPING).left} }
                     ),
                     (
                         button(font.clone(), "Edit", theme, UiFocusNav::default())
                         EditAudioPresetButton
                         UiFocusId { id: TARGET_EDIT_MAPPING }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_EDIT_MAPPING).up}, right: {settings_focus_nav(TARGET_EDIT_MAPPING).right}, down: {settings_focus_nav(TARGET_EDIT_MAPPING).down}, left: {settings_focus_nav(TARGET_EDIT_MAPPING).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPING).up}, right: {focus_nav(TARGET_EDIT_MAPPING).right}, down: {focus_nav(TARGET_EDIT_MAPPING).down}, left: {focus_nav(TARGET_EDIT_MAPPING).left} }
                     ),
                     (
                         button(font.clone(), "Create", theme, UiFocusNav::default())
                         CreateAudioPresetButton
                         UiFocusId { id: TARGET_CREATE_MAPPING }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_CREATE_MAPPING).up}, right: {settings_focus_nav(TARGET_CREATE_MAPPING).right}, down: {settings_focus_nav(TARGET_CREATE_MAPPING).down}, left: {settings_focus_nav(TARGET_CREATE_MAPPING).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_CREATE_MAPPING).up}, right: {focus_nav(TARGET_CREATE_MAPPING).right}, down: {focus_nav(TARGET_CREATE_MAPPING).down}, left: {focus_nav(TARGET_CREATE_MAPPING).left} }
                     ),
                 ]
             ),
@@ -1002,7 +1038,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
                         SettingsSelect { field: FIELD_UPSCALING_MODE }
                         UiFocusId { id: TARGET_UPSCALING }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_UPSCALING).up}, right: {settings_focus_nav(TARGET_UPSCALING).right}, down: {settings_focus_nav(TARGET_UPSCALING).down}, left: {settings_focus_nav(TARGET_UPSCALING).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_UPSCALING).up}, right: {focus_nav(TARGET_UPSCALING).right}, down: {focus_nav(TARGET_UPSCALING).down}, left: {focus_nav(TARGET_UPSCALING).left} }
                     ),
                 ]
             ),
@@ -1021,7 +1057,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
                         SettingsSelect { field: FIELD_EMULATION_MODEL }
                         UiFocusId { id: TARGET_MODEL }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_MODEL).up}, right: {settings_focus_nav(TARGET_MODEL).right}, down: {settings_focus_nav(TARGET_MODEL).down}, left: {settings_focus_nav(TARGET_MODEL).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_MODEL).up}, right: {focus_nav(TARGET_MODEL).right}, down: {focus_nav(TARGET_MODEL).down}, left: {focus_nav(TARGET_MODEL).left} }
                     ),
                 ]
             ),
@@ -1040,7 +1076,7 @@ fn settings_left_column(
                         multi_select(font.clone(), theme, yes_no_config(settings.sgb_overlay_enable as usize))
                         SettingsSelect { field: FIELD_SGB_OVERLAY_ENABLE }
                         UiFocusId { id: TARGET_SGB }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_SGB).up}, right: {settings_focus_nav(TARGET_SGB).right}, down: {settings_focus_nav(TARGET_SGB).down}, left: {settings_focus_nav(TARGET_SGB).left} }
+                        UiFocusNavIds { up: {focus_nav(TARGET_SGB).up}, right: {focus_nav(TARGET_SGB).right}, down: {focus_nav(TARGET_SGB).down}, left: {focus_nav(TARGET_SGB).left} }
                     ),
                 ]
             ),
@@ -1076,7 +1112,7 @@ fn settings_body(
                 }
                 ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
                 Children [
-                    settings_left_column(left_font, theme, settings, input_config, audio_config),
+                    settings_left_column(left_font, theme, settings, input_config, audio_config, settings_portrait_focus_nav),
                 ]
             ),
             (
@@ -1101,7 +1137,7 @@ fn settings_body(
                                 list_view(right_font.clone(), theme, provider_list_config(&providers))
                                 ProviderList
                                 UiFocusId { id: TARGET_PROVIDER_LIST }
-                                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_focus_nav(TARGET_PROVIDER_LIST).left} }
+                                UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).left} }
                             ),
                             (
                                 Node {
@@ -1115,25 +1151,25 @@ fn settings_body(
                                         button(right_font.clone(), "Sync", theme, UiFocusNav::default())
                                         ProviderSyncButton
                                         UiFocusId { id: TARGET_PROVIDER_SYNC }
-                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_focus_nav(TARGET_PROVIDER_SYNC).left} }
+                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).left} }
                                     ),
                                     (
                                         button(right_font.clone(), "Delete", theme, UiFocusNav::default())
                                         ProviderDeleteButton
                                         UiFocusId { id: TARGET_PROVIDER_DELETE }
-                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_focus_nav(TARGET_PROVIDER_DELETE).left} }
+                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).left} }
                                     ),
                                     (
                                         button(right_font.clone(), "Edit", theme, UiFocusNav::default())
                                         ProviderEditButton
                                         UiFocusId { id: TARGET_PROVIDER_EDIT }
-                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_focus_nav(TARGET_PROVIDER_EDIT).left} }
+                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).left} }
                                     ),
                                     (
                                         button(right_font, "Create", theme, UiFocusNav::default())
                                         ProviderCreateButton
                                         UiFocusId { id: TARGET_PROVIDER_CREATE }
-                                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_focus_nav(TARGET_PROVIDER_CREATE).left} }
+                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).left} }
                                     ),
                                 ]
                             ),
@@ -1175,7 +1211,7 @@ fn settings_landscape_body(
                         min_height: px(0.0),
                         thumb_height: 112.0,
                     },
-                    move |_| settings_left_column(left_font, theme, settings, input_config, audio_config)
+                    move |_| settings_left_column(left_font, theme, settings, input_config, audio_config, settings_focus_nav)
                 )
             ),
             (

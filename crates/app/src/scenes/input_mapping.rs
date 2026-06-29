@@ -35,7 +35,8 @@ use crate::ui_elements::interactions::{
     UiFocusNav, UiFocusNavIds, UiInputCapture, UiSchedule,
 };
 use crate::ui_elements::responsive::{
-    ResponsiveColumns, ResponsiveFieldRow, ResponsivePercentWidth, ResponsiveScreenPadding,
+    ResponsiveColumns, ResponsiveFieldRow, ResponsiveFocusNavIds, ResponsivePercentWidth,
+    ResponsiveScreenPadding,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
@@ -673,6 +674,7 @@ fn mapping_row(
     nav: UiFocusNavIds,
 ) -> impl Scene {
     let value = mapping_value_label(&mapping, action, false);
+    let portrait_nav = portrait_mapping_nav(target);
 
     bsn! {
         Node {
@@ -697,6 +699,10 @@ fn mapping_row(
                 MappingActionButton { action: {action} }
                 UiFocusId { id: target }
                 UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
+                ResponsiveFocusNavIds {
+                    landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
+                    portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
+                }
                 InitialFocus { enabled: {target == TARGET_DPAD_UP} }
                 DefaultFocusTarget
             )
@@ -751,6 +757,9 @@ fn controller_hero_panel(
     image: Handle<Image>,
     theme: ActiveTheme,
 ) -> impl Scene {
+    let nav = nav(UI_FOCUS_NONE, TARGET_QUIT_ROM, TARGET_A, UI_FOCUS_NONE);
+    let portrait_nav = portrait_mapping_nav(TARGET_RESET);
+
     bsn! {
         Node {
             width: percent(UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT),
@@ -772,7 +781,11 @@ fn controller_hero_panel(
                         button(font, "Reset Defaults", theme, UiFocusNav::default())
                         MappingResetButton
                         UiFocusId { id: TARGET_RESET }
-                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_QUIT_ROM, down: TARGET_A, left: UI_FOCUS_NONE }
+                        UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
+                        ResponsiveFocusNavIds {
+                            landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
+                            portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
+                        }
                     )
                 ]
             ),
@@ -1142,6 +1155,41 @@ fn right_nav(target: u16) -> UiFocusNavIds {
         TARGET_QUIT_APP => nav(TARGET_PAUSE, UI_FOCUS_NONE, UI_FOCUS_NONE, TARGET_SELECT),
         _ => nav(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
     }
+}
+
+fn portrait_mapping_nav(target: u16) -> UiFocusNavIds {
+    const ORDER: &[u16] = &[
+        TARGET_RESET,
+        TARGET_DPAD_UP,
+        TARGET_DPAD_DOWN,
+        TARGET_DPAD_LEFT,
+        TARGET_DPAD_RIGHT,
+        TARGET_A,
+        TARGET_B,
+        TARGET_START,
+        TARGET_SELECT,
+        TARGET_QUIT_ROM,
+        TARGET_RESET_ROM,
+        TARGET_SAVE_STATE,
+        TARGET_LOAD_STATE,
+        TARGET_SPEED_DOWN,
+        TARGET_SPEED_UP,
+        TARGET_PAUSE,
+        TARGET_QUIT_APP,
+    ];
+
+    let Some(index) = ORDER.iter().position(|id| *id == target) else {
+        return nav(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE);
+    };
+    nav(
+        index
+            .checked_sub(1)
+            .and_then(|previous| ORDER.get(previous).copied())
+            .unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+        ORDER.get(index + 1).copied().unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+    )
 }
 
 fn nav(up: u16, right: u16, down: u16, left: u16) -> UiFocusNavIds {

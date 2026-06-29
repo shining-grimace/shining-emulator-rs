@@ -30,8 +30,8 @@ use crate::ui_elements::interactions::{
 };
 use crate::ui_elements::list_view::{ListColumn, ListRow, ListViewConfig, list_view};
 use crate::ui_elements::responsive::{
-    ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveLandscapeOnly,
-    ResponsivePortraitOnly, ResponsiveScreenPadding,
+    ResponsiveButtonRow, ResponsiveColumns, ResponsiveFieldRow, ResponsiveFocusNavIds,
+    ResponsiveLandscapeOnly, ResponsivePortraitOnly, ResponsiveScreenPadding,
 };
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view, scroll_view};
 use crate::ui_elements::settings_header::settings_header;
@@ -422,6 +422,10 @@ fn left_panel(
                         CheckUpdatesButton
                         UiFocusId { id: TARGET_CHECK_UPDATES }
                         UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
+                        ResponsiveFocusNavIds {
+                            landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
+                            portrait: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_FILE_LIST, left: UI_FOCUS_NONE },
+                        }
                         InitialFocus { enabled: true }
                         DefaultFocusTarget
                     ),
@@ -446,6 +450,10 @@ fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) 
                 list_view(font.clone(), theme, file_list_config(&files))
                 UiFocusId { id: TARGET_FILE_LIST }
                 UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES }
+                ResponsiveFocusNavIds {
+                    landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES },
+                    portrait: UiFocusNavIds { up: TARGET_CHECK_UPDATES, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: UI_FOCUS_NONE },
+                }
             ),
             (
                 Node {
@@ -460,12 +468,20 @@ fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) 
                         DeleteSramButton
                         UiFocusId { id: TARGET_DELETE_SRAM }
                         UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES }
+                        ResponsiveFocusNavIds {
+                            landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES },
+                            portrait: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: TARGET_DELETE_ALL, left: UI_FOCUS_NONE },
+                        }
                     ),
                     (
                         button(font, "Delete All Files", theme, UiFocusNav::default())
                         DeleteAllFilesButton
                         UiFocusId { id: TARGET_DELETE_ALL }
                         UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM }
+                        ResponsiveFocusNavIds {
+                            landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM },
+                            portrait: UiFocusNavIds { up: TARGET_DELETE_SRAM, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
+                        }
                     ),
                 ]
             ),

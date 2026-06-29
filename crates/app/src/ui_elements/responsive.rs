@@ -41,6 +41,12 @@ pub struct ResponsiveFlexWidth {
     pub landscape: f32,
 }
 
+#[derive(Clone, Copy, Component, Debug, FromTemplate)]
+pub struct ResponsiveFocusNavIds {
+    pub landscape: UiFocusNavIds,
+    pub portrait: UiFocusNavIds,
+}
+
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct ResponsiveLandscapeOnly;
 
@@ -218,14 +224,23 @@ fn fill_portrait_width(node: &mut Node) {
 }
 
 fn rebind_visible_focus_nav(
+    windows: Query<&Window, With<PrimaryWindow>>,
     ids: Query<(Entity, &UiFocusId)>,
-    mut navs: Query<(&UiFocusNavIds, &mut UiFocusNav)>,
+    mut navs: Query<(
+        &UiFocusNavIds,
+        Option<&ResponsiveFocusNavIds>,
+        &mut UiFocusNav,
+    )>,
     nodes: Query<&Node>,
     parents: Query<&ChildOf>,
     focused: Query<Entity, With<FocusedUiElement>>,
     initial_focus: Query<(Entity, &InitialFocus), Without<DisabledUiElement>>,
     mut commands: Commands,
 ) {
+    let portrait = windows
+        .iter()
+        .next()
+        .is_some_and(|window| window.width() < window.height());
     let target_entities = ids
         .iter()
         .filter(|(entity, _)| entity_visible(*entity, &nodes, &parents))
@@ -241,7 +256,16 @@ fn rebind_visible_focus_nav(
             .unwrap_or(Entity::PLACEHOLDER)
     };
 
-    for (nav_ids, mut nav) in &mut navs {
+    for (nav_ids, responsive_nav_ids, mut nav) in &mut navs {
+        let nav_ids = responsive_nav_ids
+            .map(|responsive| {
+                if portrait {
+                    responsive.portrait
+                } else {
+                    responsive.landscape
+                }
+            })
+            .unwrap_or(*nav_ids);
         *nav = UiFocusNav {
             up: target(nav_ids.up),
             right: target(nav_ids.right),

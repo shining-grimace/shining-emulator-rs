@@ -39,9 +39,7 @@ use crate::ui_elements::list_view::{
     set_list_row_cells, virtual_list_content_height, virtual_list_rows, virtual_list_window,
 };
 use crate::ui_elements::multi_select::{MultiSelectConfig, multi_select};
-use crate::ui_elements::responsive::{
-    ResponsiveColumns, ResponsiveFlexWidth, ResponsiveScreenPadding,
-};
+use crate::ui_elements::responsive::{ResponsiveColumns, ResponsiveScreenPadding};
 use crate::ui_elements::scroll_view::{ScrollViewConfig, flow_scroll_view};
 
 const HOME_ROM_COLUMN_COUNT: usize = 5;
@@ -50,6 +48,7 @@ const HOME_ROM_COMPACT_LIST_WIDTH: f32 = 800.0;
 const HOME_ROM_COMPACT_NAME_WIDTH: f32 = 64.0;
 const HOME_ROM_COMPACT_LAST_PLAYED_WIDTH: f32 = 36.0;
 const HOME_CONTENT_MAX_WIDTH: f32 = 2200.0;
+const HOME_PORTRAIT_SIDE_PANEL_HEIGHT: f32 = 128.0;
 const HOME_VIRTUAL_ROW_POOL_SIZE: usize = 16;
 const HOME_POPUP_ESTIMATED_HEIGHT: f32 = 300.0;
 
@@ -63,6 +62,9 @@ struct SettingsButton;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct HomeRomList;
+
+#[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
+struct HomeRomListColumn;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 struct PrimarySortSelect;
@@ -401,7 +403,7 @@ fn home_scene(
                                     flex_direction: FlexDirection::Column,
                                     row_gap: px(UI_FIELD_GAP),
                                 }
-                                ResponsiveFlexWidth { landscape: 1.0 }
+                                HomeRomListColumn
                                 Children [
                                     (
                                         #RomList
@@ -445,6 +447,7 @@ fn home_scene(
 fn apply_home_side_panel_layout(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut panels: Query<&mut Node, With<HomeSidePanelSlot>>,
+    mut list_columns: Query<&mut Node, (With<HomeRomListColumn>, Without<HomeSidePanelSlot>)>,
 ) {
     let Some(window) = windows.iter().next() else {
         return;
@@ -455,14 +458,28 @@ fn apply_home_side_panel_layout(
         node.min_height = px(0.0);
         if portrait {
             node.width = percent(100);
-            node.height = px(0.0);
-            node.flex_grow = 1.0;
-            node.flex_shrink = 1.0;
+            node.height = px(HOME_PORTRAIT_SIDE_PANEL_HEIGHT);
+            node.flex_grow = 0.0;
+            node.flex_shrink = 0.0;
         } else {
             node.width = px(UI_SIDEBAR_WIDTH);
             node.height = percent(100);
             node.flex_grow = 0.0;
             node.flex_shrink = 0.0;
+        }
+    }
+
+    for mut node in &mut list_columns {
+        node.min_height = px(0.0);
+        node.min_width = px(0.0);
+        node.flex_grow = 1.0;
+        node.flex_shrink = 1.0;
+        if portrait {
+            node.width = percent(100);
+            node.height = px(0.0);
+        } else {
+            node.width = px(0.0);
+            node.height = percent(100);
         }
     }
 }

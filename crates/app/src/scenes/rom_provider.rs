@@ -1,6 +1,7 @@
 use bevy::math::Rect;
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task, futures::check_ready};
+use bevy::window::PrimaryWindow;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
@@ -284,6 +285,7 @@ fn reset_provider_test_connection(mut state: ResMut<ProviderTestConnectionState>
 }
 
 fn sync_provider_conditional_sections(
+    windows: Query<&Window, With<PrimaryWindow>>,
     selects: Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
     mut nodes: ParamSet<(
         Query<&Node>,
@@ -292,6 +294,10 @@ fn sync_provider_conditional_sections(
     parents: Query<&ChildOf>,
     mut navs: Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
 ) {
+    let portrait = windows
+        .iter()
+        .next()
+        .is_some_and(|window| window.width() < window.height());
     let (provider_type, pagination_enabled) = {
         let node_query = nodes.p0();
         (
@@ -313,6 +319,7 @@ fn sync_provider_conditional_sections(
     apply_provider_focus_nav(
         provider_type,
         pagination_enabled,
+        portrait,
         &nodes.p0(),
         &parents,
         &mut navs,
@@ -330,6 +337,7 @@ fn display_for(visible: bool) -> Display {
 fn apply_provider_focus_nav(
     provider_type: usize,
     pagination_enabled: bool,
+    portrait: bool,
     nodes: &Query<&Node>,
     parents: &Query<&ChildOf>,
     navs: &mut Query<(Entity, &UiFocusId, &mut UiFocusNav)>,
@@ -350,7 +358,8 @@ fn apply_provider_focus_nav(
     };
 
     for (_, focus_id, mut nav) in navs.iter_mut() {
-        let nav_ids = provider_focus_nav_for(focus_id.id, provider_type, pagination_enabled);
+        let nav_ids =
+            provider_focus_nav_for(focus_id.id, provider_type, pagination_enabled, portrait);
         *nav = UiFocusNav {
             up: target(nav_ids.up),
             right: target(nav_ids.right),
@@ -364,7 +373,12 @@ fn provider_focus_nav_for(
     id: u16,
     provider_type: usize,
     pagination_enabled: bool,
+    portrait: bool,
 ) -> UiFocusNavIds {
+    if portrait {
+        return provider_portrait_focus_nav_for(id, provider_type, pagination_enabled);
+    }
+
     let api_target = if provider_type == 2 {
         TARGET_API_URL
     } else {
@@ -478,6 +492,52 @@ fn provider_focus_nav_for(
         }
         _ => focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE),
     }
+}
+
+fn provider_portrait_focus_nav_for(
+    id: u16,
+    provider_type: usize,
+    pagination_enabled: bool,
+) -> UiFocusNavIds {
+    let mut order = vec![TARGET_NAME, TARGET_STATUS, TARGET_PRIORITY, TARGET_TYPE];
+    match provider_type {
+        0 => order.push(TARGET_LOCAL_DIR),
+        1 => order.push(TARGET_REMOTE_FILE_URL),
+        _ => {}
+    }
+    order.extend([TARGET_TEST, TARGET_SAVE]);
+    if provider_type == 2 {
+        order.extend([
+            TARGET_API_URL,
+            TARGET_DOWNLOAD_URL,
+            TARGET_ITEMS_PATH,
+            TARGET_PAGINATION,
+            TARGET_MAX_PAGES,
+        ]);
+        if pagination_enabled {
+            order.extend([TARGET_PAGE_COUNT, TARGET_PAGE_PARAM]);
+        }
+        order.extend([
+            TARGET_ID_PATH,
+            TARGET_FILENAME_PATH,
+            TARGET_NAME_PATH,
+            TARGET_AUTHOR_PATH,
+            TARGET_LICENSE_PATH,
+        ]);
+    }
+
+    let Some(index) = order.iter().position(|target| *target == id) else {
+        return focus_nav_ids(UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE, UI_FOCUS_NONE);
+    };
+    focus_nav_ids(
+        index
+            .checked_sub(1)
+            .and_then(|previous| order.get(previous).copied())
+            .unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+        order.get(index + 1).copied().unwrap_or(UI_FOCUS_NONE),
+        UI_FOCUS_NONE,
+    )
 }
 
 fn rom_provider_scene(
