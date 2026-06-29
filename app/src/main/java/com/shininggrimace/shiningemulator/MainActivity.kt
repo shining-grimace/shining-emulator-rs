@@ -3,7 +3,9 @@ package com.shininggrimace.shiningemulator
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
+import android.hardware.input.InputManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
@@ -11,7 +13,6 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.util.Base64
-import android.hardware.input.InputManager
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -92,6 +93,11 @@ class MainActivity: GameActivity(), NativeControllerReporter {
         if (hasFocus) {
             hideSystemUi()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        hideSystemUi()
     }
 
     override fun onPause() {

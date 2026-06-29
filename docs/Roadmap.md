@@ -138,7 +138,6 @@ Known issues:
 - Audio keeps running, holding the current notes, when the game is paused
 - Audio needs to be tweaked to match a good reference video
 - On Android, emulation seems to keep running when the app gets backgrounded
-- On Android, the app softlocks on a blank screen on screen rotation
 - On mobile, focus doesn't move down columns in Settings screens (it still abides by focus movements between elements that are designed for the landscape view)
 - On mobile, the ROM list should take up most of the vertical space of the Home screen
 - On settings screens with multiple drop-down select elements, opening one while another is already open doesn't close the already-open one
