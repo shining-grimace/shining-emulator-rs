@@ -11,6 +11,9 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.util.Base64
+import android.hardware.input.InputManager
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -18,11 +21,16 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.androidgamesdk.GameActivity
+import com.shininggrimace.shiningemulator.interfaces.NativeControllerReporter
+import com.shininggrimace.shiningemulator.managers.ControllerManager
+import com.shininggrimace.shiningemulator.managers.ControllerManager.ensureAllControllersConnected
+import com.shininggrimace.shiningemulator.managers.ControllerManager.handleControllerKeyEvent
+import com.shininggrimace.shiningemulator.managers.ControllerManager.handleControllerMotionEvent
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
-class MainActivity : GameActivity() {
+class MainActivity: GameActivity(), NativeControllerReporter {
     companion object {
         init {
             System.loadLibrary("shiningemulator")
@@ -62,10 +70,21 @@ class MainActivity : GameActivity() {
     private external fun nativeSetActivity(activity: MainActivity)
     private external fun nativeOnFilePickerResult(requestId: Long, uri: String?)
     private external fun nativeOnTextInputChanged(value: String?, cursor: Int)
+    private external fun nativeOnControllerConnected(
+        deviceId: Int,
+        name: String?,
+        vendorId: Int,
+        productId: Int
+    )
+    private external fun nativeOnControllerDisconnected(deviceId: Int)
+    private external fun nativeOnControllerButtonChanged(deviceId: Int, button: Int, value: Float)
+    private external fun nativeOnControllerAxisChanged(deviceId: Int, axis: Int, value: Float)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nativeSetActivity(this)
+        inputManager().registerInputDeviceListener(ControllerManager.deviceListener(this), null)
+        ensureAllControllersConnected()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -78,6 +97,46 @@ class MainActivity : GameActivity() {
     override fun onPause() {
         hideSoftwareKeyboard()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        inputManager().unregisterInputDeviceListener(ControllerManager.deviceListener(this))
+        super.onDestroy()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (handleControllerKeyEvent(event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (handleControllerMotionEvent(event)) {
+            return true
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onControllerConnected(
+        deviceId: Int,
+        name: String?,
+        vendorId: Int,
+        productId: Int
+    ) {
+        nativeOnControllerConnected(deviceId, name, vendorId, productId)
+    }
+
+    override fun onControllerDisconnected(deviceId: Int) {
+        nativeOnControllerDisconnected(deviceId)
+    }
+
+    override fun onControllerButtonChanged(deviceId: Int, button: Int, value: Float) {
+        nativeOnControllerButtonChanged(deviceId, button, value)
+    }
+
+    override fun onControllerAxisChanged(deviceId: Int, axis: Int, value: Float) {
+        nativeOnControllerAxisChanged(deviceId, axis, value)
     }
 
     @Suppress("unused")
@@ -189,6 +248,10 @@ class MainActivity : GameActivity() {
             input.clearFocus()
             hideSystemUi()
         }
+    }
+
+    private fun inputManager(): InputManager {
+        return getSystemService(INPUT_SERVICE) as InputManager
     }
 
     private fun hideSystemUi() {

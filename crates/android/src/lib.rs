@@ -2,10 +2,15 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{LazyLock, Mutex};
 
 use base64::Engine;
+use bevy::input::InputSystems;
+use bevy::input::gamepad::{
+    GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent,
+    RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent, RawGamepadEvent,
+};
 use bevy::{prelude::*, winit::WinitSettings};
 use jni::errors::ThrowRuntimeExAndDefault;
 use jni::objects::{Global, JObject, JString, JValue};
-use jni::sys::{jint, jlong};
+use jni::sys::{jfloat, jint, jlong};
 use jni::{EnvUnowned, JavaVM, jni_sig, jni_str};
 
 struct MobilePlugin;
@@ -29,6 +34,60 @@ struct AndroidFilePickerResult {
 struct AndroidTextInputChange {
     value: String,
     cursor_utf16: usize,
+}
+
+#[derive(Clone, Debug)]
+enum AndroidControllerEvent {
+    Connected {
+        device_id: i32,
+        name: String,
+        vendor_id: Option<u16>,
+        product_id: Option<u16>,
+    },
+    Disconnected {
+        device_id: i32,
+    },
+    ButtonChanged {
+        device_id: i32,
+        button: AndroidGamepadButton,
+        value: f32,
+    },
+    AxisChanged {
+        device_id: i32,
+        axis: AndroidGamepadAxis,
+        value: f32,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+enum AndroidGamepadButton {
+    South,
+    East,
+    North,
+    West,
+    C,
+    Z,
+    LeftTrigger,
+    LeftTrigger2,
+    RightTrigger,
+    RightTrigger2,
+    Select,
+    Start,
+    Mode,
+    LeftThumb,
+    RightThumb,
+    DPadUp,
+    DPadDown,
+    DPadLeft,
+    DPadRight,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum AndroidGamepadAxis {
+    LeftStickX,
+    LeftStickY,
+    RightStickX,
+    RightStickY,
 }
 
 #[derive(serde::Deserialize)]
@@ -66,6 +125,11 @@ struct AndroidTextInputBridgeState {
     applied_from_android: Option<AndroidTextInputStateSnapshot>,
 }
 
+#[derive(Default, Resource)]
+struct AndroidControllerBridgeState {
+    devices: HashMap<i32, Entity>,
+}
+
 static ANDROID_ACTIVITY: LazyLock<Mutex<Option<AndroidActivity>>> =
     LazyLock::new(|| Mutex::new(None));
 
@@ -75,12 +139,20 @@ static ANDROID_FILE_PICKER_RESULTS: LazyLock<Mutex<VecDeque<AndroidFilePickerRes
 static ANDROID_TEXT_INPUT_CHANGES: LazyLock<Mutex<VecDeque<AndroidTextInputChange>>> =
     LazyLock::new(|| Mutex::new(VecDeque::new()));
 
+static ANDROID_CONTROLLER_EVENTS: LazyLock<Mutex<VecDeque<AndroidControllerEvent>>> =
+    LazyLock::new(|| Mutex::new(VecDeque::new()));
+
 impl Plugin for MobilePlugin {
     // Sets 60 fps; note this can be changed at runtime if needed
     fn build(&self, app: &mut App) {
         app::platform::set_android_local_directory_reader(read_android_local_directory_roms);
         app.insert_resource(WinitSettings::mobile())
             .init_resource::<AndroidTextInputBridgeState>()
+            .init_resource::<AndroidControllerBridgeState>()
+            .add_systems(
+                PreUpdate,
+                forward_android_controller_events.before(InputSystems),
+            )
             .add_systems(
                 Update,
                 (
@@ -164,6 +236,79 @@ pub extern "system" fn Java_com_shininggrimace_shiningemulator_MainActivity_nati
     .resolve::<ThrowRuntimeExAndDefault>();
 }
 
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_shininggrimace_shiningemulator_MainActivity_nativeOnControllerConnected<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _activity: JObject<'local>,
+    device_id: jint,
+    name: JString<'local>,
+    vendor_id: jint,
+    product_id: jint,
+) {
+    env.with_env(|env| -> jni::errors::Result<()> {
+        let name = if name.is_null() {
+            format!("Android Controller {device_id}")
+        } else {
+            name.try_to_string(env)?
+        };
+        push_android_controller_event(AndroidControllerEvent::Connected {
+            device_id,
+            name,
+            vendor_id: android_usb_id(vendor_id),
+            product_id: android_usb_id(product_id),
+        });
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_shininggrimace_shiningemulator_MainActivity_nativeOnControllerDisconnected(
+    _env: EnvUnowned<'_>,
+    _activity: JObject<'_>,
+    device_id: jint,
+) {
+    push_android_controller_event(AndroidControllerEvent::Disconnected { device_id });
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_shininggrimace_shiningemulator_MainActivity_nativeOnControllerButtonChanged(
+    _env: EnvUnowned<'_>,
+    _activity: JObject<'_>,
+    device_id: jint,
+    button: jint,
+    value: jfloat,
+) {
+    let Some(button) = AndroidGamepadButton::from_jint(button) else {
+        return;
+    };
+    push_android_controller_event(AndroidControllerEvent::ButtonChanged {
+        device_id,
+        button,
+        value,
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_shininggrimace_shiningemulator_MainActivity_nativeOnControllerAxisChanged(
+    _env: EnvUnowned<'_>,
+    _activity: JObject<'_>,
+    device_id: jint,
+    axis: jint,
+    value: jfloat,
+) {
+    let Some(axis) = AndroidGamepadAxis::from_jint(axis) else {
+        return;
+    };
+    push_android_controller_event(AndroidControllerEvent::AxisChanged {
+        device_id,
+        axis,
+        value,
+    });
+}
+
 fn read_android_local_directory_roms(
     uri: &str,
 ) -> Result<Vec<app::platform::AndroidLocalDirectoryRomFile>, String> {
@@ -206,6 +351,118 @@ fn read_android_local_directory_roms_json(uri: &str) -> Result<String, String> {
             json.try_to_string(env)
         })
         .map_err(|error| format!("Android content URI could not be read: {error}"))
+}
+
+fn forward_android_controller_events(
+    mut commands: Commands,
+    mut state: ResMut<AndroidControllerBridgeState>,
+    mut raw_events: MessageWriter<RawGamepadEvent>,
+    mut connection_events: MessageWriter<GamepadConnectionEvent>,
+    mut raw_button_events: MessageWriter<RawGamepadButtonChangedEvent>,
+    mut raw_axis_events: MessageWriter<RawGamepadAxisChangedEvent>,
+) {
+    for event in drain_android_controller_events() {
+        match event {
+            AndroidControllerEvent::Connected {
+                device_id,
+                name,
+                vendor_id,
+                product_id,
+            } => {
+                if state.devices.contains_key(&device_id) {
+                    continue;
+                }
+
+                let entity = commands.spawn_empty().id();
+                state.devices.insert(device_id, entity);
+                let event = GamepadConnectionEvent::new(
+                    entity,
+                    GamepadConnection::Connected {
+                        name,
+                        vendor_id,
+                        product_id,
+                    },
+                );
+                raw_events.write(event.clone().into());
+                connection_events.write(event);
+            }
+            AndroidControllerEvent::Disconnected { device_id } => {
+                let Some(entity) = state.devices.remove(&device_id) else {
+                    continue;
+                };
+                let event = GamepadConnectionEvent::new(entity, GamepadConnection::Disconnected);
+                raw_events.write(event.clone().into());
+                connection_events.write(event);
+            }
+            AndroidControllerEvent::ButtonChanged {
+                device_id,
+                button,
+                value,
+            } => {
+                let Some(entity) = android_controller_entity(
+                    &mut commands,
+                    &mut state,
+                    device_id,
+                    &mut raw_events,
+                    &mut connection_events,
+                ) else {
+                    continue;
+                };
+                let raw_button = RawGamepadButtonChangedEvent::new(
+                    entity,
+                    button.into(),
+                    clamp_button_value(value),
+                );
+                raw_events.write(raw_button.into());
+                raw_button_events.write(raw_button);
+            }
+            AndroidControllerEvent::AxisChanged {
+                device_id,
+                axis,
+                value,
+            } => {
+                let Some(entity) = android_controller_entity(
+                    &mut commands,
+                    &mut state,
+                    device_id,
+                    &mut raw_events,
+                    &mut connection_events,
+                ) else {
+                    continue;
+                };
+                let raw_axis =
+                    RawGamepadAxisChangedEvent::new(entity, axis.into(), clamp_axis_value(value));
+                raw_events.write(raw_axis.into());
+                raw_axis_events.write(raw_axis);
+            }
+        }
+    }
+}
+
+fn android_controller_entity(
+    commands: &mut Commands,
+    state: &mut AndroidControllerBridgeState,
+    device_id: i32,
+    raw_events: &mut MessageWriter<RawGamepadEvent>,
+    connection_events: &mut MessageWriter<GamepadConnectionEvent>,
+) -> Option<Entity> {
+    if let Some(entity) = state.devices.get(&device_id) {
+        return Some(*entity);
+    }
+
+    let entity = commands.spawn_empty().id();
+    state.devices.insert(device_id, entity);
+    let event = GamepadConnectionEvent::new(
+        entity,
+        GamepadConnection::Connected {
+            name: format!("Android Controller {device_id}"),
+            vendor_id: None,
+            product_id: None,
+        },
+    );
+    raw_events.write(event.clone().into());
+    connection_events.write(event);
+    Some(entity)
 }
 
 fn open_file_picker_requests(
@@ -455,6 +712,42 @@ fn drain_android_text_input_changes() -> Vec<AndroidTextInputChange> {
     changes.drain(..).collect()
 }
 
+fn push_android_controller_event(event: AndroidControllerEvent) {
+    let Ok(mut events) = ANDROID_CONTROLLER_EVENTS.lock() else {
+        eprintln!("failed to lock Android controller event queue");
+        return;
+    };
+    events.push_back(event);
+}
+
+fn drain_android_controller_events() -> Vec<AndroidControllerEvent> {
+    let Ok(mut events) = ANDROID_CONTROLLER_EVENTS.lock() else {
+        eprintln!("failed to lock Android controller event queue");
+        return Vec::new();
+    };
+    events.drain(..).collect()
+}
+
+fn android_usb_id(value: i32) -> Option<u16> {
+    u16::try_from(value).ok().filter(|value| *value != 0)
+}
+
+fn clamp_button_value(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn clamp_axis_value(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(-1.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
 fn sanitize_android_text_change(value: &str, cursor_utf16: usize) -> (String, usize) {
     let cursor_byte = byte_cursor_for_utf16_cursor(value, cursor_utf16);
     let before_cursor = sanitize_single_line_text(&value[..cursor_byte]);
@@ -504,4 +797,80 @@ fn byte_cursor_for_utf16_cursor(value: &str, cursor_utf16: usize) -> usize {
 fn utf16_cursor_for_byte_cursor(value: &str, cursor: usize) -> usize {
     let cursor = clamp_cursor_to_char_boundary(value, cursor);
     value[..cursor].encode_utf16().count()
+}
+
+impl AndroidGamepadButton {
+    fn from_jint(value: jint) -> Option<Self> {
+        match value {
+            0 => Some(Self::South),
+            1 => Some(Self::East),
+            2 => Some(Self::North),
+            3 => Some(Self::West),
+            4 => Some(Self::C),
+            5 => Some(Self::Z),
+            6 => Some(Self::LeftTrigger),
+            7 => Some(Self::LeftTrigger2),
+            8 => Some(Self::RightTrigger),
+            9 => Some(Self::RightTrigger2),
+            10 => Some(Self::Select),
+            11 => Some(Self::Start),
+            12 => Some(Self::Mode),
+            13 => Some(Self::LeftThumb),
+            14 => Some(Self::RightThumb),
+            15 => Some(Self::DPadUp),
+            16 => Some(Self::DPadDown),
+            17 => Some(Self::DPadLeft),
+            18 => Some(Self::DPadRight),
+            _ => None,
+        }
+    }
+}
+
+impl From<AndroidGamepadButton> for GamepadButton {
+    fn from(value: AndroidGamepadButton) -> Self {
+        match value {
+            AndroidGamepadButton::South => GamepadButton::South,
+            AndroidGamepadButton::East => GamepadButton::East,
+            AndroidGamepadButton::North => GamepadButton::North,
+            AndroidGamepadButton::West => GamepadButton::West,
+            AndroidGamepadButton::C => GamepadButton::C,
+            AndroidGamepadButton::Z => GamepadButton::Z,
+            AndroidGamepadButton::LeftTrigger => GamepadButton::LeftTrigger,
+            AndroidGamepadButton::LeftTrigger2 => GamepadButton::LeftTrigger2,
+            AndroidGamepadButton::RightTrigger => GamepadButton::RightTrigger,
+            AndroidGamepadButton::RightTrigger2 => GamepadButton::RightTrigger2,
+            AndroidGamepadButton::Select => GamepadButton::Select,
+            AndroidGamepadButton::Start => GamepadButton::Start,
+            AndroidGamepadButton::Mode => GamepadButton::Mode,
+            AndroidGamepadButton::LeftThumb => GamepadButton::LeftThumb,
+            AndroidGamepadButton::RightThumb => GamepadButton::RightThumb,
+            AndroidGamepadButton::DPadUp => GamepadButton::DPadUp,
+            AndroidGamepadButton::DPadDown => GamepadButton::DPadDown,
+            AndroidGamepadButton::DPadLeft => GamepadButton::DPadLeft,
+            AndroidGamepadButton::DPadRight => GamepadButton::DPadRight,
+        }
+    }
+}
+
+impl AndroidGamepadAxis {
+    fn from_jint(value: jint) -> Option<Self> {
+        match value {
+            0 => Some(Self::LeftStickX),
+            1 => Some(Self::LeftStickY),
+            2 => Some(Self::RightStickX),
+            3 => Some(Self::RightStickY),
+            _ => None,
+        }
+    }
+}
+
+impl From<AndroidGamepadAxis> for GamepadAxis {
+    fn from(value: AndroidGamepadAxis) -> Self {
+        match value {
+            AndroidGamepadAxis::LeftStickX => GamepadAxis::LeftStickX,
+            AndroidGamepadAxis::LeftStickY => GamepadAxis::LeftStickY,
+            AndroidGamepadAxis::RightStickX => GamepadAxis::RightStickX,
+            AndroidGamepadAxis::RightStickY => GamepadAxis::RightStickY,
+        }
+    }
 }

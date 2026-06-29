@@ -137,10 +137,11 @@ Known issues:
 - "rhythm-land" reports that this is an inaccurate emulator
 - Audio keeps running, holding the current notes, when the game is paused
 - Audio needs to be tweaked to match a good reference video
-- On Android, the menu music shows audio channels that are not a well-volume-balanced mix
 - On Android, emulation seems to keep running when the app gets backgrounded
-- On Android, the app goes blank on screen rotation
-- Controllers haven't been tested on Android
+- On Android, the app softlocks on a blank screen on screen rotation
+- On mobile, focus doesn't move down columns in Settings screens (it still abides by focus movements between elements that are designed for the landscape view)
+- On mobile, the ROM list should take up most of the vertical space of the Home screen
+- On settings screens with multiple drop-down select elements, opening one while another is already open doesn't close the already-open one
 - Windows hasn't been tested
 
 # Stage 9 - Polish & Embellishments

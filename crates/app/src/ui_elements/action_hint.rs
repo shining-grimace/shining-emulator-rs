@@ -373,6 +373,8 @@ fn controller_action_key_hint(
     let label = controller_key_id_label(key_id);
     if label.is_empty() {
         icon_only_hint(controller_icon_rect(key_id), ActionHintTint::Primary)
+    } else if is_controller_face_button(key_id) {
+        labelled_generic_button_hint(label)
     } else {
         ActionKeyHint {
             label,
@@ -382,6 +384,13 @@ fn controller_action_key_hint(
             foreground_tint: ActionHintTint::Primary,
         }
     }
+}
+
+fn is_controller_face_button(key_id: InputKeyId) -> bool {
+    matches!(
+        key_id,
+        InputKeyId::South | InputKeyId::East | InputKeyId::North | InputKeyId::West
+    )
 }
 
 fn key_id_label(key_id: InputKeyId) -> String {
@@ -440,6 +449,10 @@ fn key_id_label(key_id: InputKeyId) -> String {
 
 fn controller_key_id_label(key_id: InputKeyId) -> String {
     match key_id {
+        InputKeyId::South => "A",
+        InputKeyId::East => "B",
+        InputKeyId::North => "Y",
+        InputKeyId::West => "X",
         InputKeyId::LeftTrigger => "LB",
         InputKeyId::RightTrigger => "RB",
         InputKeyId::LeftTrigger2 => "LT",
@@ -488,32 +501,31 @@ fn platform_face_button_hint(
 ) -> Option<ActionKeyHint> {
     let platform = mapping
         .and_then(|mapping| mapping.controller_model_id.as_deref())
-        .map(controller_button_platform)
-        .unwrap_or(ControllerButtonPlatform::Xbox);
+        .and_then(controller_button_platform);
 
     match (platform, key_id) {
-        (ControllerButtonPlatform::Xbox, InputKeyId::South) => {
+        (Some(ControllerButtonPlatform::Xbox), InputKeyId::South) => {
             Some(platform_button_hint(xbox_button_a_rect()))
         }
-        (ControllerButtonPlatform::Xbox, InputKeyId::East) => {
+        (Some(ControllerButtonPlatform::Xbox), InputKeyId::East) => {
             Some(platform_button_hint(xbox_button_b_rect()))
         }
-        (ControllerButtonPlatform::Xbox, InputKeyId::North) => {
+        (Some(ControllerButtonPlatform::Xbox), InputKeyId::North) => {
             Some(platform_button_hint(xbox_button_y_rect()))
         }
-        (ControllerButtonPlatform::Xbox, InputKeyId::West) => {
+        (Some(ControllerButtonPlatform::Xbox), InputKeyId::West) => {
             Some(platform_button_hint(xbox_button_x_rect()))
         }
-        (ControllerButtonPlatform::PlayStation, InputKeyId::South) => {
+        (Some(ControllerButtonPlatform::PlayStation), InputKeyId::South) => {
             Some(platform_button_hint(playstation_button_cross_rect()))
         }
-        (ControllerButtonPlatform::PlayStation, InputKeyId::East) => {
+        (Some(ControllerButtonPlatform::PlayStation), InputKeyId::East) => {
             Some(platform_button_hint(playstation_button_circle_rect()))
         }
-        (ControllerButtonPlatform::PlayStation, InputKeyId::North) => {
+        (Some(ControllerButtonPlatform::PlayStation), InputKeyId::North) => {
             Some(platform_button_hint(playstation_button_triangle_rect()))
         }
-        (ControllerButtonPlatform::PlayStation, InputKeyId::West) => {
+        (Some(ControllerButtonPlatform::PlayStation), InputKeyId::West) => {
             Some(platform_button_hint(playstation_button_square_rect()))
         }
         _ => None,
@@ -536,7 +548,7 @@ enum ControllerButtonPlatform {
     PlayStation,
 }
 
-fn controller_button_platform(model_id: &str) -> ControllerButtonPlatform {
+fn controller_button_platform(model_id: &str) -> Option<ControllerButtonPlatform> {
     let lower = model_id.to_ascii_lowercase();
     if lower.contains("playstation")
         || lower.contains("dualshock")
@@ -544,9 +556,16 @@ fn controller_button_platform(model_id: &str) -> ControllerButtonPlatform {
         || lower.contains("wireless controller")
         || lower.contains("sony")
     {
-        ControllerButtonPlatform::PlayStation
+        Some(ControllerButtonPlatform::PlayStation)
+    } else if lower.contains("xbox")
+        || lower.contains("x-box")
+        || lower.contains("xinput")
+        || lower.contains("microsoft")
+        || lower.starts_with("045e:")
+    {
+        Some(ControllerButtonPlatform::Xbox)
     } else {
-        ControllerButtonPlatform::Xbox
+        None
     }
 }
 
@@ -701,7 +720,13 @@ mod tests {
 
     #[test]
     fn xbox_face_button_hints_use_tinted_circle_background_and_platform_icon() {
-        let hint = controller_action_key_hint(None, InputKeyId::West);
+        let mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Controller,
+            controller_model_id: Some("045e:028e:Xbox 360 Controller".to_string()),
+            map: Vec::new(),
+        };
+
+        let hint = controller_action_key_hint(Some(&mapping), InputKeyId::West);
 
         assert!(hint.label.is_empty());
         assert_eq!(hint.background_rect, generic_button_rect());
@@ -723,6 +748,22 @@ mod tests {
         assert_eq!(hint.background_rect, generic_button_rect());
         assert_eq!(hint.background_tint, ActionHintTint::Primary);
         assert_eq!(hint.foreground_rect, Some(playstation_button_cross_rect()));
+    }
+
+    #[test]
+    fn unknown_controller_face_button_hints_use_labelled_generic_button() {
+        let mapping = InputDeviceMapping {
+            r#type: InputDeviceType::Controller,
+            controller_model_id: Some("Gamesir Controller".to_string()),
+            map: Vec::new(),
+        };
+
+        let hint = controller_action_key_hint(Some(&mapping), InputKeyId::North);
+
+        assert_eq!(hint.label, "Y");
+        assert_eq!(hint.background_rect, generic_button_rect());
+        assert_eq!(hint.background_tint, ActionHintTint::Primary);
+        assert!(hint.foreground_rect.is_none());
     }
 
     #[test]
