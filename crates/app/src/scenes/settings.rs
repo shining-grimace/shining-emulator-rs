@@ -52,6 +52,7 @@ const FIELD_UPSCALING_MODE: u8 = 3;
 const FIELD_FONT_SIZE: u8 = 4;
 const FIELD_UI_THEME: u8 = 5;
 const FIELD_AUDIO_PRESET: u8 = 6;
+const FIELD_GAME_AUDIO_VOLUME: u8 = 7;
 const FIELD_PRIMARY_INPUT: u8 = 255;
 
 const EMULATION_MODEL_BEST_FOR_ROM: u8 = 0;
@@ -70,6 +71,7 @@ const TARGET_AUDIO_PRESET: u16 = 8;
 const TARGET_DELETE_MAPPING: u16 = 9;
 const TARGET_EDIT_MAPPING: u16 = 10;
 const TARGET_CREATE_MAPPING: u16 = 11;
+const TARGET_GAME_AUDIO_VOLUME: u16 = 12;
 const TARGET_PROVIDER_LIST: u16 = 15;
 const TARGET_PROVIDER_SYNC: u16 = 16;
 const TARGET_PROVIDER_DELETE: u16 = 17;
@@ -192,6 +194,7 @@ fn save_settings_select_on_activation(
     let value = match settings_select.field {
         FIELD_AUDIO_PRESET => selected_audio_preset_number(&storage, ui_select.selected),
         FIELD_EMULATION_MODEL => selected_emulation_model_value(ui_select.selected),
+        FIELD_GAME_AUDIO_VOLUME => selected_game_audio_volume(ui_select.selected as u8),
         _ => ui_select.selected as u8,
     };
     if settings_select.field == FIELD_PRIMARY_INPUT {
@@ -212,6 +215,7 @@ fn save_settings_select_on_activation(
         FIELD_FONT_SIZE => storage.data.settings.font_size,
         FIELD_UI_THEME => storage.data.settings.ui_theme,
         FIELD_AUDIO_PRESET => storage.data.settings.audio_preset,
+        FIELD_GAME_AUDIO_VOLUME => storage.data.settings.game_audio_volume,
         _ => return,
     };
     if previous_value == value {
@@ -226,6 +230,7 @@ fn save_settings_select_on_activation(
         FIELD_FONT_SIZE => storage.data.settings.font_size = value,
         FIELD_UI_THEME => storage.data.settings.ui_theme = value,
         FIELD_AUDIO_PRESET => storage.data.settings.audio_preset = value.min(9),
+        FIELD_GAME_AUDIO_VOLUME => storage.data.settings.game_audio_volume = value,
         _ => return,
     }
 
@@ -718,20 +723,26 @@ fn settings_focus_nav(id: u16) -> UiFocusNavIds {
         TARGET_DELETE_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_EDIT_MAPPING,
-            TARGET_UPSCALING,
+            TARGET_GAME_AUDIO_VOLUME,
             UI_FOCUS_NONE,
         ),
         TARGET_EDIT_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_CREATE_MAPPING,
-            TARGET_UPSCALING,
+            TARGET_GAME_AUDIO_VOLUME,
             TARGET_DELETE_MAPPING,
         ),
         TARGET_CREATE_MAPPING => focus_nav_ids(
             TARGET_AUDIO_PRESET,
             TARGET_PROVIDER_LIST,
-            TARGET_UPSCALING,
+            TARGET_GAME_AUDIO_VOLUME,
             TARGET_EDIT_MAPPING,
+        ),
+        TARGET_GAME_AUDIO_VOLUME => focus_nav_ids(
+            TARGET_CREATE_MAPPING,
+            TARGET_PROVIDER_LIST,
+            TARGET_UPSCALING,
+            UI_FOCUS_NONE,
         ),
         TARGET_PROVIDER_LIST => focus_nav_ids(
             UI_FOCUS_NONE,
@@ -1068,6 +1079,24 @@ fn settings_left_column(
                 }
                 ResponsiveFieldRow { gap: 18.0 }
                 Children [
+                    description(font.clone(), theme, "Game Audio Volume"),
+                    (
+                        multi_select(font.clone(), theme, game_audio_volume_config(settings.game_audio_volume))
+                        SettingsSelect { field: FIELD_GAME_AUDIO_VOLUME }
+                        UiFocusId { id: TARGET_GAME_AUDIO_VOLUME }
+                        UiFocusNavIds { up: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).up}, right: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).right}, down: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).down}, left: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).left} }
+                    ),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(18.0),
+                }
+                ResponsiveFieldRow { gap: 18.0 }
+                Children [
                     description(font.clone(), theme, "Image Upscaling"),
                     (
                         multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
@@ -1357,6 +1386,28 @@ fn yes_no_config(selected: usize) -> MultiSelectConfig {
 
 fn upscaling_config(selected: usize) -> MultiSelectConfig {
     select_config(selected.min(3), vec!["None", "2x", "3x", "4x"])
+}
+
+fn game_audio_volume_config(value: u8) -> MultiSelectConfig {
+    let selected = match value {
+        0 => 0,
+        25 => 1,
+        50 => 2,
+        75 => 3,
+        100 => 4,
+        _ => 1,
+    };
+    select_config(selected, vec!["0%", "25%", "50%", "75%", "100%"])
+}
+
+fn selected_game_audio_volume(selected: u8) -> u8 {
+    match selected {
+        0 => 0,
+        2 => 50,
+        3 => 75,
+        4 => 100,
+        _ => 25,
+    }
 }
 
 fn font_size_config(selected: usize) -> MultiSelectConfig {

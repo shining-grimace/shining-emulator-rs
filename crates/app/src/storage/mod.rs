@@ -10,6 +10,7 @@ pub mod rom_data;
 pub mod rom_identifier;
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::{collections::HashSet, mem};
 
@@ -49,13 +50,17 @@ impl FromWorld for LocalStorage {
     fn from_world(_world: &mut World) -> Self {
         match LocalStorage::load_or_initialise() {
             Ok(storage) => storage,
-            Err(error) => {
-                eprintln!("failed to initialise local storage: {error}");
-                LocalStorage {
-                    paths: StoragePaths::default(),
-                    data: LocalStorageData::default(),
-                }
+            Err(error) if can_fall_back_to_temporary_storage(&error) => {
+                eprintln!(
+                    "failed to initialise local storage at the platform config directory: {error}; using temporary storage"
+                );
+                LocalStorage::load_or_initialise_at_paths(StoragePaths::default()).unwrap_or_else(
+                    |fallback_error| {
+                        panic!("failed to initialise temporary local storage: {fallback_error}")
+                    },
+                )
             }
+            Err(error) => panic!("failed to initialise local storage: {error}"),
         }
     }
 }
@@ -63,6 +68,10 @@ impl FromWorld for LocalStorage {
 impl LocalStorage {
     pub fn load_or_initialise() -> Result<Self, StorageError> {
         let paths = StoragePaths::new()?;
+        Self::load_or_initialise_at_paths(paths)
+    }
+
+    fn load_or_initialise_at_paths(paths: StoragePaths) -> Result<Self, StorageError> {
         paths.create_dirs()?;
 
         let settings = read_or_create_json(&paths.settings_file, &GeneralSettings::default())?;
@@ -316,6 +325,14 @@ impl LocalStorage {
     }
 }
 
+fn can_fall_back_to_temporary_storage(error: &StorageError) -> bool {
+    match error {
+        StorageError::MissingProjectDirectory => true,
+        StorageError::Io(error) => error.kind() == io::ErrorKind::PermissionDenied,
+        StorageError::Json { .. } | StorageError::Provider(_) => false,
+    }
+}
+
 fn same_provider_rom(left: &RomMetadata, right: &RomMetadata) -> bool {
     left.provider_id == right.provider_id && rom_sync_key(left) == rom_sync_key(right)
 }
@@ -395,6 +412,26 @@ mod tests {
 
     const PROVIDER_ID: Uuid = Uuid::from_u128(0xaaaaaaaa_aaaa_aaaa_aaaa_aaaaaaaaaaaa);
     const OTHER_PROVIDER_ID: Uuid = Uuid::from_u128(0xbbbbbbbb_bbbb_bbbb_bbbb_bbbbbbbbbbbb);
+
+    #[test]
+    fn malformed_json_does_not_allow_temporary_storage_fallback() {
+        let error = StorageError::Json {
+            path: PathBuf::from("settings.json"),
+            source: serde_json::from_slice::<GeneralSettings>(b"{").unwrap_err(),
+        };
+
+        assert!(!can_fall_back_to_temporary_storage(&error));
+    }
+
+    #[test]
+    fn permission_denied_allows_temporary_storage_fallback() {
+        let error = StorageError::Io(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "permission denied",
+        ));
+
+        assert!(can_fall_back_to_temporary_storage(&error));
+    }
 
     #[test]
     fn provider_sync_removes_unplayed_roms_missing_from_latest_result() {

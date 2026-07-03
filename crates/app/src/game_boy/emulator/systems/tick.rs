@@ -219,9 +219,10 @@ fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing)
     }
     advance_cartridge_rtc(emulator);
     step_oam_dma(emulator);
-    emulator
-        .audio_unit
-        .advance_ticks(MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1));
+    emulator.audio_unit.advance_ticks(
+        MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1),
+        &mut emulator.memory.io_ports,
+    );
     update_serial(emulator, MACHINE_CYCLE_CLOCKS);
 
     if display_enabled {

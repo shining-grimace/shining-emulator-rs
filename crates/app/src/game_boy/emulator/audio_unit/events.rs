@@ -22,16 +22,17 @@ impl GameBoyAudioChannel {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum GameBoyAudioBalance {
-    Both,
-    Left,
-    Right,
-    Pan(f32),
+pub(crate) struct GameBoyAudioBalance {
+    pub(crate) left_gain: f32,
+    pub(crate) right_gain: f32,
 }
 
 impl Default for GameBoyAudioBalance {
     fn default() -> Self {
-        Self::Both
+        Self {
+            left_gain: 1.0,
+            right_gain: 1.0,
+        }
     }
 }
 
@@ -46,9 +47,10 @@ pub(crate) enum GameBoyAudioCommand {
     Frequency {
         frequency_hz: f32,
     },
+    DutyCycle(f32),
     Volume(f32),
     Balance(GameBoyAudioBalance),
-    Wavetable([f32; 16]),
+    Wavetable([f32; 32]),
     AllNotesOff,
 }
 

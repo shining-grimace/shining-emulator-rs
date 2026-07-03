@@ -133,8 +133,10 @@ b. Fix everything on the list below
 c. Finalise all assets (app icons, hero images, audio samples, menu music)
 
 Known issues:
+- MIDI Graph Sampler nodes need to be able to switch to and from using wavetable buffers, not complain about attempts to change
 - Think animations in menus: corrode away layouts on transition?
 - "rhythm-land" reports that this is an inaccurate emulator
+- The SGB border gets removed when quitting and resuming auto-save
 - Audio keeps running, holding the current notes, when the game is paused
 - Audio needs to be tweaked to match a good reference video
 - On Android, emulation seems to keep running when the app gets backgrounded
@@ -151,10 +153,11 @@ Steps:
 a. Consider accessibility
 b. Consider multi language support
 c. Consider compatibility with libretro cores
-d. Revise the Homebrew Hub integration: are we using it within its terms, and can the ROM list use the most highly-regarded ROMs only?
-e. Check is vsync enabled, or any other possible cause of high CPU usage in settings
-f. Make sure all dead-code annotations are removed
-g. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
+d. Consider Sentry or similar for app issues to replace any panicks or other unexpected events
+e. Revise the Homebrew Hub integration: are we using it within its terms, and can the ROM list use the most highly-regarded ROMs only?
+f. Check is vsync enabled, or any other possible cause of high CPU usage in settings
+g. Make sure all dead-code annotations are removed
+h. Consider animations: UI trees fading in/out on screen change, popup UIs scaling
    in/out and fading in/out on appear/disappear, row focus highlights in list views
    translating from one to another, scrolling being ease-out rather than instant
-h. Easter eggs?
+i. Easter eggs?

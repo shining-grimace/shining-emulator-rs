@@ -66,7 +66,7 @@ refer to them in other places internally.
 The settings will be stored in a JSON file called `settings.json` holding
 an object of key-value pairs where the keys are "forceButtonOverlay",
 "upscalingMode", "emulationModel", "sgbOverlayEnable", "fontSize",
-"uiTheme", and "audioPreset". All values are integers.
+"uiTheme", "audioPreset", and "gameAudioVolume". All values are integers.
 
 ### ROM Providers
 
@@ -862,6 +862,8 @@ Under General Settings, these options are available:
   "Minimal" (an option with no background image or menu music), or any of the
   16 themes (to force a theme to always be used rather than one being chosen at
   random on every launch)
+- A selection for GameBoy gameplay audio volume, stored as a percentage and
+  applied as a global post-mix level
 - A drop-down selection of a "primary input device", which is not actually a
   saved setting but rather allows choosing a device to edit using the Edit
   Mappings button underneath it

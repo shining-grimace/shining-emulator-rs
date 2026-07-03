@@ -254,8 +254,41 @@ fn handle_audio_settings_activation(
                 );
             }
         }
-    } else if selects.p0().get(entity).is_ok() {
+    } else if let Ok((changed_select, changed_value)) = selects.p0().get(entity) {
+        let changed_select = *changed_select;
+        let changed_value = changed_value.selected;
+        sync_matching_audio_selects(
+            changed_select,
+            changed_value,
+            &mut selects.p1(),
+            &mut text_queries.p1(),
+            &child_query,
+        );
         apply_audio_conditional_sections(&selects.p0(), &mut sections);
+    }
+}
+
+fn sync_matching_audio_selects(
+    changed_select: AudioSelect,
+    selected: usize,
+    selects: &mut Query<(&AudioSelect, &mut UiMultiSelect, Option<&Children>)>,
+    select_labels: &mut Query<&mut Text, With<UiMultiSelectLabel>>,
+    child_query: &Query<&Children>,
+) {
+    for (select, mut ui_select, children) in selects {
+        if select.channel != changed_select.channel || select.field != changed_select.field {
+            continue;
+        }
+
+        ui_select.selected = selected;
+        if let Some(children) = children {
+            update_multi_select_label(
+                children,
+                select_label(select.field, selected),
+                select_labels,
+                child_query,
+            );
+        }
     }
 }
 

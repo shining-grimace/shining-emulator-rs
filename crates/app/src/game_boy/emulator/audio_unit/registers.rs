@@ -3,6 +3,7 @@ use super::events::{GameBoyAudioBalance, GameBoyAudioChannel};
 pub(super) const CHANNEL_COUNT: usize = 4;
 pub(super) const LENGTH_CLOCK_HZ: u64 = 256;
 pub(super) const ENVELOPE_CLOCK_HZ: u64 = 64;
+pub(super) const SWEEP_CLOCK_HZ: u64 = 128;
 const PULSE_TIMER_HZ: f32 = 131_072.0;
 const WAVE_TIMER_HZ: f32 = 65_536.0;
 const NOISE_TIMER_HZ: f32 = 524_288.0;
@@ -53,7 +54,14 @@ pub(super) fn wave_output_level(io_ports: &[u8]) -> f32 {
 }
 
 pub(super) fn pulse_frequency(low: u8, high: u8) -> f32 {
-    let raw = u16::from(low) | (u16::from(high & 0x07) << 8);
+    pulse_frequency_from_raw(pulse_frequency_raw(low, high))
+}
+
+pub(super) fn pulse_frequency_raw(low: u8, high: u8) -> u16 {
+    u16::from(low) | (u16::from(high & 0x07) << 8)
+}
+
+pub(super) fn pulse_frequency_from_raw(raw: u16) -> f32 {
     timer_frequency(PULSE_TIMER_HZ, raw)
 }
 
@@ -85,12 +93,12 @@ pub(super) fn channel_output_gains(channel: GameBoyAudioChannel, io_ports: &[u8]
     let right_enabled = nr51 & channel_bit != 0;
     let left_enabled = nr51 & (channel_bit << 4) != 0;
     let right_gain = if right_enabled {
-        f32::from(nr50 & 0x07) / 7.0
+        output_volume_gain(nr50 & 0x07)
     } else {
         0.0
     };
     let left_gain = if left_enabled {
-        f32::from((nr50 >> 4) & 0x07) / 7.0
+        output_volume_gain((nr50 >> 4) & 0x07)
     } else {
         0.0
     };
@@ -98,23 +106,64 @@ pub(super) fn channel_output_gains(channel: GameBoyAudioChannel, io_ports: &[u8]
 }
 
 pub(super) fn balance_from_gains(left_gain: f32, right_gain: f32) -> GameBoyAudioBalance {
-    match (left_gain > 0.0, right_gain > 0.0) {
-        (true, true) if (left_gain - right_gain).abs() <= f32::EPSILON => GameBoyAudioBalance::Both,
-        (true, true) => GameBoyAudioBalance::Pan(right_gain / (left_gain + right_gain)),
-        (true, false) => GameBoyAudioBalance::Left,
-        (false, true) => GameBoyAudioBalance::Right,
-        (false, false) => GameBoyAudioBalance::Both,
+    GameBoyAudioBalance {
+        left_gain,
+        right_gain,
     }
 }
 
-pub(super) fn decode_wavetable(io_ports: &[u8]) -> [f32; 16] {
-    let mut samples = [0.0; 16];
-    for (index, output) in samples.iter_mut().enumerate() {
-        let byte = io(io_ports, WAVE_RAM_START_INDEX + index);
-        let nibble = byte >> 4;
-        *output = (f32::from(nibble) / 7.5) - 1.0;
+fn output_volume_gain(value: u8) -> f32 {
+    f32::from((value & 0x07) + 1) / 8.0
+}
+
+pub(super) fn pulse_duty_cycle(value: u8) -> f32 {
+    match value >> 6 {
+        0 => 0.125,
+        1 => 0.25,
+        2 => 0.5,
+        _ => 0.75,
+    }
+}
+
+pub(super) fn decode_wavetable(io_ports: &[u8]) -> [f32; 32] {
+    let mut samples = [0.0; 32];
+    for byte_index in 0..16 {
+        let byte = io(io_ports, WAVE_RAM_START_INDEX + byte_index);
+        let sample_index = byte_index * 2;
+        samples[sample_index] = decode_wave_nibble(byte >> 4);
+        samples[sample_index + 1] = decode_wave_nibble(byte);
     }
     samples
+}
+
+fn decode_wave_nibble(nibble: u8) -> f32 {
+    (f32::from(nibble & 0x0f) / 7.5) - 1.0
+}
+
+pub(super) fn pulse_sweep_period(value: u8) -> u8 {
+    (value >> 4) & 0x07
+}
+
+pub(super) fn pulse_sweep_decreases(value: u8) -> bool {
+    value & 0x08 != 0
+}
+
+pub(super) fn pulse_sweep_shift(value: u8) -> u8 {
+    value & 0x07
+}
+
+pub(super) fn write_pulse_frequency_raw(
+    io_ports: &mut [u8],
+    low_index: usize,
+    high_index: usize,
+    raw: u16,
+) {
+    if let Some(low) = io_ports.get_mut(low_index) {
+        *low = raw as u8;
+    }
+    if let Some(high) = io_ports.get_mut(high_index) {
+        *high = (*high & !0x07) | (((raw >> 8) as u8) & 0x07);
+    }
 }
 
 pub(super) fn io(io_ports: &[u8], index: usize) -> u8 {

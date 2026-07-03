@@ -18,8 +18,9 @@ const MENU_MIDI_TRACK_INDEX: usize = 0;
 pub(crate) const GAME_AUDIO_CHANNEL_NODE_IDS: [u64; 4] = [201, 202, 203, 204];
 const GAME_AUDIO_ROOT_NODE_ID: u64 = 200;
 const GAME_AUDIO_SOURCE_NODE_IDS: [u64; 4] = [211, 212, 213, 214];
-const WAVETABLE_SAMPLE_RATE: u32 = 4096;
-const WAVETABLE_BASE_NOTE: u8 = 127;
+const WAVETABLE_FRAME_COUNT: usize = 32;
+const WAVETABLE_SAMPLE_RATE: u32 = 14_080;
+const WAVETABLE_BASE_NOTE: u8 = 69;
 
 const OSCILLATOR_SQUARE: &str = "Square Wave";
 const OSCILLATOR_TRIANGLE: &str = "Triangle Wave";
@@ -33,6 +34,7 @@ const BUILT_IN_SAMPLE_BASE_NOTE: u8 = 60;
 const BUILT_IN_SAMPLE_LOOP_START: usize = 0;
 const BUILT_IN_SAMPLE_LOOP_END: usize = 96_000;
 const MENU_SQUARE_WAVE_VOLUME_MULTIPLIER: f32 = 0.25;
+const DEFAULT_GAME_AUDIO_VOLUME: u8 = 25;
 
 #[derive(Clone, Copy)]
 enum AudioGraphTarget {
@@ -144,7 +146,7 @@ pub(crate) fn apply_audio_preset_to_playback(
         sender
             .send(Message {
                 target: EventTarget::SpecificNode(MENU_MIDI_NODE_ID),
-                data: Event::StateSnapshot(snapshot),
+                event: Event::StateSnapshot(snapshot),
                 timing: EventTiming::Imprecise,
             })
             .map_err(|error| error.to_string())?;
@@ -155,13 +157,14 @@ pub(crate) fn apply_audio_preset_to_playback(
 
 pub(crate) fn apply_audio_preset_to_gameplay(
     preset: &AudioPreset,
+    game_audio_volume: u8,
     asset_server: &Res<AssetServer>,
     audio_context: &mut MidiGraphAudioContext,
     midi_assets: &Res<Assets<MidiFileSource>>,
     sf2_assets: &Res<Assets<Sf2FileSource>>,
     wave_assets: &Res<Assets<WaveFileSource>>,
 ) -> Result<(), String> {
-    let graph_json = game_audio_graph_json_from_audio_preset(preset);
+    let graph_json = game_audio_graph_json_from_audio_preset(preset, game_audio_volume);
     let config: ChildConfig =
         serde_json::from_value(graph_json).map_err(|error| error.to_string())?;
     let mut loader = GraphAssetLoader::new(asset_server, midi_assets, sf2_assets, wave_assets);
@@ -192,16 +195,27 @@ fn midi_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
     })
 }
 
-fn game_audio_graph_json_from_audio_preset(preset: &AudioPreset) -> Value {
+pub(crate) fn game_audio_volume_gain(volume: u8) -> f32 {
+    match volume {
+        0 | 25 | 50 | 75 | 100 => volume as f32 / 100.0,
+        _ => DEFAULT_GAME_AUDIO_VOLUME as f32 / 100.0,
+    }
+}
+
+fn game_audio_graph_json_from_audio_preset(preset: &AudioPreset, game_audio_volume: u8) -> Value {
     json!({
-        "type": "Combiner",
+        "type": "Fader",
         "node_id": GAME_AUDIO_ROOT_NODE_ID,
-        "sources": [
-            midi_channel_source_json(preset, 0, 1.0, AudioGraphTarget::Gameplay),
-            midi_channel_source_json(preset, 1, 1.0, AudioGraphTarget::Gameplay),
-            midi_channel_source_json(preset, 2, 1.0, AudioGraphTarget::Gameplay),
-            midi_channel_source_json(preset, 3, 1.0, AudioGraphTarget::Gameplay)
-        ]
+        "initial_volume": game_audio_volume_gain(game_audio_volume),
+        "source": {
+            "type": "Combiner",
+            "sources": [
+                midi_channel_source_json(preset, 0, 1.0, AudioGraphTarget::Gameplay),
+                midi_channel_source_json(preset, 1, 1.0, AudioGraphTarget::Gameplay),
+                midi_channel_source_json(preset, 2, 1.0, AudioGraphTarget::Gameplay),
+                midi_channel_source_json(preset, 3, 1.0, AudioGraphTarget::Gameplay)
+            ]
+        }
     })
 }
 
@@ -213,7 +227,7 @@ fn midi_channel_source_json(
 ) -> Value {
     let channel = channel_for_graph(preset, index, target);
     let channel_node_id = game_audio_channel_node_id(index);
-    let uses_envelope = channel_uses_envelope(&channel);
+    let uses_envelope = matches!(target, AudioGraphTarget::Menu) && channel_uses_envelope(&channel);
     let source_node_id = match uses_envelope {
         true => game_audio_source_node_id(index),
         false => channel_node_id,
@@ -294,19 +308,19 @@ fn oscillator_source_json(
             "type": "TriangleWave",
             "node_id": node_id,
             "balance": "Both",
-            "amplitude": channel_amplitude(channel_index)
+            "amplitude": game_audio_channel_amplitude(channel_index)
         }),
         OSCILLATOR_SAWTOOTH => json!({
             "type": "SawtoothWave",
             "node_id": node_id,
             "balance": "Both",
-            "amplitude": channel_amplitude(channel_index)
+            "amplitude": game_audio_channel_amplitude(channel_index)
         }),
         OSCILLATOR_LFSR_NOISE => json!({
             "type": "LfsrNoise",
             "node_id": node_id,
             "balance": "Both",
-            "amplitude": channel_amplitude(channel_index) * 0.6,
+            "amplitude": game_audio_channel_amplitude(channel_index) * 0.6,
             "inside_feedback": false
         }),
         OSCILLATOR_WAVE_TABLE => wavetable_source_json(node_id),
@@ -316,7 +330,7 @@ fn oscillator_source_json(
             "type": "SquareWave",
             "node_id": node_id,
             "balance": "Both",
-            "amplitude": channel_amplitude(channel_index) * square_wave_volume_multiplier,
+            "amplitude": game_audio_channel_amplitude(channel_index) * square_wave_volume_multiplier,
             "duty_cycle": square_duty_cycle(preset)
         }),
     }
@@ -366,8 +380,9 @@ fn built_in_sample_path(sample: &str) -> &'static str {
 
 fn wavetable_source_json(node_id: u64) -> Value {
     let wavetable = [
-        0.0, 0.125, 0.25, 0.375, 0.5, 0.375, 0.25, 0.125, 0.0, -0.125, -0.25, -0.375, -0.5, -0.375,
-        -0.25, -0.125,
+        0.0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.5, 0.4375, 0.375, 0.3125, 0.25,
+        0.1875, 0.125, 0.0625, 0.0, -0.0625, -0.125, -0.1875, -0.25, -0.3125, -0.375, -0.4375,
+        -0.5, -0.4375, -0.375, -0.3125, -0.25, -0.1875, -0.125, -0.0625,
     ];
     json!({
         "type": "SampleLoop",
@@ -379,12 +394,12 @@ fn wavetable_source_json(node_id: u64) -> Value {
         "base_note": WAVETABLE_BASE_NOTE,
         "looping": {
             "start": 0,
-            "end": wavetable.len()
+            "end": WAVETABLE_FRAME_COUNT
         }
     })
 }
 
-fn channel_amplitude(index: usize) -> f32 {
+pub(crate) fn game_audio_channel_amplitude(index: usize) -> f32 {
     match index {
         0 => 0.24,
         1 => 0.2,
@@ -461,8 +476,8 @@ mod tests {
 
     #[test]
     fn default_wave_table_channel_uses_wavetable_sampler_config() {
-        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
-        let wavetable_channel = &graph["sources"][2];
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset(), 25);
+        let wavetable_channel = &gameplay_graph_sources(&graph)[2];
 
         assert_eq!(wavetable_channel["type"], json!("SampleLoop"));
         assert_eq!(
@@ -471,31 +486,53 @@ mod tests {
         );
         assert_eq!(wavetable_channel["base_note"], json!(WAVETABLE_BASE_NOTE));
         assert_eq!(wavetable_channel["looping"]["start"], json!(0));
-        assert_eq!(wavetable_channel["looping"]["end"], json!(16));
+        assert_eq!(
+            wavetable_channel["looping"]["end"],
+            json!(WAVETABLE_FRAME_COUNT)
+        );
     }
 
     #[test]
-    fn gameplay_graph_uses_combiner_root_so_paused_menu_midi_cannot_silence_game_audio() {
-        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
+    fn wavetable_sample_rate_matches_game_boy_frequency_events() {
+        let target_hz = 440.0;
+        let base_note_hz = midi_note_frequency(WAVETABLE_BASE_NOTE);
+        let effective_loop_hz =
+            target_hz / base_note_hz * WAVETABLE_SAMPLE_RATE as f32 / WAVETABLE_FRAME_COUNT as f32;
 
-        assert_eq!(graph["type"], json!("Combiner"));
+        assert!((effective_loop_hz - target_hz).abs() < 0.02);
+    }
+
+    #[test]
+    fn gameplay_graph_wraps_channel_combiner_in_global_fader() {
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset(), 25);
+
+        assert_eq!(graph["type"], json!("Fader"));
         assert_eq!(graph["node_id"], json!(GAME_AUDIO_ROOT_NODE_ID));
+        assert_eq!(graph["initial_volume"], json!(0.25));
+        assert_eq!(graph["source"]["type"], json!("Combiner"));
         assert_eq!(
-            graph["sources"][0]["node_id"],
+            graph["source"]["sources"][0]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[0])
         );
         assert_eq!(
-            graph["sources"][1]["node_id"],
+            graph["source"]["sources"][1]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[1])
         );
         assert_eq!(
-            graph["sources"][2]["node_id"],
+            graph["source"]["sources"][2]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
         );
         assert_eq!(
-            graph["sources"][3]["node_id"],
+            graph["source"]["sources"][3]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[3])
         );
+    }
+
+    #[test]
+    fn unsupported_game_audio_volume_falls_back_to_default_gain() {
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset(), 99);
+
+        assert_eq!(graph["initial_volume"], json!(0.25));
     }
 
     #[test]
@@ -504,25 +541,26 @@ mod tests {
 
         assert_eq!(
             graph["channels"]["0"]["source"]["amplitude"],
-            json!(channel_amplitude(0) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
+            json!(game_audio_channel_amplitude(0) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
         );
         assert_eq!(
             graph["channels"]["1"]["source"]["amplitude"],
-            json!(channel_amplitude(1) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
+            json!(game_audio_channel_amplitude(1) * MENU_SQUARE_WAVE_VOLUME_MULTIPLIER)
         );
     }
 
     #[test]
     fn gameplay_square_wave_channels_keep_original_volume() {
-        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset());
+        let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset(), 25);
+        let sources = gameplay_graph_sources(&graph);
 
         assert_eq!(
-            graph["sources"][0]["source"]["amplitude"],
-            json!(channel_amplitude(0))
+            sources[0]["amplitude"],
+            json!(game_audio_channel_amplitude(0))
         );
         assert_eq!(
-            graph["sources"][1]["source"]["amplitude"],
-            json!(channel_amplitude(1))
+            sources[1]["amplitude"],
+            json!(game_audio_channel_amplitude(1))
         );
     }
 
@@ -545,8 +583,8 @@ mod tests {
         preset.channels[2].oscillator = OSCILLATOR_SQUARE.to_string();
         preset.channels[2].built_in_sample = "Bell".to_string();
 
-        let graph = game_audio_graph_json_from_audio_preset(&preset);
-        let source = &graph["sources"][2];
+        let graph = game_audio_graph_json_from_audio_preset(&preset, 25);
+        let source = &gameplay_graph_sources(&graph)[2];
 
         assert_eq!(source["type"], json!("SampleLoop"));
         assert_eq!(
@@ -587,16 +625,19 @@ mod tests {
         preset.channels[2].built_in_sample = OSCILLATOR_SILENCE.to_string();
 
         let menu_graph = midi_graph_json_from_audio_preset(&preset);
-        let gameplay_graph = game_audio_graph_json_from_audio_preset(&preset);
+        let gameplay_graph = game_audio_graph_json_from_audio_preset(&preset, 25);
 
         assert_eq!(menu_graph["channels"]["2"]["type"], json!("Null"));
         assert_eq!(
             menu_graph["channels"]["2"]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
         );
-        assert_eq!(gameplay_graph["sources"][2]["type"], json!("Null"));
         assert_eq!(
-            gameplay_graph["sources"][2]["node_id"],
+            gameplay_graph_sources(&gameplay_graph)[2]["type"],
+            json!("Null")
+        );
+        assert_eq!(
+            gameplay_graph_sources(&gameplay_graph)[2]["node_id"],
             json!(GAME_AUDIO_CHANNEL_NODE_IDS[2])
         );
     }
@@ -657,5 +698,13 @@ mod tests {
         let source = graph["channels"]["0"]["source"].clone();
 
         let _: SampleLoop = serde_json::from_value(source).unwrap();
+    }
+
+    fn gameplay_graph_sources(graph: &Value) -> &[Value] {
+        graph["source"]["sources"].as_array().unwrap()
+    }
+
+    fn midi_note_frequency(note: u8) -> f32 {
+        440.0 * 2.0_f32.powf((f32::from(note) - 69.0) / 12.0)
     }
 }

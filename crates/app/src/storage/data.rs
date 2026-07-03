@@ -24,6 +24,7 @@ pub struct GeneralSettings {
     pub font_size: u8,
     pub ui_theme: u8,
     pub audio_preset: u8,
+    pub game_audio_volume: u8,
 }
 
 impl Default for GeneralSettings {
@@ -36,6 +37,7 @@ impl Default for GeneralSettings {
             font_size: crate::app_ui_scale::default_font_size(),
             ui_theme: 0,
             audio_preset: 0,
+            game_audio_volume: 25,
         }
     }
 }

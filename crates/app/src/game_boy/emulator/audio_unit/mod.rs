@@ -19,6 +19,16 @@ struct EnvelopeState {
     active: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct SweepState {
+    shadow_frequency: u16,
+    period_ticks: u64,
+    ticks_until_step: u64,
+    shift: u8,
+    decreases: bool,
+    active: bool,
+}
+
 #[derive(Debug)]
 pub(crate) struct AudioUnitState {
     pub(crate) cumulative_ticks: u64,
@@ -28,7 +38,7 @@ pub(crate) struct AudioUnitState {
     length_enabled: [bool; CHANNEL_COUNT],
     length_remaining_ticks: [u64; CHANNEL_COUNT],
     envelope: [EnvelopeState; CHANNEL_COUNT],
-    mix_gain: [f32; CHANNEL_COUNT],
+    sweep: SweepState,
     last_frequency_hz: [f32; CHANNEL_COUNT],
     last_volume: [f32; CHANNEL_COUNT],
     last_balance: [GameBoyAudioBalance; CHANNEL_COUNT],
@@ -45,10 +55,10 @@ impl Default for AudioUnitState {
             length_enabled: [false; CHANNEL_COUNT],
             length_remaining_ticks: [0; CHANNEL_COUNT],
             envelope: [EnvelopeState::default(); CHANNEL_COUNT],
-            mix_gain: [1.0; CHANNEL_COUNT],
+            sweep: SweepState::default(),
             last_frequency_hz: [0.0; CHANNEL_COUNT],
             last_volume: [0.0; CHANNEL_COUNT],
-            last_balance: [GameBoyAudioBalance::Both; CHANNEL_COUNT],
+            last_balance: [GameBoyAudioBalance::default(); CHANNEL_COUNT],
             pending_events: Vec::new(),
         }
     }
@@ -62,17 +72,17 @@ impl AudioUnitState {
         self.length_enabled = [false; CHANNEL_COUNT];
         self.length_remaining_ticks = [0; CHANNEL_COUNT];
         self.envelope = [EnvelopeState::default(); CHANNEL_COUNT];
-        self.mix_gain = [1.0; CHANNEL_COUNT];
+        self.sweep = SweepState::default();
         self.last_frequency_hz = [0.0; CHANNEL_COUNT];
         self.last_volume = [0.0; CHANNEL_COUNT];
-        self.last_balance = [GameBoyAudioBalance::Both; CHANNEL_COUNT];
+        self.last_balance = [GameBoyAudioBalance::default(); CHANNEL_COUNT];
         self.pending_events.clear();
         self.base_running_speed =
             usize::try_from(clock_frequency_hz).unwrap_or(GB_CLOCK_HZ as usize);
         self.queue_event(None, GameBoyAudioCommand::AllNotesOff);
     }
 
-    pub(crate) fn advance_ticks(&mut self, ticks: i32) {
+    pub(crate) fn advance_ticks(&mut self, ticks: i32, io_ports: &mut [u8]) {
         let Ok(ticks) = u64::try_from(ticks.max(0)) else {
             return;
         };
@@ -81,6 +91,9 @@ impl AudioUnitState {
         }
 
         let start_tick = self.cumulative_ticks;
+        if self.running[GameBoyAudioChannel::Pulse1.index()] {
+            self.advance_sweep(start_tick, ticks, io_ports);
+        }
         for channel in [
             GameBoyAudioChannel::Pulse1,
             GameBoyAudioChannel::Pulse2,
@@ -119,7 +132,8 @@ impl AudioUnitState {
 
         match index {
             NR11_IO_INDEX => {
-                self.refresh_length_from_register(GameBoyAudioChannel::Pulse1, io_ports)
+                self.refresh_length_from_register(GameBoyAudioChannel::Pulse1, io_ports);
+                self.queue_duty_update(GameBoyAudioChannel::Pulse1, io_ports);
             }
             NR12_IO_INDEX => {
                 self.write_envelope_register(GameBoyAudioChannel::Pulse1, value, io_ports)
@@ -129,7 +143,8 @@ impl AudioUnitState {
                 self.write_trigger_register(GameBoyAudioChannel::Pulse1, value, io_ports)
             }
             NR21_IO_INDEX => {
-                self.refresh_length_from_register(GameBoyAudioChannel::Pulse2, io_ports)
+                self.refresh_length_from_register(GameBoyAudioChannel::Pulse2, io_ports);
+                self.queue_duty_update(GameBoyAudioChannel::Pulse2, io_ports);
             }
             NR22_IO_INDEX => {
                 self.write_envelope_register(GameBoyAudioChannel::Pulse2, value, io_ports)
@@ -156,7 +171,7 @@ impl AudioUnitState {
                 self.write_trigger_register(GameBoyAudioChannel::Noise, value, io_ports)
             }
             NR50_IO_INDEX | NR51_IO_INDEX => self.queue_all_mix_updates(io_ports),
-            NR10_IO_INDEX => {}
+            NR10_IO_INDEX => self.write_sweep_register(value),
             _ => {}
         }
     }
@@ -188,6 +203,7 @@ impl AudioUnitState {
             self.running = [false; CHANNEL_COUNT];
             self.length_remaining_ticks = [0; CHANNEL_COUNT];
             self.envelope = [EnvelopeState::default(); CHANNEL_COUNT];
+            self.sweep = SweepState::default();
             self.queue_event(None, GameBoyAudioCommand::AllNotesOff);
         }
     }
@@ -241,6 +257,9 @@ impl AudioUnitState {
         let index = channel.index();
         self.running[index] = true;
         self.configure_channel_on_trigger(channel, io_ports);
+        if !self.running[index] {
+            return;
+        }
         self.refresh_length_from_register(channel, io_ports);
 
         let frequency_hz = self.channel_frequency(channel, io_ports);
@@ -252,6 +271,11 @@ impl AudioUnitState {
 
         if channel == GameBoyAudioChannel::Wave {
             self.queue_wavetable_update(io_ports);
+        } else if matches!(
+            channel,
+            GameBoyAudioChannel::Pulse1 | GameBoyAudioChannel::Pulse2
+        ) {
+            self.queue_duty_update(channel, io_ports);
         }
 
         self.queue_event(
@@ -268,6 +292,7 @@ impl AudioUnitState {
         match channel {
             GameBoyAudioChannel::Pulse1 => {
                 self.configure_envelope(channel, io(io_ports, NR12_IO_INDEX));
+                self.configure_sweep(io_ports);
             }
             GameBoyAudioChannel::Pulse2 => {
                 self.configure_envelope(channel, io(io_ports, NR22_IO_INDEX));
@@ -331,6 +356,19 @@ impl AudioUnitState {
         );
     }
 
+    fn queue_duty_update(&mut self, channel: GameBoyAudioChannel, io_ports: &[u8]) {
+        if !self.running[channel.index()] {
+            return;
+        }
+
+        let duty_cycle = match channel {
+            GameBoyAudioChannel::Pulse1 => pulse_duty_cycle(io(io_ports, NR11_IO_INDEX)),
+            GameBoyAudioChannel::Pulse2 => pulse_duty_cycle(io(io_ports, NR21_IO_INDEX)),
+            GameBoyAudioChannel::Wave | GameBoyAudioChannel::Noise => return,
+        };
+        self.queue_event(Some(channel), GameBoyAudioCommand::DutyCycle(duty_cycle));
+    }
+
     fn queue_all_mix_updates(&mut self, io_ports: &[u8]) {
         for channel in [
             GameBoyAudioChannel::Pulse1,
@@ -364,7 +402,6 @@ impl AudioUnitState {
     fn update_mix_state(&mut self, channel: GameBoyAudioChannel, io_ports: &[u8]) {
         let index = channel.index();
         let (left_gain, right_gain) = channel_output_gains(channel, io_ports);
-        self.mix_gain[index] = left_gain.max(right_gain);
         self.last_balance[index] = balance_from_gains(left_gain, right_gain);
     }
 
@@ -421,7 +458,7 @@ impl AudioUnitState {
 
             envelope.volume = next_volume;
             envelope.ticks_until_step = envelope.period_ticks;
-            let volume = envelope_volume(envelope.volume) * self.mix_gain[index];
+            let volume = envelope_volume(envelope.volume);
             self.last_volume[index] = volume;
             self.queue_event_at(
                 cursor_tick,
@@ -437,6 +474,10 @@ impl AudioUnitState {
     }
 
     fn stop_channel(&mut self, channel: GameBoyAudioChannel) {
+        self.stop_channel_at(channel, self.cumulative_ticks);
+    }
+
+    fn stop_channel_at(&mut self, channel: GameBoyAudioChannel, tick: u64) {
         let index = channel.index();
         if !self.running[index] {
             return;
@@ -444,7 +485,10 @@ impl AudioUnitState {
         self.running[index] = false;
         self.length_remaining_ticks[index] = 0;
         self.envelope[index] = EnvelopeState::default();
-        self.queue_event(Some(channel), GameBoyAudioCommand::NoteOff);
+        if channel == GameBoyAudioChannel::Pulse1 {
+            self.sweep = SweepState::default();
+        }
+        self.queue_event_at(tick, Some(channel), GameBoyAudioCommand::NoteOff);
     }
 
     fn queue_wavetable_update(&mut self, io_ports: &[u8]) {
@@ -456,14 +500,11 @@ impl AudioUnitState {
 
     fn current_channel_volume(&mut self, channel: GameBoyAudioChannel, io_ports: &[u8]) -> f32 {
         let index = channel.index();
-        let (left_gain, right_gain) = channel_output_gains(channel, io_ports);
-        let mix_gain = left_gain.max(right_gain);
-        self.mix_gain[index] = mix_gain;
         match channel {
             GameBoyAudioChannel::Pulse1
             | GameBoyAudioChannel::Pulse2
-            | GameBoyAudioChannel::Noise => envelope_volume(self.envelope[index].volume) * mix_gain,
-            GameBoyAudioChannel::Wave => wave_output_level(io_ports) * mix_gain,
+            | GameBoyAudioChannel::Noise => envelope_volume(self.envelope[index].volume),
+            GameBoyAudioChannel::Wave => wave_output_level(io_ports),
         }
     }
 
@@ -500,6 +541,102 @@ impl AudioUnitState {
             }
             GameBoyAudioChannel::Noise => noise_frequency(io(io_ports, NR43_IO_INDEX)),
         }
+    }
+
+    fn write_sweep_register(&mut self, value: u8) {
+        self.sweep.period_ticks = self.sweep_period_ticks(value);
+        self.sweep.shift = pulse_sweep_shift(value);
+        self.sweep.decreases = pulse_sweep_decreases(value);
+        self.sweep.active = self.sweep.period_ticks > 0 || self.sweep.shift > 0;
+        if self.sweep.ticks_until_step == 0 {
+            self.sweep.ticks_until_step = self.sweep.period_ticks.max(self.sweep_clock_ticks());
+        }
+    }
+
+    fn configure_sweep(&mut self, io_ports: &[u8]) {
+        let nr10 = io(io_ports, NR10_IO_INDEX);
+        let raw = pulse_frequency_raw(io(io_ports, NR13_IO_INDEX), io(io_ports, NR14_IO_INDEX));
+        let period_ticks = self.sweep_period_ticks(nr10);
+        let shift = pulse_sweep_shift(nr10);
+        self.sweep = SweepState {
+            shadow_frequency: raw,
+            period_ticks,
+            ticks_until_step: period_ticks.max(self.sweep_clock_ticks()),
+            shift,
+            decreases: pulse_sweep_decreases(nr10),
+            active: period_ticks > 0 || shift > 0,
+        };
+
+        if shift > 0 && self.calculate_sweep_frequency().is_none() {
+            self.stop_channel(GameBoyAudioChannel::Pulse1);
+        }
+    }
+
+    fn advance_sweep(&mut self, start_tick: u64, ticks: u64, io_ports: &mut [u8]) {
+        if !self.sweep.active {
+            return;
+        }
+
+        let mut elapsed_ticks = ticks;
+        let mut cursor_tick = start_tick;
+        while elapsed_ticks >= self.sweep.ticks_until_step {
+            cursor_tick = cursor_tick.saturating_add(self.sweep.ticks_until_step);
+            elapsed_ticks -= self.sweep.ticks_until_step;
+            self.sweep.ticks_until_step = self.sweep.period_ticks.max(self.sweep_clock_ticks());
+
+            if self.sweep.period_ticks == 0 {
+                continue;
+            }
+
+            let Some(raw) = self.calculate_sweep_frequency() else {
+                self.stop_channel_at(GameBoyAudioChannel::Pulse1, cursor_tick);
+                return;
+            };
+
+            if self.sweep.shift == 0 {
+                continue;
+            }
+
+            self.sweep.shadow_frequency = raw;
+            write_pulse_frequency_raw(io_ports, NR13_IO_INDEX, NR14_IO_INDEX, raw);
+            let frequency_hz = pulse_frequency_from_raw(raw);
+            self.last_frequency_hz[GameBoyAudioChannel::Pulse1.index()] = frequency_hz;
+            self.queue_event_at(
+                cursor_tick,
+                Some(GameBoyAudioChannel::Pulse1),
+                GameBoyAudioCommand::Frequency { frequency_hz },
+            );
+
+            if self.calculate_sweep_frequency().is_none() {
+                self.stop_channel_at(GameBoyAudioChannel::Pulse1, cursor_tick);
+                return;
+            }
+        }
+
+        self.sweep.ticks_until_step = self.sweep.ticks_until_step.saturating_sub(elapsed_ticks);
+    }
+
+    fn calculate_sweep_frequency(&self) -> Option<u16> {
+        let delta = self.sweep.shadow_frequency >> self.sweep.shift;
+        let raw = if self.sweep.decreases {
+            self.sweep.shadow_frequency.saturating_sub(delta)
+        } else {
+            self.sweep.shadow_frequency.saturating_add(delta)
+        };
+        (raw <= 2047).then_some(raw)
+    }
+
+    fn sweep_period_ticks(&self, nr10: u8) -> u64 {
+        let period = pulse_sweep_period(nr10);
+        if period == 0 {
+            0
+        } else {
+            self.sweep_clock_ticks().saturating_mul(u64::from(period))
+        }
+    }
+
+    fn sweep_clock_ticks(&self) -> u64 {
+        self.clock_ticks_per_second() / SWEEP_CLOCK_HZ
     }
 
     fn queue_event(&mut self, channel: Option<GameBoyAudioChannel>, command: GameBoyAudioCommand) {
