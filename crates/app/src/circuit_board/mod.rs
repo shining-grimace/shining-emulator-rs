@@ -11,6 +11,7 @@ use crate::circuit_board::systems::{
     animate_circuit_board, spawn_circuit_board, update_circuit_board_target, update_circuit_nodes,
     update_circuit_schematic,
 };
+use crate::settings_transition::SettingsTransitionTimeline;
 
 pub struct CircuitBoardPlugin;
 
@@ -25,7 +26,8 @@ impl Plugin for CircuitBoardPlugin {
                 update_circuit_nodes,
                 update_circuit_schematic,
             )
-                .chain(),
+                .chain()
+                .after(SettingsTransitionTimeline),
         );
     }
 }

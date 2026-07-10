@@ -14,6 +14,7 @@ use crate::dimensions::{
 use crate::game_boy::GameBoyRomLoadRequest;
 use crate::input::selection::PrimaryInputDevice;
 use crate::scenes::rom_data::RomDataEditTarget;
+use crate::settings_transition::SettingsNavigation;
 use crate::storage::LocalStorage;
 use crate::storage::data::RomMetadata;
 use crate::storage::provider_sync::{ProviderSyncMessages, ProviderSyncTaskResult, sync_provider};
@@ -248,16 +249,15 @@ fn handle_home_activation(
     mut rom_load_request: ResMut<GameBoyRomLoadRequest>,
     mut rom_data_target: ResMut<RomDataEditTarget>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
-    state: Res<State<AppState>>,
-    mut next_state: ResMut<NextState<AppState>>,
+    mut navigation: SettingsNavigation,
 ) {
-    if *state.get() != AppState::Home {
+    if navigation.current() != AppState::Home {
         return;
     }
 
     let entity = activated.entity;
     if settings_buttons.get(entity).is_ok() {
-        next_state.set(AppState::Settings);
+        navigation.request(AppState::Settings);
     } else if let Ok(option) = popup_options.get(entity) {
         let popup_rom_index = choice_popup_context_index(entity, &popup_roots, &child_query);
         despawn_choice_popups(&mut commands, &popup_roots);
@@ -266,7 +266,7 @@ fn handle_home_activation(
                 if let Some(rom_index) = popup_rom_index {
                     rom_load_request.rom_index = Some(rom_index);
                     rom_load_request.resume_auto_save = true;
-                    next_state.set(AppState::Gameplay);
+                    navigation.request(AppState::Gameplay);
                 } else {
                     set_latest_info_message(&mut messages, "ROM data could not be opened.");
                 }
@@ -275,7 +275,7 @@ fn handle_home_activation(
                 if let Some(rom_index) = popup_rom_index {
                     rom_load_request.rom_index = Some(rom_index);
                     rom_load_request.resume_auto_save = false;
-                    next_state.set(AppState::Gameplay);
+                    navigation.request(AppState::Gameplay);
                 } else {
                     set_latest_info_message(&mut messages, "ROM data could not be opened.");
                 }
@@ -283,7 +283,7 @@ fn handle_home_activation(
             2 => {
                 if let Some(rom_index) = popup_rom_index {
                     rom_data_target.rom_index = Some(rom_index);
-                    next_state.set(AppState::RomData);
+                    navigation.request(AppState::RomData);
                 } else {
                     set_latest_info_message(&mut messages, "ROM data could not be opened.");
                 }

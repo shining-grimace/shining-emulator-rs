@@ -13,6 +13,7 @@ use crate::dimensions::{
     UI_WIDE_CONTENT_WIDTH,
 };
 use crate::input::selection::PrimaryInputDevice;
+use crate::settings_transition::{SettingsTransition, request_or_set};
 use crate::storage::LocalStorage;
 use crate::storage::provider_sync::{
     ProviderSyncTaskState, test_provider as test_provider_connection,
@@ -189,6 +190,7 @@ fn handle_provider_activation(
     mut test_state: ResMut<ProviderTestConnectionState>,
     mut sync_state: ResMut<ProviderSyncTaskState>,
     mut next_state: ResMut<NextState<AppState>>,
+    mut transition: ResMut<SettingsTransition>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     if *state.get() != AppState::RomProvider {
@@ -227,7 +229,12 @@ fn handle_provider_activation(
                         "ROM provider was saved, but initial sync could not start because another provider sync is already running."
                     );
                 }
-                next_state.set(AppState::Settings);
+                request_or_set(
+                    &mut transition,
+                    &mut next_state,
+                    AppState::RomProvider,
+                    AppState::Settings,
+                );
             }
             Err(error) => set_latest_info_message(&mut messages, &error.to_string()),
         }

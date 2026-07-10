@@ -15,6 +15,7 @@ use crate::binary_text::constants::{
 };
 use crate::binary_text::effects::BinaryTextEffects;
 use crate::circuit_board::utils::{active_rect, screen_has_circuit_board};
+use crate::settings_transition::SettingsTransition;
 
 pub(super) fn update_binary_text_grid(
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -65,6 +66,7 @@ pub(super) fn animate_binary_text(
     theme: Res<ActiveTheme>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut effects: ResMut<BinaryTextEffects>,
+    transition: Res<SettingsTransition>,
     mut digits: Query<(
         &mut BinaryTextDigit,
         &mut TextColor,
@@ -78,13 +80,14 @@ pub(super) fn animate_binary_text(
 
     let delta_seconds = time.delta_secs();
     let screen = *state.get();
-    let active_screen = screen_has_circuit_board(screen).then_some(screen);
+    let foreground_opaque = transition.foreground_is_opaque();
+    let active_screen = (screen_has_circuit_board(screen) && foreground_opaque).then_some(screen);
     effects.update(delta_seconds, active_screen);
 
     let rect = digit_rect(Vec2::new(window.width(), window.height()));
     let top_left = Vec2::new(rect.min.x, rect.max.y);
     let fade_multiplier = fade_multiplier(delta_seconds);
-    let enabled = effects.is_settled();
+    let enabled = effects.is_settled() && foreground_opaque;
     if !enabled {
         for (mut digit, mut colour, _, mut visibility) in &mut digits {
             digit.group_id = None;

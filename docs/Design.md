@@ -330,7 +330,10 @@ particle effects looking like coloured fireflies floating around. The
 colour of these particles is the tertiary colour from the theme. The
 background image has the ability to render at any opacity, which is used
 to fade out when emulation starts and back in when emulation ends, and
-will also have a random stuttering blink effect while it is shown. At
+will also have a random stuttering blink effect while it is shown. Each
+blink fades the image completely out and back in over a randomly-selected
+duration from 0.05 to 0.5 seconds. The random duration uses a quadratic
+distribution biased toward shorter blinks. At
 most, the background will be rendered at 30% opacity (this number should
 be defined in a reusable constant somewhere in the code).
 
@@ -348,6 +351,10 @@ additional behaviours which can't easily be drawn:
   and when this one becomes active, the entire overlay fades away along with
   the other background layers (using the same animation properties defined
   in shared constants)
+- During a transition between settings screens, the circuit board moves from
+  the source screen to the destination screen continuously over the complete
+  foreground transition. Its duration is derived from the shared foreground
+  fade and hold constants.
 
 The behaviour of this design necessitates that it is rendered procedurally
 rather than by rendering images from files. There will be a lot of maths
@@ -367,6 +374,19 @@ digits influenced at any given time). Digits animate by fading in until
 anything else) and then fading out. The fade duration and group size should
 also be defined as constants. Once the group finishes animating, the group
 is deleted.
+
+Binary text effects are visible only while a foreground UI layer is fully
+opaque. During transitions between the Home and main Settings screens, and
+between settings screens, the binary text and
+foreground UI fade out together, remain hidden, and fade back in together.
+The fade duration and hidden hold duration are shared constants, initially
+set to one second each. Consequently the complete transition lasts three
+seconds: one second fading out, one second hidden, and one second fading in.
+The destination screen replaces the source screen at the start of the hidden
+hold. The background image and particle layers remain visible throughout.
+Circuit board movement uses a single continuous interpolation from the
+complete starting layout to the complete destination layout across those
+three seconds.
 
 ## Sound
 

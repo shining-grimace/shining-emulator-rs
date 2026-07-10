@@ -20,6 +20,7 @@ use crate::input::selection::{
     InputMappingEditTarget, PrimaryInputDevice, mapping_label, selected_mapping_index,
 };
 use crate::scenes::rom_provider::RomProviderEditTarget;
+use crate::settings_transition::{SettingsTransition, request_or_set};
 use crate::storage::LocalStorage;
 use crate::storage::provider_sync::{ProviderSyncTaskResult, ProviderSyncTaskState};
 use crate::storage::providers::RomProvider;
@@ -262,13 +263,19 @@ fn handle_mapping_button_activation(
     storage: Res<LocalStorage>,
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
+    mut transition: ResMut<SettingsTransition>,
 ) {
     if *state.get() != AppState::Settings || edit_primary_buttons.get(activated.entity).is_err() {
         return;
     }
 
     edit_target.mapping_index = selected_mapping_index(&primary_input, &storage);
-    next_state.set(AppState::InputMapping);
+    request_or_set(
+        &mut transition,
+        &mut next_state,
+        AppState::Settings,
+        AppState::InputMapping,
+    );
 }
 
 fn handle_audio_preset_button_activation(
@@ -279,6 +286,7 @@ fn handle_audio_preset_button_activation(
     state: Res<State<AppState>>,
     mut storage: ResMut<LocalStorage>,
     mut next_state: ResMut<NextState<AppState>>,
+    mut transition: ResMut<SettingsTransition>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
     asset_server: Res<AssetServer>,
     mut audio_context: ResMut<MidiGraphAudioContext>,
@@ -291,9 +299,19 @@ fn handle_audio_preset_button_activation(
     }
 
     if edit_buttons.get(activated.entity).is_ok() {
-        next_state.set(AppState::AudioSettings);
+        request_or_set(
+            &mut transition,
+            &mut next_state,
+            AppState::Settings,
+            AppState::AudioSettings,
+        );
     } else if create_buttons.get(activated.entity).is_ok() {
-        create_audio_preset(&mut storage, &mut next_state, &mut messages);
+        create_audio_preset(
+            &mut storage,
+            &mut next_state,
+            &mut transition,
+            &mut messages,
+        );
     } else if delete_buttons.get(activated.entity).is_ok() {
         delete_audio_preset(
             &mut storage,
@@ -398,6 +416,7 @@ fn delete_audio_preset(
 fn create_audio_preset(
     storage: &mut LocalStorage,
     next_state: &mut NextState<AppState>,
+    transition: &mut SettingsTransition,
     messages: &mut Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     let Some(index) = next_available_audio_preset_index(storage) else {
@@ -425,7 +444,12 @@ fn create_audio_preset(
                 set_latest_info_message(messages, SETTINGS_SAVE_ERROR_MESSAGE);
                 return;
             }
-            next_state.set(AppState::AudioSettings);
+            request_or_set(
+                transition,
+                next_state,
+                AppState::Settings,
+                AppState::AudioSettings,
+            );
         }
         Ok(Err(error)) => {
             eprintln!("failed to create audio preset {}: {error}", index);
@@ -464,6 +488,7 @@ fn handle_provider_button_activation(
     mut sync_state: ResMut<ProviderSyncTaskState>,
     state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
+    mut transition: ResMut<SettingsTransition>,
     mut messages: Query<(&mut Text, &mut TextColor, &mut InfoMessage)>,
 ) {
     if *state.get() != AppState::Settings {
@@ -473,14 +498,24 @@ fn handle_provider_button_activation(
     let entity = activated.entity;
     if queries.create_buttons.get(entity).is_ok() {
         edit_target.provider_index = None;
-        next_state.set(AppState::RomProvider);
+        request_or_set(
+            &mut transition,
+            &mut next_state,
+            AppState::Settings,
+            AppState::RomProvider,
+        );
     } else if queries.edit_buttons.get(entity).is_ok() {
         let Some(index) = selected_provider_index(&queries.selected_provider_rows) else {
             set_latest_info_message(&mut messages, "Select a ROM provider to edit.");
             return;
         };
         edit_target.provider_index = Some(index);
-        next_state.set(AppState::RomProvider);
+        request_or_set(
+            &mut transition,
+            &mut next_state,
+            AppState::Settings,
+            AppState::RomProvider,
+        );
     } else if queries.delete_buttons.get(entity).is_ok() {
         let Some(index) = selected_provider_index(&queries.selected_provider_rows) else {
             set_latest_info_message(&mut messages, "Select a ROM provider to delete.");

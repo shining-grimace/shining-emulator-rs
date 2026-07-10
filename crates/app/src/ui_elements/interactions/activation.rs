@@ -2,6 +2,7 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 
 use crate::app_state::AppState;
+use crate::settings_transition::SettingsNavigation;
 use crate::ui_elements::back_button::UiBackButton;
 use crate::ui_elements::file_picker::{UiFilePicker, UiFilePickerActivated};
 use crate::ui_elements::list_view::{VirtualListRow, VirtualListSelection};
@@ -37,11 +38,10 @@ pub(super) fn activate_controls(
     mut app_exit: MessageWriter<AppExit>,
     mut texts: Query<&mut Text, With<UiMultiSelectLabel>>,
     child_query: Query<&Children>,
-    state: Res<State<AppState>>,
-    mut next_state: ResMut<NextState<AppState>>,
+    mut navigation: SettingsNavigation,
 ) {
     let keyboard_activation = input.select;
-    let state_value = *state.get();
+    let state_value = navigation.current();
     let back_activation = input.back && back_input_enabled(state_value);
     let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
     if clicked_entities.is_empty() && !input.select && !input.back && !input.quit_app {
@@ -50,7 +50,7 @@ pub(super) fn activate_controls(
 
     if input.quit_app || back_activation {
         match back_navigation_target(state_value) {
-            Some(target) => next_state.set(target),
+            Some(target) => navigation.request(target),
             None => {
                 app_exit.write(AppExit::Success);
             }
@@ -61,8 +61,8 @@ pub(super) fn activate_controls(
         .iter()
         .any(|entity| back_buttons.get(*entity).is_ok())
     {
-        match back_navigation_target(*state.get()) {
-            Some(target) => next_state.set(target),
+        match back_navigation_target(navigation.current()) {
+            Some(target) => navigation.request(target),
             None => {
                 app_exit.write(AppExit::Success);
             }

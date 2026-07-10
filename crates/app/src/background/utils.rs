@@ -51,7 +51,9 @@ pub(super) fn random_blink_delay() -> f32 {
 }
 
 pub(super) fn random_blink_duration() -> f32 {
-    random_range(BLINK_MIN_DURATION_SECONDS, BLINK_MAX_DURATION_SECONDS)
+    let sample = fastrand::f32();
+    BLINK_MIN_DURATION_SECONDS
+        + (BLINK_MAX_DURATION_SECONDS - BLINK_MIN_DURATION_SECONDS) * sample * sample
 }
 
 pub(super) fn random_direction() -> Vec2 {

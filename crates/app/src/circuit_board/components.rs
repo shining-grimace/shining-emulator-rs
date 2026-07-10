@@ -10,6 +10,7 @@ pub(super) struct CircuitNode {
     pub screen: AppState,
     pub current_rect: Rect,
     pub corner_radius: f32,
+    pub transition_start_rect: Option<Rect>,
 }
 
 #[derive(Component)]

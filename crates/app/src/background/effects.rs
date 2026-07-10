@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 
-use crate::background::constants::{
-    BACKGROUND_MAX_OPACITY, BLINK_MAX_OPACITY_MULTIPLIER, BLINK_MIN_OPACITY_MULTIPLIER,
-};
-use crate::background::utils::{random_blink_delay, random_blink_duration, random_range};
+use crate::background::constants::BACKGROUND_MAX_OPACITY;
+use crate::background::utils::{random_blink_delay, random_blink_duration};
 
 #[derive(Resource, Debug)]
 pub struct BackgroundDisplay {
@@ -51,16 +49,16 @@ impl Default for BackgroundDisplay {
 #[derive(Debug)]
 struct BlinkState {
     delay_seconds: f32,
-    remaining_seconds: f32,
-    opacity_multiplier: f32,
+    elapsed_seconds: f32,
+    duration_seconds: f32,
 }
 
 impl BlinkState {
     fn new() -> Self {
         Self {
             delay_seconds: random_blink_delay(),
-            remaining_seconds: 0.0,
-            opacity_multiplier: 1.0,
+            elapsed_seconds: 0.0,
+            duration_seconds: 0.0,
         }
     }
 
@@ -69,26 +67,27 @@ impl BlinkState {
             return;
         }
 
-        if self.remaining_seconds > 0.0 {
-            self.remaining_seconds -= delta_seconds;
-            if self.remaining_seconds <= 0.0 {
+        if self.duration_seconds > 0.0 {
+            self.elapsed_seconds += delta_seconds;
+            if self.elapsed_seconds >= self.duration_seconds {
                 self.delay_seconds = random_blink_delay();
+                self.elapsed_seconds = 0.0;
+                self.duration_seconds = 0.0;
             }
         } else {
             self.delay_seconds -= delta_seconds;
             if self.delay_seconds <= 0.0 {
-                self.remaining_seconds = random_blink_duration();
-                self.opacity_multiplier =
-                    random_range(BLINK_MIN_OPACITY_MULTIPLIER, BLINK_MAX_OPACITY_MULTIPLIER);
+                self.duration_seconds = random_blink_duration();
+                self.elapsed_seconds = 0.0;
             }
         }
     }
 
     fn opacity_multiplier(&self) -> f32 {
-        if self.remaining_seconds > 0.0 {
-            self.opacity_multiplier
-        } else {
-            1.0
+        if self.duration_seconds <= 0.0 {
+            return 1.0;
         }
+        let phase = (self.elapsed_seconds / self.duration_seconds).clamp(0.0, 1.0);
+        (2.0 * phase - 1.0).abs()
     }
 }

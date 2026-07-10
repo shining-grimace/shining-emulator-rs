@@ -20,6 +20,7 @@ use crate::dimensions::{
     UI_WIDE_SECONDARY_COLUMN_PERCENT,
 };
 use crate::input::selection::PrimaryInputDevice;
+use crate::settings_transition::SettingsNavigation;
 use crate::storage::LocalStorage;
 use crate::ui_elements::action_hint::action_hints_with_labels;
 use crate::ui_elements::button::button;
@@ -151,10 +152,9 @@ fn handle_audio_settings_activation(
     midi_assets: Res<Assets<MidiFileSource>>,
     sf2_assets: Res<Assets<Sf2FileSource>>,
     wave_assets: Res<Assets<WaveFileSource>>,
-    state: Res<State<AppState>>,
-    mut next_state: ResMut<NextState<AppState>>,
+    mut navigation: SettingsNavigation,
 ) {
-    if *state.get() != AppState::AudioSettings {
+    if navigation.current() != AppState::AudioSettings {
         return;
     }
 
@@ -172,7 +172,7 @@ fn handle_audio_settings_activation(
                 &sf2_assets,
                 &wave_assets,
             ) {
-                Ok(()) => next_state.set(AppState::Settings),
+                Ok(()) => navigation.request(AppState::Settings),
                 Err(error) => {
                     eprintln!("failed to apply audio preset: {error}");
                     set_audio_preset_apply_error_message(&mut text_queries.p0(), &error);

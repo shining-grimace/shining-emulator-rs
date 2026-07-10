@@ -167,7 +167,7 @@ pub(super) fn animate_particles(
     let half_width = window_size.x * 0.5 + OFFSCREEN_MARGIN;
     let half_height = window_size.y * 0.5 + OFFSCREEN_MARGIN;
     let visibility_scale = if BACKGROUND_MAX_OPACITY > 0.0 {
-        display.rendered_opacity() / BACKGROUND_MAX_OPACITY
+        display.opacity() / BACKGROUND_MAX_OPACITY
     } else {
         0.0
     };

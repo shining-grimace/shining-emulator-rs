@@ -17,13 +17,15 @@ use crate::circuit_board::utils::{
     rounded_rect_corner_radius, rounded_rect_stroke_segment, rounded_rect_strokes,
     schematic_segments, screen_has_circuit_board, transformed_base_rect,
 };
+use crate::settings_transition::SettingsTransition;
 use crate::visual_effects::ACTIVE_SCREEN_RECT_ANIMATION_SECONDS;
 
 pub(super) fn update_circuit_board_target(
     state: Res<State<AppState>>,
     mut display: ResMut<CircuitBoardDisplay>,
+    transition: Res<SettingsTransition>,
 ) {
-    let screen = *state.get();
+    let screen = transition.circuit_screen().unwrap_or(*state.get());
     if screen_has_circuit_board(screen) {
         display.fade_in_for(screen);
     } else {
@@ -56,6 +58,7 @@ pub(super) fn spawn_circuit_board(
                 screen,
                 current_rect: base_rect,
                 corner_radius: rounded_rect_corner_radius(base_rect),
+                transition_start_rect: None,
             },
         ));
 
@@ -85,6 +88,7 @@ pub(super) fn animate_circuit_board(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut display: ResMut<CircuitBoardDisplay>,
     mut nodes: Query<&mut CircuitNode>,
+    transition: Res<SettingsTransition>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -99,9 +103,30 @@ pub(super) fn animate_circuit_board(
         return;
     }
 
+    let active_screen = display.active_screen.map(display_node_for_screen);
+    if let Some(progress) = transition.circuit_progress() {
+        let final_active_rect = active_rect(window_size);
+        for mut node in &mut nodes {
+            let current_rect = node.current_rect;
+            let start = *node.transition_start_rect.get_or_insert(current_rect);
+            let target = transformed_base_rect(
+                node.screen,
+                active_screen,
+                Some(final_active_rect),
+                window_size,
+            );
+            node.current_rect = lerp_rect(start, target, progress);
+            node.corner_radius = rounded_rect_corner_radius(base_rect(node.screen, window_size));
+        }
+        return;
+    }
+
+    for mut node in &mut nodes {
+        node.transition_start_rect = None;
+    }
+
     let max_rect_delta =
         window_size.max_element() / ACTIVE_SCREEN_RECT_ANIMATION_SECONDS * delta_seconds;
-    let active_screen = display.active_screen.map(display_node_for_screen);
     let active_rect = active_screen.and_then(|screen| {
         nodes.iter().find(|node| node.screen == screen).map(|node| {
             move_rect_toward(node.current_rect, active_rect(window_size), max_rect_delta)
@@ -114,6 +139,13 @@ pub(super) fn animate_circuit_board(
         node.current_rect = move_rect_toward(node.current_rect, target, max_rect_delta);
         node.corner_radius = rounded_rect_corner_radius(base_rect);
     }
+}
+
+fn lerp_rect(start: Rect, end: Rect, progress: f32) -> Rect {
+    Rect::from_corners(
+        start.min.lerp(end.min, progress),
+        start.max.lerp(end.max, progress),
+    )
 }
 
 pub(super) fn update_circuit_nodes(

@@ -10,6 +10,7 @@ mod dimensions;
 mod game_boy;
 mod input;
 mod scenes;
+mod settings_transition;
 mod storage;
 mod ui_elements;
 mod visual_effects;
@@ -58,6 +59,7 @@ where
         .init_state::<AppState>()
         .add_plugins(storage::StoragePlugin)
         .add_plugins(app_ui_scale::AppUiScalePlugin)
+        .add_plugins(settings_transition::SettingsTransitionPlugin)
         .init_resource::<ActiveTheme>()
         .add_systems(Startup, camera_scene.spawn())
         .add_plugins(ui_elements::action_hint::ActionHintPlugin)
