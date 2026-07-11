@@ -1028,3 +1028,72 @@ in an authentic way.
 Custom audio graph configurations are also possible by configuring these
 in the Audio Settings screen. This screen manages JSON files which are
 compatible with the MIDI Graph plugin.
+
+# NES Extension Proposal
+
+This section proposes extending the current GameBoy emulator to support NES
+without changing the existing GameBoy design until implementation begins.
+
+## Scope and References
+
+The primary implementation reference is the community-maintained [NESdev
+reference guide](https://www.nesdev.org/wiki/NES_reference_guide). It covers the
+RP2A03/RP2A07 CPU and APU, 2C02-family PPU, memory maps, timing, DMA,
+controllers, cartridge boards, mappers, regional differences, hardware quirks,
+and emulator test ROMs. A downloadable static mirror is available from the
+[NESdev archive](https://nes.science/archive/), although the live wiki is
+preferred because the mirror may lag behind it.
+
+No single frozen document is sufficient for every NES game. Broad compatibility
+also requires the NESdev [iNES](https://www.nesdev.org/wiki/INES) and [NES
+2.0](https://www.nesdev.org/wiki/NES_2.0) specifications, mapper and submapper
+pages, and empirical validation with the linked test ROMs. Mapper hardware is
+part of the cartridge and varies significantly, so mapper support is an
+incremental compatibility boundary.
+
+The first milestone targets NTSC NES, iNES and NES 2.0 containers, standard
+controllers, and mapper 0 (NROM). Later milestones add authentic APU and DMC
+timing, PAL timing, and mappers in compatibility-driven order: mapper 1
+(MMC1), mapper 2 (UxROM), mapper 3 (CNROM), and mapper 4 (MMC3). Unsupported
+console types, regions, mappers, submappers, peripherals, or expansion audio
+must produce a specific compatibility error rather than silently inaccurate
+emulation.
+
+## Storage and Providers
+
+ROM metadata gains a required `platform` value of `gb`, `gbc`, or `nes`. NES
+files normally use the `.nes` extension. ROM identifiers become lowercase
+hexadecimal SHA-1 hashes of platform-canonicalised content. Game Boy hashes
+zero the cartridge header range 0x0104 through 0x014F inclusive. NES iNES/NES
+2.0 hashes omit the validated 16-byte container header while retaining trainer
+and PlayChoice data declared by it. Platform identification must precede
+canonicalisation; ambiguous formats receive no identifier.
+
+The existing built-in Homebrew Hub integration should gain a third provider for
+NES, alongside GB and GBC, with the same priority. It should use the documented
+paginated API at `https://hh3.gbdev.io/api` (including its `/search` and
+per-entry download endpoints), not website scraping. The public NES source
+database is maintained at
+`https://github.com/nesdev-org/homebrew-db`.
+
+## Architecture and Compatibility Tests
+
+The app-facing emulation interface should become platform-neutral. ROM loading
+selects a Game Boy or NES core, while rendering, audio delivery, input,
+pause/reset, save-state management, and error reporting use common interfaces.
+Save states are core- and version-specific and record the platform and state
+format version; a state from one core must never be passed to the other. The
+renderer accepts 160x144 Game Boy frames and 256x240 NES frames through the
+same ring-buffer abstraction.
+
+The NES core models CPU, PPU, APU, DMA, controller ports, and mapper as
+concurrent clocked components. Synchronisation must be fine-grained enough for
+mid-frame PPU and mapper changes; running components a whole frame at a time is
+not acceptable. CI must cover PPU rendering and timing, APU behavior, DMA and
+interrupt timing, mapper bank switching and IRQs, and iNES/NES 2.0 parser edge
+cases, in addition to CPU instruction tests.
+
+The audio graph may expose the NES APU's two pulse channels, triangle, noise,
+and DMC, but it must not replace emulation of frame sequencers, envelopes,
+sweeps, length counters, nonlinear mixing, DMC memory fetches, DMA stalls, or
+expansion audio.
