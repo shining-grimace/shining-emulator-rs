@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::ui::InteractionDisabled;
 
 use crate::ui_elements::list_view::VirtualListRow;
 
@@ -43,7 +44,7 @@ impl Default for UiFocusNav {
 }
 
 pub(super) fn bind_focus_nav_ids(
-    _added: On<Add, UiFocusNavIds>,
+    _added: On<Add<UiFocusNavIds>>,
     mut targets: ParamSet<(
         Query<(Entity, &UiFocusId)>,
         Query<(&UiFocusNavIds, &mut UiFocusNav)>,
@@ -93,6 +94,22 @@ pub struct LastFocusedUiElement {
 impl LastFocusedUiElement {
     pub fn clear(&mut self) {
         self.entity = None;
+    }
+}
+
+pub(super) fn clear_unavailable_focus(
+    mut commands: Commands,
+    focused: Query<
+        (Entity, Has<DisabledUiElement>, Has<InteractionDisabled>),
+        With<FocusedUiElement>,
+    >,
+    nodes: Query<&Node>,
+    parents: Query<&ChildOf>,
+) {
+    for (entity, disabled, interaction_disabled) in &focused {
+        if disabled || interaction_disabled || !entity_visible(entity, &nodes, &parents) {
+            commands.entity(entity).remove::<FocusedUiElement>();
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
@@ -93,107 +94,96 @@ pub fn multi_select_with_width(
         UiMultiSelect { selected: {config.selected} }
         DismissOnOutsideClick
         Children [
-            (
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0.0),
+                overflow: Overflow::clip(),
+            }
+            IgnorePicking
+            Children [
+                Text({selected_label})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(label_font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                UiElementLabel
+                IgnorePicking
+                UiMultiSelectLabel
+                TextLayout::new(Justify::Left, LineBreak::NoWrap)
+            ]
+            --
+            @chevron_icon(theme.primary)
+            --
+            Node {
+                display: Display::None,
+                position_type: PositionType::Absolute,
+                top: px(POPUP_TOP_OFFSET),
+                left: px(0.0),
+                width: percent(100),
+                border: ui_border(),
+                border_radius: ui_radius(),
+                padding: UiRect::all(px(UI_INNER_PADDING)),
+            }
+            GlobalZIndex(100)
+            BorderColor::all(theme.primary)
+            UiThemeBorderColor::Primary
+            BackgroundColor({popup_background})
+            UiMultiSelectPopup { parent: {Entity::PLACEHOLDER} }
+            Children [
                 Node {
-                    flex_grow: 1.0,
-                    min_width: px(0.0),
+                    width: percent(100),
+                    height: px(popup_options_height),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: px(POPUP_SCROLLBAR_GAP),
                     overflow: Overflow::clip(),
                 }
-                IgnorePicking
-                Children [
-                    (
-                        Text({selected_label})
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(label_font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        UiElementLabel
-                        IgnorePicking
-                        UiMultiSelectLabel
-                        TextLayout::new(Justify::Left, LineBreak::NoWrap)
-                    )
-                ]
-            ),
-            chevron_icon(theme.primary),
-            (
-                Node {
-                    display: Display::None,
-                    position_type: PositionType::Absolute,
-                    top: px(POPUP_TOP_OFFSET),
-                    left: px(0.0),
-                    width: percent(100),
-                    border: ui_border(),
-                    border_radius: ui_radius(),
-                    padding: UiRect::all(px(UI_INNER_PADDING)),
+                UiScrollArea { offset: 0.0, max_offset: 0.0 }
+                UiPopupScrollArea {
+                    option_count: {config.options.len()},
+                    max_visible_options: {MAX_VISIBLE_POPUP_OPTIONS},
+                    option_height: {UI_ELEMENT_HEIGHT},
+                    option_gap: {POPUP_OPTION_GAP},
                 }
-                GlobalZIndex(100)
-                BorderColor::all(theme.primary)
-                UiThemeBorderColor::Primary
-                BackgroundColor({popup_background})
-                UiMultiSelectPopup { parent: {Entity::PLACEHOLDER} }
+                AutoScrollFocusedChild
                 Children [
-                    (
+                    Node {
+                        position_type: PositionType::Relative,
+                        flex_grow: 1.0,
+                        height: percent(100),
+                        overflow: Overflow::clip(),
+                    }
+                    Children [
                         Node {
+                            position_type: PositionType::Absolute,
+                            top: px(0.0),
+                            left: px(0.0),
                             width: percent(100),
-                            height: px(popup_options_height),
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(POPUP_SCROLLBAR_GAP),
-                            overflow: Overflow::clip(),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(POPUP_OPTION_GAP),
                         }
-                        UiScrollArea { offset: 0.0, max_offset: 0.0 }
-                        UiPopupScrollArea {
-                            option_count: {config.options.len()},
-                            max_visible_options: {MAX_VISIBLE_POPUP_OPTIONS},
-                            option_height: {UI_ELEMENT_HEIGHT},
-                            option_gap: {POPUP_OPTION_GAP},
-                        }
-                        AutoScrollFocusedChild
+                        UiScrollContent
                         Children [
-                            (
-                                Node {
-                                    position_type: PositionType::Relative,
-                                    flex_grow: 1.0,
-                                    height: percent(100),
-                                    overflow: Overflow::clip(),
-                                }
-                                Children [
-                                    (
-                                        Node {
-                                            position_type: PositionType::Absolute,
-                                            top: px(0.0),
-                                            left: px(0.0),
-                                            width: percent(100),
-                                            flex_direction: FlexDirection::Column,
-                                            row_gap: px(POPUP_OPTION_GAP),
-                                        }
-                                        UiScrollContent
-                                        Children [
-                                            {options}
-                                        ]
-                                    )
-                                ]
-                            ),
-                            (
-                                Node {
-                                    height: percent(100),
-                                    overflow: Overflow::clip(),
-                                    flex_direction: FlexDirection::Column,
-                                }
-                                Children [
-                                    scrollbar_with_display(
-                                        theme,
-                                        POPUP_SCROLLBAR_THUMB_HEIGHT,
-                                        0.0,
-                                        scrollbar_display
-                                    )
-                                ]
-                            ),
+                            {options}
                         ]
-                    )
+                    ]
+                    --
+                    Node {
+                        height: percent(100),
+                        overflow: Overflow::clip(),
+                        flex_direction: FlexDirection::Column,
+                    }
+                    Children [
+                        @scrollbar_with_display(
+                            theme,
+                            POPUP_SCROLLBAR_THUMB_HEIGHT,
+                            0.0,
+                            scrollbar_display
+                        )
+                    ]
                 ]
-            ),
+            ]
         ]
     }
 }
@@ -223,18 +213,16 @@ fn popup_option(
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {popup_background}, hover_fill: {hover_background} }
         UiMultiSelectOption { option_index: {option_index}, label: {label.clone()} }
         Children [
-            (
-                Text({label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Left, LineBreak::NoWrap)
-            )
+            Text({label})
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Left, LineBreak::NoWrap)
         ]
     }
 }
@@ -249,26 +237,24 @@ fn chevron_icon(colour: Color) -> impl Scene {
         }
         IgnorePicking
         Children [
-            (
-                Node {
-                    width: px(0.0),
-                    height: px(0.0),
-                    border: UiRect {
-                        left: px(8.0),
-                        right: px(8.0),
-                        top: px(10.0),
-                        bottom: px(0.0),
-                    },
-                }
-                BorderColor {
-                    top: {colour},
-                    right: Color::NONE,
-                    bottom: Color::NONE,
-                    left: Color::NONE,
-                }
-                BackgroundColor(Color::NONE)
-                IgnorePicking
-            )
+            Node {
+                width: px(0.0),
+                height: px(0.0),
+                border: UiRect {
+                    left: px(8.0),
+                    right: px(8.0),
+                    top: px(10.0),
+                    bottom: px(0.0),
+                },
+            }
+            BorderColor {
+                top: {colour},
+                right: Color::NONE,
+                bottom: Color::NONE,
+                left: Color::NONE,
+            }
+            BackgroundColor(Color::NONE)
+            IgnorePicking
         ]
     }
 }

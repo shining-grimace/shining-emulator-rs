@@ -234,7 +234,7 @@ fn finish_home_provider_sync(
 }
 
 fn handle_home_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
@@ -373,73 +373,66 @@ fn home_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
+            Node {
+                width: percent(100),
+                max_width: px(HOME_CONTENT_MAX_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                @heading(font.clone(), theme, "Shining Emulator")
+                --
                 Node {
                     width: percent(100),
-                    max_width: px(HOME_CONTENT_MAX_WIDTH),
-                    height: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
                     min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: px(UI_PANEL_GAP),
                 }
+                ResponsiveColumns { gap: UI_PANEL_GAP }
                 Children [
-                    heading(font.clone(), theme, "Shining Emulator"),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
+                    Node {
+                        flex_grow: 1.0,
+                        flex_shrink: 1.0,
+                        min_height: px(0.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(UI_FIELD_GAP),
+                    }
+                    HomeRomListColumn
+                    Children [
+                        #RomList
+                        @list_view(font.clone(), theme, rom_list_config(&rom_list_data.roms))
+                        HomeRomList
+                        InitialFocus { enabled: true }
+                        DefaultFocusTarget
+                        UiFocusId { id: TARGET_ROM_LIST }
+                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_ALL_SETTINGS, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
+                        --
+                        @info_message_text(font.clone(), theme, initial_status.to_string(), false)
+                        HomeStatusMessage
+                        --
+                        @info_message(font.clone(), theme, "", false)
+                    ]
+                    --
+                    #HomeSideScrollBar
+                    @flow_scroll_view(
+                        theme,
+                        #HomeSideScrollBar,
+                        ScrollViewConfig {
+                            width: px(UI_SIDEBAR_WIDTH),
                             min_height: px(0.0),
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(UI_PANEL_GAP),
-                        }
-                        ResponsiveColumns { gap: UI_PANEL_GAP }
-                        Children [
-                            (
-                                Node {
-                                    flex_grow: 1.0,
-                                    flex_shrink: 1.0,
-                                    min_height: px(0.0),
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: px(UI_FIELD_GAP),
-                                }
-                                HomeRomListColumn
-                                Children [
-                                    (
-                                        #RomList
-                                        list_view(font.clone(), theme, rom_list_config(&rom_list_data.roms))
-                                        HomeRomList
-                                        InitialFocus { enabled: true }
-                                        DefaultFocusTarget
-                                        UiFocusId { id: TARGET_ROM_LIST }
-                                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_ALL_SETTINGS, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
-                                    ),
-                                    (
-                                        info_message_text(font.clone(), theme, initial_status.to_string(), false)
-                                        HomeStatusMessage
-                                    ),
-                                    info_message(font.clone(), theme, "", false)
-                                ]
-                            ),
-                            (
-                                #HomeSideScrollBar
-                                flow_scroll_view(
-                                    theme,
-                                    #HomeSideScrollBar,
-                                    ScrollViewConfig {
-                                        width: px(UI_SIDEBAR_WIDTH),
-                                        min_height: px(0.0),
-                                        thumb_height: 72.0,
-                                    },
-                                    move |_| home_side_panel(side_font, theme)
-                                )
-                                HomeSidePanelSlot
-                            ),
-                        ]
-                    ),
-                    action_hints(font, assets.icons.clone(), theme, storage, primary_input),
+                            thumb_height: 72.0,
+                        },
+                        move |_| home_side_panel(side_font, theme)
+                    )
+                    HomeSidePanelSlot
                 ]
-            ),
+                --
+                @action_hints(font, assets.icons.clone(), theme, storage, primary_input)
+            ]
         ]
     }
 }
@@ -499,48 +492,42 @@ fn home_side_panel(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
             },
         }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
-                }
-                Children [
-                    (
-                        #AllSettings
-                        button_with_width(font.clone(), "All Settings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
-                        SettingsButton
-                        UiFocusId { id: TARGET_ALL_SETTINGS }
-                        UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_PRIMARY_SORT, left: TARGET_ROM_LIST }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_FIELD_GAP),
-                    margin: UiRect::top(px(UI_SIDEBAR_TOP_GAP)),
-                }
-                Children [
-                    description(font.clone(), theme, "Sort ROMs by:"),
-                    (
-                        #PrimarySort
-                        multi_select(font.clone(), theme, sort_select_config(0))
-                        PrimarySortSelect
-                        UiFocusId { id: TARGET_PRIMARY_SORT }
-                        UiFocusNavIds { up: TARGET_ALL_SETTINGS, right: UI_FOCUS_NONE, down: TARGET_SECONDARY_SORT, left: TARGET_ROM_LIST }
-                    ),
-                    description(font.clone(), theme, "Then by:"),
-                    (
-                        #SecondarySort
-                        multi_select(font, theme, sort_select_config(1))
-                        SecondarySortSelect
-                        UiFocusId { id: TARGET_SECONDARY_SORT }
-                        UiFocusNavIds { up: TARGET_PRIMARY_SORT, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_ROM_LIST }
-                    ),
-                ]
-            ),
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                #AllSettings
+                @button_with_width(font.clone(), "All Settings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
+                SettingsButton
+                UiFocusId { id: TARGET_ALL_SETTINGS }
+                UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_PRIMARY_SORT, left: TARGET_ROM_LIST }
+            ]
+            --
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_FIELD_GAP),
+                margin: UiRect::top(px(UI_SIDEBAR_TOP_GAP)),
+            }
+            Children [
+                @description(font.clone(), theme, "Sort ROMs by:")
+                --
+                #PrimarySort
+                @multi_select(font.clone(), theme, sort_select_config(0))
+                PrimarySortSelect
+                UiFocusId { id: TARGET_PRIMARY_SORT }
+                UiFocusNavIds { up: TARGET_ALL_SETTINGS, right: UI_FOCUS_NONE, down: TARGET_SECONDARY_SORT, left: TARGET_ROM_LIST }
+                --
+                @description(font.clone(), theme, "Then by:")
+                --
+                #SecondarySort
+                @multi_select(font, theme, sort_select_config(1))
+                SecondarySortSelect
+                UiFocusId { id: TARGET_SECONDARY_SORT }
+                UiFocusNavIds { up: TARGET_PRIMARY_SORT, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_ROM_LIST }
+            ]
         ]
     }
 }
@@ -902,7 +889,7 @@ fn auto_save_popup_scene(
     bsn! {
         #AutoSavePopup
         DespawnOnExit::<AppState>(AppState::Home)
-        choice_popup_menu(
+        @choice_popup_menu(
             font,
             theme,
             ChoicePopupConfig {

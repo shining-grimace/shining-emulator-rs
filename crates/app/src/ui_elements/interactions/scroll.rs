@@ -1,5 +1,7 @@
 use bevy::input::mouse::MouseWheel;
+use bevy::picking::pointer::{PointerButton, PointerId};
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 use crate::dimensions::{KEY_SCROLL_PIXELS, SCROLLBAR_VERTICAL_PADDING, WHEEL_SCROLL_PIXELS};
 use crate::ui_elements::list_view::{VirtualListContent, VirtualListRow};
@@ -87,7 +89,7 @@ pub(super) struct KeyScrollRepeatState {
 
 #[derive(Default, Resource)]
 pub(super) struct ScrollThumbDragState {
-    active: bool,
+    owners: HashMap<Entity, PointerId>,
     released_this_frame: bool,
 }
 
@@ -384,7 +386,8 @@ pub(super) fn scroll_areas(
 }
 
 fn drag_scroll_area(
-    mut event: On<Pointer<Drag>>,
+    mut event: On<PointerDrag>,
+    ui_scale: Res<UiScale>,
     thumb_targets: Query<(), With<UiScrollThumb>>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
     scroll_contents: Query<(), With<UiScrollContent>>,
@@ -395,14 +398,16 @@ fn drag_scroll_area(
     virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
-    if thumb_targets.contains(event.original_event_target()) {
+    if event.button != PointerButton::Primary
+        || thumb_targets.contains(event.original_event_target())
+    {
         return;
     }
 
     event.propagate(false);
     scroll_area_by_delta(
         event.entity,
-        -event.delta.y,
+        -event.delta.y / ui_scale.0.max(f32::EPSILON),
         &mut areas,
         &scroll_contents,
         &mut scroll_nodes,
@@ -442,16 +447,23 @@ fn hierarchy_depth(entity: Entity, parents: &Query<&ChildOf>) -> usize {
 }
 
 fn start_scroll_thumb_drag(
-    mut event: On<Pointer<DragStart>>,
+    mut event: On<PointerDragStart>,
     mut state: ResMut<ScrollThumbDragState>,
 ) {
     event.propagate(false);
-    state.active = true;
+    if event.button != PointerButton::Primary {
+        return;
+    }
+    let owner = state.owners.entry(event.entity).or_insert(event.pointer.id);
+    if *owner != event.pointer.id {
+        return;
+    }
     state.released_this_frame = false;
 }
 
 fn drag_scroll_thumb(
-    mut event: On<Pointer<Drag>>,
+    mut event: On<PointerDrag>,
+    ui_scale: Res<UiScale>,
     mut state: ResMut<ScrollThumbDragState>,
     mut areas: Query<(Entity, &mut UiScrollArea, &Children)>,
     scroll_contents: Query<(), With<UiScrollContent>>,
@@ -464,7 +476,13 @@ fn drag_scroll_thumb(
     child_query: Query<&Children>,
 ) {
     event.propagate(false);
-    state.active = true;
+    if event.button != PointerButton::Primary {
+        return;
+    }
+    let owner = state.owners.entry(event.entity).or_insert(event.pointer.id);
+    if *owner != event.pointer.id {
+        return;
+    }
     state.released_this_frame = false;
 
     let Ok(thumb) = thumbs.get(event.entity) else {
@@ -479,7 +497,7 @@ fn drag_scroll_thumb(
             return;
         }
 
-        let delta = event.delta.y / thumb.travel * area.max_offset;
+        let delta = event.delta.y / ui_scale.0.max(f32::EPSILON) / thumb.travel * area.max_offset;
         scroll_area_by_delta(
             area_entity,
             delta,
@@ -493,10 +511,42 @@ fn drag_scroll_thumb(
     }
 }
 
-fn end_scroll_thumb_drag(mut event: On<Pointer<DragEnd>>, mut state: ResMut<ScrollThumbDragState>) {
+fn end_scroll_thumb_drag(mut event: On<PointerDragEnd>, mut state: ResMut<ScrollThumbDragState>) {
     event.propagate(false);
-    state.active = false;
-    state.released_this_frame = true;
+    if event.button == PointerButton::Primary
+        && state.owners.get(&event.entity) == Some(&event.pointer.id)
+    {
+        state.owners.remove(&event.entity);
+        state.released_this_frame = true;
+    }
+}
+
+pub(super) fn finish_scroll_thumb_drags(
+    mut releases: MessageReader<PointerRelease>,
+    mut cancels: MessageReader<PointerCancel>,
+    mut drag_ends: MessageReader<PointerDragEnd>,
+    thumbs: Query<(), With<UiScrollThumb>>,
+    mut state: ResMut<ScrollThumbDragState>,
+) {
+    let finished: Vec<_> = releases
+        .read()
+        .filter(|event| event.button == PointerButton::Primary)
+        .map(|event| event.pointer.id)
+        .chain(cancels.read().map(|event| event.pointer.id))
+        .chain(
+            drag_ends
+                .read()
+                .filter(|event| event.button == PointerButton::Primary)
+                .map(|event| event.pointer.id),
+        )
+        .collect();
+    let previous = state.owners.len();
+    state
+        .owners
+        .retain(|entity, id| thumbs.contains(*entity) && !finished.contains(id));
+    if previous != state.owners.len() {
+        state.released_this_frame = true;
+    }
 }
 
 pub(super) fn keep_focused_list_item_visible(
@@ -526,7 +576,10 @@ pub(super) fn keep_focused_list_item_visible(
     virtual_rows: Query<(), With<VirtualListRow>>,
     child_query: Query<&Children>,
 ) {
-    if input.direction().is_none() || drag_state.active || drag_state.released_this_frame {
+    if input.direction().is_none()
+        || !drag_state.owners.is_empty()
+        || drag_state.released_this_frame
+    {
         return;
     }
 
@@ -964,6 +1017,178 @@ impl KeyScrollDirection {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pointer_scrollbars_track_independent_fingers_and_remove_despawned_owners() {
+        use super::super::test_support::*;
+        let mut app = App::new();
+        app.init_resource::<UiScale>()
+            .init_resource::<ScrollThumbDragState>()
+            .add_message::<PointerRelease>()
+            .add_message::<PointerCancel>()
+            .add_message::<PointerDragEnd>()
+            .add_systems(
+                Update,
+                (setup_scroll_drag_tracking, finish_scroll_thumb_drags).chain(),
+            );
+        let first = app
+            .world_mut()
+            .spawn((
+                UiScrollThumb {
+                    height: 20.0,
+                    travel: 100.0,
+                },
+                DraggableUiElement,
+                Node::default(),
+            ))
+            .id();
+        let second = app
+            .world_mut()
+            .spawn((
+                UiScrollThumb {
+                    height: 20.0,
+                    travel: 100.0,
+                },
+                DraggableUiElement,
+                Node::default(),
+            ))
+            .id();
+        app.update();
+        for (entity, id) in [(first, 1), (second, 2)] {
+            app.world_mut().trigger(PointerDragStart {
+                entity,
+                pointer: pointer(id),
+                button: PointerButton::Primary,
+                hit: hit(),
+            });
+        }
+        app.world_mut().write_message(cancel(first, 1));
+        app.update();
+        assert_eq!(
+            app.world().resource::<ScrollThumbDragState>().owners.len(),
+            1
+        );
+        assert_eq!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .owners
+                .get(&second),
+            Some(&PointerId::Touch(2))
+        );
+        app.world_mut().despawn(second);
+        app.update();
+        assert!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .owners
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn pointer_scrollbar_drag_has_an_owner_and_cancellation_releases_it() {
+        use super::super::test_support::*;
+        let mut app = App::new();
+        app.init_resource::<UiScale>()
+            .init_resource::<ScrollThumbDragState>()
+            .add_message::<PointerRelease>()
+            .add_message::<PointerCancel>()
+            .add_message::<PointerDragEnd>()
+            .add_systems(
+                Update,
+                (setup_scroll_drag_tracking, finish_scroll_thumb_drags).chain(),
+            );
+        let content = app
+            .world_mut()
+            .spawn((UiScrollContent, Node::default()))
+            .id();
+        let thumb = app
+            .world_mut()
+            .spawn((
+                UiScrollThumb {
+                    height: 20.0,
+                    travel: 100.0,
+                },
+                DraggableUiElement,
+                Node::default(),
+            ))
+            .id();
+        let area = app
+            .world_mut()
+            .spawn(UiScrollArea {
+                offset: 0.0,
+                max_offset: 200.0,
+            })
+            .add_children(&[content, thumb])
+            .id();
+        app.update();
+        let start = |id| PointerDragStart {
+            entity: thumb,
+            pointer: pointer(id),
+            button: PointerButton::Primary,
+            hit: hit(),
+        };
+        app.world_mut().resource_mut::<UiScale>().0 = 2.0;
+        app.world_mut().trigger(start(1));
+        app.world_mut().trigger(start(2));
+        app.world_mut()
+            .trigger(drag(thumb, 2, Vec2::new(0.0, 30.0)));
+        assert_eq!(app.world().get::<UiScrollArea>(area).unwrap().offset, 0.0);
+        app.world_mut()
+            .trigger(drag(thumb, 1, Vec2::new(0.0, 30.0)));
+        assert!((app.world().get::<UiScrollArea>(area).unwrap().offset - 30.0).abs() < 0.0001);
+        let Val::Px(content_top) = app.world().get::<Node>(content).unwrap().top else {
+            panic!("expected pixel offset");
+        };
+        let Val::Px(thumb_top) = app.world().get::<Node>(thumb).unwrap().top else {
+            panic!("expected pixel offset");
+        };
+        assert!((content_top + 30.0).abs() < 0.0001);
+        assert!((thumb_top - 21.0).abs() < 0.0001);
+        // An unrelated finger ending must not release the owner's drag.
+        app.world_mut().trigger(PointerDragEnd {
+            entity: thumb,
+            pointer: pointer(2),
+            button: PointerButton::Primary,
+            distance: Vec2::ZERO,
+        });
+        assert_eq!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .owners
+                .get(&thumb),
+            Some(&PointerId::Touch(1))
+        );
+        app.world_mut().write_message(cancel(thumb, 1));
+        app.update();
+        assert!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .owners
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .released_this_frame
+        );
+        app.world_mut().trigger(start(2));
+        app.world_mut()
+            .trigger(drag(thumb, 2, Vec2::new(0.0, 1000.0)));
+        assert_eq!(app.world().get::<UiScrollArea>(area).unwrap().offset, 200.0);
+        app.world_mut()
+            .write_message(release(Entity::PLACEHOLDER, 2));
+        app.update();
+        assert!(
+            app.world()
+                .resource::<ScrollThumbDragState>()
+                .owners
+                .is_empty()
+        );
+        app.world_mut()
+            .trigger(drag(area, 3, Vec2::new(0.0, 100.0)));
+        assert_eq!(app.world().get::<UiScrollArea>(area).unwrap().offset, 150.0);
+    }
+
     use super::*;
 
     fn popup_scroll() -> UiPopupScrollArea {

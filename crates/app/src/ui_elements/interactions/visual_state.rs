@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::ui::InteractionDisabled;
+use bevy::ui::Pressed;
 
 use super::focus::FocusedUiElement;
 use super::picking::HoveredUiElement;
@@ -11,6 +13,19 @@ pub struct SelectedUiElement;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct DisabledUiElement;
+
+pub(super) fn disable_button(event: On<Add<DisabledUiElement>>, mut commands: Commands) {
+    commands
+        .entity(event.entity)
+        .try_insert(InteractionDisabled)
+        .try_remove::<(Pressed, ActivatedUiElement)>();
+}
+
+pub(super) fn enable_button(event: On<Remove<DisabledUiElement>>, mut commands: Commands) {
+    commands
+        .entity(event.entity)
+        .try_remove::<InteractionDisabled>();
+}
 
 #[derive(Clone, Copy, Component, Debug, FromTemplate)]
 pub struct UiElementColors {

@@ -18,16 +18,15 @@ pub fn settings_header(
             column_gap: px(18.0),
         }
         Children [
-            (
-                Node {
-                    flex_grow: 1.0,
-                    min_width: px(0.0),
-                }
-                Children [
-                    heading(font, theme, label),
-                ]
-            ),
-            back_button(icons, theme),
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0.0),
+            }
+            Children [
+                @heading(font, theme, label)
+            ]
+            --
+            @back_button(icons, theme)
         ]
     }
 }

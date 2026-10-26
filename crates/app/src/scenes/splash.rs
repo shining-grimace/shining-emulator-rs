@@ -57,42 +57,36 @@ fn splash_scene(assets: &AppAssets) -> impl Scene {
             justify_content: JustifyContent::Center,
         }
         Children [
-            (
+            Node {
+                width: px(APP_LOGO_WIDTH),
+            }
+            ImageNode {
+                image: {app_logo},
+            }
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(DEVELOPER_BRANDING_MARGIN),
+                bottom: px(DEVELOPER_BRANDING_MARGIN),
+                align_items: AlignItems::Center,
+                column_gap: px(DEVELOPER_BRANDING_GAP),
+            }
+            Children [
                 Node {
-                    width: px(APP_LOGO_WIDTH),
+                    width: px(DEVELOPER_LOGO_SIZE),
+                    height: px(DEVELOPER_LOGO_SIZE),
                 }
                 ImageNode {
-                    image: {app_logo},
+                    image: {developer_logo},
                 }
-            ),
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: px(DEVELOPER_BRANDING_MARGIN),
-                    bottom: px(DEVELOPER_BRANDING_MARGIN),
-                    align_items: AlignItems::Center,
-                    column_gap: px(DEVELOPER_BRANDING_GAP),
+                --
+                Text("Shining Grimace")
+                TextFont {
+                    font: FontSourceTemplate::Handle(font),
+                    font_size: px(DEVELOPER_TEXT_SIZE),
                 }
-                Children [
-                    (
-                        Node {
-                            width: px(DEVELOPER_LOGO_SIZE),
-                            height: px(DEVELOPER_LOGO_SIZE),
-                        }
-                        ImageNode {
-                            image: {developer_logo},
-                        }
-                    ),
-                    (
-                        Text("Shining Grimace")
-                        TextFont {
-                            font: FontSourceTemplate::Handle(font),
-                            font_size: px(DEVELOPER_TEXT_SIZE),
-                        }
-                        TextColor(Color::WHITE)
-                    ),
-                ]
-            ),
+                TextColor(Color::WHITE)
+            ]
         ]
     }
 }

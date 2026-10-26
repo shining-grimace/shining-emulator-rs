@@ -37,46 +37,41 @@ pub fn loading_indicator_scene(theme: ActiveTheme) -> impl Scene {
             height: px(LOADING_INDICATOR_GRID_SIZE),
         }
         Children [
-            (
-                Node {
-                    grid_column: GridPlacement::start(1),
-                    grid_row: GridPlacement::start(1),
-                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
-                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
-                }
-                BackgroundColor({colours[0]})
-                LoadingIndicatorSquare { clockwise_position: 0 }
-            ),
-            (
-                Node {
-                    grid_column: GridPlacement::start(2),
-                    grid_row: GridPlacement::start(1),
-                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
-                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
-                }
-                BackgroundColor({colours[1]})
-                LoadingIndicatorSquare { clockwise_position: 1 }
-            ),
-            (
-                Node {
-                    grid_column: GridPlacement::start(2),
-                    grid_row: GridPlacement::start(2),
-                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
-                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
-                }
-                BackgroundColor({colours[2]})
-                LoadingIndicatorSquare { clockwise_position: 2 }
-            ),
-            (
-                Node {
-                    grid_column: GridPlacement::start(1),
-                    grid_row: GridPlacement::start(2),
-                    width: px(LOADING_INDICATOR_SQUARE_SIZE),
-                    height: px(LOADING_INDICATOR_SQUARE_SIZE),
-                }
-                BackgroundColor({colours[3]})
-                LoadingIndicatorSquare { clockwise_position: 3 }
-            ),
+            Node {
+                grid_column: GridPlacement::start(1),
+                grid_row: GridPlacement::start(1),
+                width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                height: px(LOADING_INDICATOR_SQUARE_SIZE),
+            }
+            BackgroundColor({colours[0]})
+            LoadingIndicatorSquare { clockwise_position: 0 }
+            --
+            Node {
+                grid_column: GridPlacement::start(2),
+                grid_row: GridPlacement::start(1),
+                width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                height: px(LOADING_INDICATOR_SQUARE_SIZE),
+            }
+            BackgroundColor({colours[1]})
+            LoadingIndicatorSquare { clockwise_position: 1 }
+            --
+            Node {
+                grid_column: GridPlacement::start(2),
+                grid_row: GridPlacement::start(2),
+                width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                height: px(LOADING_INDICATOR_SQUARE_SIZE),
+            }
+            BackgroundColor({colours[2]})
+            LoadingIndicatorSquare { clockwise_position: 2 }
+            --
+            Node {
+                grid_column: GridPlacement::start(1),
+                grid_row: GridPlacement::start(2),
+                width: px(LOADING_INDICATOR_SQUARE_SIZE),
+                height: px(LOADING_INDICATOR_SQUARE_SIZE),
+            }
+            BackgroundColor({colours[3]})
+            LoadingIndicatorSquare { clockwise_position: 3 }
         ]
     }
 }

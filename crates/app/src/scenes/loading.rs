@@ -88,7 +88,7 @@ fn loading_scene(theme: ActiveTheme) -> impl Scene {
             height: px(LOADING_INDICATOR_GRID_SIZE),
         }
         Children [
-            {bsn_list![loading_indicator_scene(theme)]}
+            @loading_indicator_scene(theme)
         ]
     }
 }

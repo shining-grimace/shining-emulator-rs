@@ -99,8 +99,9 @@ pub fn action_hints_for_actions(
         }
         ActionHintRoot
         Children [
-            action_hint(font.clone(), icons.clone(), theme, first.0, first_key, first.1),
-            action_hint(font, icons, theme, second.0, second_key, second.1)
+            @action_hint(font.clone(), icons.clone(), theme, first.0, first_key, first.1)
+            --
+            @action_hint(font, icons, theme, second.0, second_key, second.1)
         ]
     }
 }
@@ -147,75 +148,68 @@ fn action_hint(
         }
         IgnorePicking
         Children [
-            (
+            Node {
+                width: px(ACTION_HINT_ICON_SIZE),
+                height: px(ACTION_HINT_ICON_SIZE),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            ActionHintIcon { action: {action} }
+            IgnorePicking
+            Children [
                 Node {
-                    width: px(ACTION_HINT_ICON_SIZE),
-                    height: px(ACTION_HINT_ICON_SIZE),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
+                    position_type: PositionType::Absolute,
+                    left: px(0.0),
+                    top: px(0.0),
+                    width: percent(100),
+                    height: percent(100),
                 }
-                ActionHintIcon { action: {action} }
+                ImageNode {
+                    image: HandleTemplate::Handle(background_icons),
+                    color: {background_tint},
+                    rect: {Some(background_rect)},
+                }
+                ActionHintBackgroundIcon
                 IgnorePicking
-                Children [
-                    (
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0.0),
-                            top: px(0.0),
-                            width: percent(100),
-                            height: percent(100),
-                        }
-                        ImageNode {
-                            image: HandleTemplate::Handle(background_icons),
-                            color: {background_tint},
-                            rect: {Some(background_rect)},
-                        }
-                        ActionHintBackgroundIcon
-                        IgnorePicking
-                    ),
-                    (
-                        Node {
-                            display: {foreground_display},
-                            position_type: PositionType::Absolute,
-                            left: px(0.0),
-                            top: px(0.0),
-                            width: percent(100),
-                            height: percent(100),
-                        }
-                        ImageNode {
-                            image: HandleTemplate::Handle(foreground_icons),
-                            color: {foreground_tint},
-                            rect: {Some(foreground_rect)},
-                        }
-                        ActionHintForegroundIcon
-                        IgnorePicking
-                    ),
-                    (
-                        Text({key_label})
-                        Node {
-                            display: {text_display},
-                        }
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(key_font)),
-                            font_size: px(UI_BODY_FONT_SIZE),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        ActionHintKeyLabel
-                        IgnorePicking
-                    )
-                ]
-            ),
-            (
-                Text({label})
+                --
+                Node {
+                    display: {foreground_display},
+                    position_type: PositionType::Absolute,
+                    left: px(0.0),
+                    top: px(0.0),
+                    width: percent(100),
+                    height: percent(100),
+                }
+                ImageNode {
+                    image: HandleTemplate::Handle(foreground_icons),
+                    color: {foreground_tint},
+                    rect: {Some(foreground_rect)},
+                }
+                ActionHintForegroundIcon
+                IgnorePicking
+                --
+                Text({key_label})
+                Node {
+                    display: {text_display},
+                }
                 TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(key_font)),
                     font_size: px(UI_BODY_FONT_SIZE),
                 }
                 TextColor({theme.primary})
                 UiThemeTextColor::Primary
+                ActionHintKeyLabel
                 IgnorePicking
-            )
+            ]
+            --
+            Text({label})
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_BODY_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            IgnorePicking
         ]
     }
 }

@@ -1,3 +1,4 @@
+use bevy::ui_widgets::Button;
 use std::fs;
 use std::path::PathBuf;
 
@@ -220,7 +221,7 @@ fn update_gameplay_error_overlay(
 }
 
 fn handle_gameplay_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     mut commands: Commands,
     assets: Res<AppAssets>,
     theme: Res<ActiveTheme>,
@@ -436,64 +437,58 @@ fn gameplay_scene(
             row_gap: px(UI_CONTENT_GAP),
         }
         Children [
-            gameplay_menu_button(font.clone(), theme),
-            (
+            @gameplay_menu_button(font.clone(), theme)
+            --
+            Node {
+                width: percent(100),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: px(0.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            Children [
                 Node {
-                    width: percent(100),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    min_height: px(0.0),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(UI_CONTENT_GAP),
                 }
+                GameplayErrorOverlay
                 Children [
-                    (
-                        Node {
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::Center,
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(UI_CONTENT_GAP),
-                        }
-                        GameplayErrorOverlay
-                        Children [
-                            (
-                                Node {
-                                    width: px(GAMEPLAY_ERROR_ICON_SIZE),
-                                    height: px(GAMEPLAY_ERROR_ICON_SIZE),
-                                }
-                                GameplayErrorIcon
-                                ImageNode {
-                                    image: {HandleTemplate::Handle(assets.icons.clone())},
-                                    color: {theme.secondary},
-                                    rect: {Some(error_icon_rect())},
-                                }
-                            ),
-                            (
-                                Node {
-                                    display: Display::None,
-                                    width: px(LOADING_INDICATOR_GRID_SIZE),
-                                    height: px(LOADING_INDICATOR_GRID_SIZE),
-                                }
-                                GameplayLoadingIndicator
-                                Children [
-                                    {bsn_list![loading_indicator_scene(theme)]}
-                                ]
-                            ),
-                            (
-                                Text("Loading ROM...")
-                                GameplayErrorMessage
-                                TextFont {
-                                    font: {FontSourceTemplate::Handle(HandleTemplate::Handle(font.clone()))},
-                                    font_size: px(UI_BODY_FONT_SIZE),
-                                }
-                                TextColor({theme.secondary})
-                                TextLayout::new(Justify::Center, LineBreak::WordBoundary)
-                            )
-                        ]
-                    )
+                    Node {
+                        width: px(GAMEPLAY_ERROR_ICON_SIZE),
+                        height: px(GAMEPLAY_ERROR_ICON_SIZE),
+                    }
+                    GameplayErrorIcon
+                    ImageNode {
+                        image: {HandleTemplate::Handle(assets.icons.clone())},
+                        color: {theme.secondary},
+                        rect: {Some(error_icon_rect())},
+                    }
+                    --
+                    Node {
+                        display: Display::None,
+                        width: px(LOADING_INDICATOR_GRID_SIZE),
+                        height: px(LOADING_INDICATOR_GRID_SIZE),
+                    }
+                    GameplayLoadingIndicator
+                    Children [
+                        @loading_indicator_scene(theme)
+                    ]
+                    --
+                    Text("Loading ROM...")
+                    GameplayErrorMessage
+                    TextFont {
+                        font: {FontSourceTemplate::Handle(HandleTemplate::Handle(font.clone()))},
+                        font_size: px(UI_BODY_FONT_SIZE),
+                    }
+                    TextColor({theme.secondary})
+                    TextLayout::new(Justify::Center, LineBreak::WordBoundary)
                 ]
-            ),
-            action_hints_for_actions(
+            ]
+            --
+            @action_hints_for_actions(
                 hint_font,
                 assets.icons.clone(),
                 theme,
@@ -501,7 +496,7 @@ fn gameplay_scene(
                 primary_input,
                 (InputAction::QuitRom, "Quit"),
                 (InputAction::PauseAndResume, "Pause"),
-            ),
+            )
         ]
     }
 }
@@ -538,18 +533,16 @@ fn gameplay_menu_button(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text("Menu")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            )
+            Text("Menu")
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -560,7 +553,7 @@ fn gameplay_menu_popup_scene(assets: &AppAssets, theme: ActiveTheme, position: V
     bsn! {
         DespawnOnExit::<AppState>(AppState::Gameplay)
         GlobalZIndex(120)
-        choice_popup_menu(
+        @choice_popup_menu(
             font,
             theme,
             ChoicePopupConfig {
@@ -965,17 +958,20 @@ fn cheat_codes_popup_scene(
         ChoicePopupContext { context_index: {CHEAT_CODES_CONTEXT_INDEX} }
         CheatCodePopupRoot
         Children [
-            cheat_codes_popup_label(font.clone(), theme, "Cheat Codes"),
-            text_input_with_value_width(
+            @cheat_codes_popup_label(font.clone(), theme, "Cheat Codes")
+            --
+            @text_input_with_value_width(
                 font.clone(),
                 "Enter code (e.g. 004-BCE or 010238CD)",
                 String::new(),
                 theme,
                 UiFocusNav::default(),
                 px(width - 2.0 * UI_INNER_PADDING),
-            ),
-            cheat_codes_list_container(font.clone(), theme, codes),
-            cheat_codes_button_row(font.clone(), theme),
+            )
+            --
+            @cheat_codes_list_container(font.clone(), theme, codes)
+            --
+            @cheat_codes_button_row(font.clone(), theme)
         ]
     }
 }
@@ -995,7 +991,7 @@ fn cheat_codes_list_container(
             overflow: Overflow::clip(),
         }
         Children [
-            cheat_codes_list(font, theme, codes),
+            @cheat_codes_list(font, theme, codes)
         ]
     }
 }
@@ -1011,10 +1007,13 @@ fn cheat_codes_button_row(font: Handle<Font>, theme: ActiveTheme) -> impl Scene 
             column_gap: px(8.0),
         }
         Children [
-            cheat_codes_add_button(font.clone(), theme, background, hover_background),
-            cheat_codes_remove_button(font.clone(), theme, background, hover_background),
-            cheat_codes_back_button(font.clone(), theme, background, hover_background),
-            cheat_codes_close_button(font, theme, background, hover_background),
+            @cheat_codes_add_button(font.clone(), theme, background, hover_background)
+            --
+            @cheat_codes_remove_button(font.clone(), theme, background, hover_background)
+            --
+            @cheat_codes_back_button(font.clone(), theme, background, hover_background)
+            --
+            @cheat_codes_close_button(font, theme, background, hover_background)
         ]
     }
 }
@@ -1047,18 +1046,16 @@ fn cheat_codes_add_button(
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text("Add Code")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            ),
+            Text("Add Code")
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -1091,18 +1088,16 @@ fn cheat_codes_remove_button(
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text("Remove")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            ),
+            Text("Remove")
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -1135,18 +1130,16 @@ fn cheat_codes_back_button(
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text("Back")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            ),
+            Text("Back")
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -1179,18 +1172,16 @@ fn cheat_codes_close_button(
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text("Close")
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            ),
+            Text("Close")
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -1204,7 +1195,7 @@ fn cheat_codes_list(font: Handle<Font>, theme: ActiveTheme, codes: &[CheatCode])
             min_height: px(0.0),
         }
         Children [
-            list_view(font, theme, ListViewConfig {
+            @list_view(font, theme, ListViewConfig {
                 nav: UiFocusNav::default(),
                 scrollbar_nav: UiFocusNav::default(),
                 columns: vec![

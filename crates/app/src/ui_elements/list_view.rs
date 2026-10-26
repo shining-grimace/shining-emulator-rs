@@ -2,6 +2,7 @@ use bevy::asset::HandleTemplate;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{UI_BODY_FONT_SIZE, UI_LIST_HEIGHT, UI_LIST_ROW_HEIGHT};
@@ -120,74 +121,65 @@ pub fn list_view(font: Handle<Font>, theme: ActiveTheme, config: ListViewConfig)
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.primary}, fill: {background}, hover_fill: {background} }
         UiListViewFocus { remembered_item: {Entity::PLACEHOLDER} }
         Children [
-            header,
-            (
+            @header
+            --
+            Node {
+                width: percent(100),
+                height: px(2.0),
+            }
+            BackgroundColor({theme.primary})
+            UiThemeBackgroundColor::Primary
+            UiElementAccent
+            IgnorePicking
+            --
+            Node {
+                width: percent(100),
+                flex_grow: 1.0,
+                flex_direction: FlexDirection::Row,
+                column_gap: px(10.0),
+                overflow: Overflow::clip(),
+            }
+            UiScrollArea { offset: 0.0, max_offset: 0.0 }
+            VirtualListScrollArea
+            AutoScrollFocusedChild
+            Children [
                 Node {
-                    width: percent(100),
-                    height: px(2.0),
-                }
-                BackgroundColor({theme.primary})
-                UiThemeBackgroundColor::Primary
-                UiElementAccent
-                IgnorePicking
-            ),
-            (
-                Node {
-                    width: percent(100),
+                    position_type: PositionType::Relative,
                     flex_grow: 1.0,
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(10.0),
+                    height: percent(100),
                     overflow: Overflow::clip(),
                 }
-                UiScrollArea { offset: 0.0, max_offset: 0.0 }
-                VirtualListScrollArea
-                AutoScrollFocusedChild
                 Children [
-                    (
-                        Node {
-                            position_type: PositionType::Relative,
-                            flex_grow: 1.0,
-                            height: percent(100),
-                            overflow: Overflow::clip(),
-                        }
-                        Children [
-                            (
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    top: px(0.0),
-                                    left: px(0.0),
-                                    width: percent(100),
-                                    height: px(content_height),
-                                    flex_direction: FlexDirection::Column,
-                                }
-                                UiScrollContent
-                                VirtualListContent
-                                VirtualListSelection::default()
-                                Children [
-                                    {rows}
-                                ]
-                            )
-                        ]
-                    ),
-                    (
-                        Node {
-                            height: percent(100),
-                            overflow: Overflow::clip(),
-                            flex_direction: FlexDirection::Column,
-                        }
-                        Children [
-                            (
-                                scrollbar(theme, 56.0, 0.0)
-                                Button
-                                UiFocusNav { up: {config.scrollbar_nav.up}, right: {config.scrollbar_nav.right}, down: {config.scrollbar_nav.down}, left: {config.scrollbar_nav.left} }
-                                UiElementKind::ScrollBar
-                                UiElementTheme::ScrollBar
-                                UiElementColors { primary: {theme.secondary}, secondary: {theme.secondary}, tertiary: {control_background}, fill: Color::NONE, hover_fill: Color::NONE }
-                            ),
-                        ]
-                    ),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: px(0.0),
+                        left: px(0.0),
+                        width: percent(100),
+                        height: px(content_height),
+                        flex_direction: FlexDirection::Column,
+                    }
+                    UiScrollContent
+                    VirtualListContent
+                    VirtualListSelection::default()
+                    Children [
+                        {rows}
+                    ]
                 ]
-            ),
+                --
+                Node {
+                    height: percent(100),
+                    overflow: Overflow::clip(),
+                    flex_direction: FlexDirection::Column,
+                }
+                Children [
+                    @scrollbar(theme, 56.0, 0.0)
+                    Button
+                    UiFocusNav { up: {config.scrollbar_nav.up}, right: {config.scrollbar_nav.right}, down: {config.scrollbar_nav.down}, left: {config.scrollbar_nav.left} }
+                    UiElementKind::ScrollBar
+                    UiElementTheme::ScrollBar
+                    UiElementColors { primary: {theme.secondary}, secondary: {theme.secondary}, tertiary: {control_background}, fill: Color::NONE, hover_fill: Color::NONE }
+                ]
+            ]
         ]
     }
 }
@@ -415,18 +407,16 @@ fn list_cell(
         UiListCellText { value: {label.clone()}, average_character_width: 0.0 }
         IgnorePicking
         Children [
-            (
-                Text({label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_BODY_FONT_SIZE),
-                }
-                TextColor({colour})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                IgnorePicking
-                TextLayout::new(Justify::Left, LineBreak::NoWrap)
-            )
+            Text({label})
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_BODY_FONT_SIZE),
+            }
+            TextColor({colour})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            IgnorePicking
+            TextLayout::new(Justify::Left, LineBreak::NoWrap)
         ]
     }
 }

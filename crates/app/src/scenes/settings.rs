@@ -168,7 +168,7 @@ fn spawn_settings_scene(
 }
 
 fn save_settings_select_on_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     mut commands: Commands,
     selects: Query<(&SettingsSelect, &UiMultiSelect)>,
     mut storage: ResMut<LocalStorage>,
@@ -261,7 +261,7 @@ fn save_settings_select_on_activation(
 }
 
 fn handle_mapping_button_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     edit_primary_buttons: Query<(), With<EditPrimaryMappingButton>>,
     mut edit_target: ResMut<InputMappingEditTarget>,
     primary_input: Res<PrimaryInputDevice>,
@@ -284,7 +284,7 @@ fn handle_mapping_button_activation(
 }
 
 fn handle_audio_preset_button_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     edit_buttons: Query<(), With<EditAudioPresetButton>>,
     create_buttons: Query<(), With<CreateAudioPresetButton>>,
     delete_buttons: Query<(), With<DeleteAudioPresetButton>>,
@@ -485,7 +485,7 @@ fn existing_audio_preset_numbers(storage: &LocalStorage) -> Vec<u8> {
 }
 
 fn handle_provider_button_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     mut commands: Commands,
     mut queries: ProviderButtonQueries,
     mut edit_target: ResMut<RomProviderEditTarget>,
@@ -862,59 +862,55 @@ fn settings_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
+            Node {
+                width: percent(100),
+                max_width: px(UI_WIDE_CONTENT_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                @settings_header(font.clone(), assets.icons.clone(), theme, "Settings")
+                --
                 Node {
                     width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
-                    height: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
                     min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
+                    display: Display::None,
                 }
+                ResponsiveLandscapeOnly
                 Children [
-                    settings_header(font.clone(), assets.icons.clone(), theme, "Settings"),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsiveLandscapeOnly
-                        Children [
-                            settings_landscape_body(landscape_font, theme, settings, landscape_input_config, landscape_audio_config, landscape_providers),
-                        ]
-                    ),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsivePortraitOnly
-                        Children [
-                            (
-                                #SettingsBodyScrollBar
-                                flow_scroll_view(
-                                    theme,
-                                    #SettingsBodyScrollBar,
-                                    ScrollViewConfig {
-                                        width: percent(100),
-                                        min_height: px(0.0),
-                                        thumb_height: 112.0,
-                                    },
-                                    move |_| settings_body(body_font, theme, settings, input_config, audio_config, providers)
-                                )
-                            )
-                        ]
-                    ),
-                    info_message_text(font.clone(), theme, info_text.to_string(), false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
+                    @settings_landscape_body(landscape_font, theme, settings, landscape_input_config, landscape_audio_config, landscape_providers)
                 ]
-            ),
+                --
+                Node {
+                    width: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: px(0.0),
+                    display: Display::None,
+                }
+                ResponsivePortraitOnly
+                Children [
+                    #SettingsBodyScrollBar
+                    @flow_scroll_view(
+                        theme,
+                        #SettingsBodyScrollBar,
+                        ScrollViewConfig {
+                            width: percent(100),
+                            min_height: px(0.0),
+                            thumb_height: 112.0,
+                        },
+                        move |_| settings_body(body_font, theme, settings, input_config, audio_config, providers)
+                    )
+                ]
+                --
+                @info_message_text(font.clone(), theme, info_text.to_string(), false)
+                --
+                @action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select")
+            ]
         ]
     }
 }
@@ -935,215 +931,191 @@ fn settings_left_column(
             padding: UiRect::right(px(18.0)),
         }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Show Button Overlay"),
-                    (
-                        multi_select(font.clone(), theme, button_overlay_config(settings.force_button_overlay as usize))
-                        SettingsSelect { field: FIELD_FORCE_BUTTON_OVERLAY }
-                        UiFocusId { id: TARGET_OVERLAY }
-                        UiFocusNavIds { up: {focus_nav(TARGET_OVERLAY).up}, right: {focus_nav(TARGET_OVERLAY).right}, down: {focus_nav(TARGET_OVERLAY).down}, left: {focus_nav(TARGET_OVERLAY).left} }
-                        InitialFocus { enabled: true }
-                        DefaultFocusTarget
-                    ),
-                ]
-            ),
-            description(font.clone(), theme, "The overlay shows touch input zones and emulated button state. By default, it's hidden when using any non-touch input device."),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Font Size"),
-                    (
-                        multi_select(font.clone(), theme, font_size_config(settings.font_size as usize))
-                        SettingsSelect { field: FIELD_FONT_SIZE }
-                        UiFocusId { id: TARGET_FONT_SIZE }
-                        UiFocusNavIds { up: {focus_nav(TARGET_FONT_SIZE).up}, right: {focus_nav(TARGET_FONT_SIZE).right}, down: {focus_nav(TARGET_FONT_SIZE).down}, left: {focus_nav(TARGET_FONT_SIZE).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "UI Theme"),
-                    (
-                        multi_select(font.clone(), theme, theme_config(settings.ui_theme as usize))
-                        SettingsSelect { field: FIELD_UI_THEME }
-                        UiFocusId { id: TARGET_THEME }
-                        UiFocusNavIds { up: {focus_nav(TARGET_THEME).up}, right: {focus_nav(TARGET_THEME).right}, down: {focus_nav(TARGET_THEME).down}, left: {focus_nav(TARGET_THEME).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Primary Input Device"),
-                    (
-                        multi_select(font.clone(), theme, input_config)
-                        SettingsSelect { field: FIELD_PRIMARY_INPUT }
-                        UiFocusId { id: TARGET_PRIMARY_INPUT }
-                        UiFocusNavIds { up: {focus_nav(TARGET_PRIMARY_INPUT).up}, right: {focus_nav(TARGET_PRIMARY_INPUT).right}, down: {focus_nav(TARGET_PRIMARY_INPUT).down}, left: {focus_nav(TARGET_PRIMARY_INPUT).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    justify_content: JustifyContent::FlexEnd,
-                }
-                Children [
-                    (
-                        button_with_width(font.clone(), "Edit Mappings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
-                        EditPrimaryMappingButton
-                        UiFocusId { id: TARGET_EDIT_MAPPINGS }
-                        UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {focus_nav(TARGET_EDIT_MAPPINGS).left} }
-                    )
-                ]
-            ),
-            description(font.clone(), theme, "The primary input device will be used for showing action hints in the UI."),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Audio Preset"),
-                    (
-                        multi_select(font.clone(), theme, audio_config)
-                        SettingsSelect { field: FIELD_AUDIO_PRESET }
-                        UiFocusId { id: TARGET_AUDIO_PRESET }
-                        UiFocusNavIds { up: {focus_nav(TARGET_AUDIO_PRESET).up}, right: {focus_nav(TARGET_AUDIO_PRESET).right}, down: {focus_nav(TARGET_AUDIO_PRESET).down}, left: {focus_nav(TARGET_AUDIO_PRESET).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    column_gap: px(UI_BUTTON_ROW_GAP),
-                }
-                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
-                Children [
-                    (
-                        button(font.clone(), "Delete", theme, UiFocusNav::default())
-                        DeleteAudioPresetButton
-                        UiFocusId { id: TARGET_DELETE_MAPPING }
-                        UiFocusNavIds { up: {focus_nav(TARGET_DELETE_MAPPING).up}, right: {focus_nav(TARGET_DELETE_MAPPING).right}, down: {focus_nav(TARGET_DELETE_MAPPING).down}, left: {focus_nav(TARGET_DELETE_MAPPING).left} }
-                    ),
-                    (
-                        button(font.clone(), "Edit", theme, UiFocusNav::default())
-                        EditAudioPresetButton
-                        UiFocusId { id: TARGET_EDIT_MAPPING }
-                        UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPING).up}, right: {focus_nav(TARGET_EDIT_MAPPING).right}, down: {focus_nav(TARGET_EDIT_MAPPING).down}, left: {focus_nav(TARGET_EDIT_MAPPING).left} }
-                    ),
-                    (
-                        button(font.clone(), "Create", theme, UiFocusNav::default())
-                        CreateAudioPresetButton
-                        UiFocusId { id: TARGET_CREATE_MAPPING }
-                        UiFocusNavIds { up: {focus_nav(TARGET_CREATE_MAPPING).up}, right: {focus_nav(TARGET_CREATE_MAPPING).right}, down: {focus_nav(TARGET_CREATE_MAPPING).down}, left: {focus_nav(TARGET_CREATE_MAPPING).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Game Audio Volume"),
-                    (
-                        multi_select(font.clone(), theme, game_audio_volume_config(settings.game_audio_volume))
-                        SettingsSelect { field: FIELD_GAME_AUDIO_VOLUME }
-                        UiFocusId { id: TARGET_GAME_AUDIO_VOLUME }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).up}, right: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).right}, down: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).down}, left: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Image Upscaling"),
-                    (
-                        multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
-                        SettingsSelect { field: FIELD_UPSCALING_MODE }
-                        UiFocusId { id: TARGET_UPSCALING }
-                        UiFocusNavIds { up: {focus_nav(TARGET_UPSCALING).up}, right: {focus_nav(TARGET_UPSCALING).right}, down: {focus_nav(TARGET_UPSCALING).down}, left: {focus_nav(TARGET_UPSCALING).left} }
-                    ),
-                ]
-            ),
-            description(font.clone(), theme, "Image upscaling enhances pixel art using the xBR algorithms."),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Emulated Model"),
-                    (
-                        multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
-                        SettingsSelect { field: FIELD_EMULATION_MODEL }
-                        UiFocusId { id: TARGET_MODEL }
-                        UiFocusNavIds { up: {focus_nav(TARGET_MODEL).up}, right: {focus_nav(TARGET_MODEL).right}, down: {focus_nav(TARGET_MODEL).down}, left: {focus_nav(TARGET_MODEL).left} }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::SpaceBetween,
-                    column_gap: px(18.0),
-                    padding: UiRect::bottom(px(120.0)),
-                }
-                ResponsiveFieldRow { gap: 18.0 }
-                Children [
-                    description(font.clone(), theme, "Enable Super GameBoy Border"),
-                    (
-                        multi_select(font.clone(), theme, yes_no_config(settings.sgb_overlay_enable as usize))
-                        SettingsSelect { field: FIELD_SGB_OVERLAY_ENABLE }
-                        UiFocusId { id: TARGET_SGB }
-                        UiFocusNavIds { up: {focus_nav(TARGET_SGB).up}, right: {focus_nav(TARGET_SGB).right}, down: {focus_nav(TARGET_SGB).down}, left: {focus_nav(TARGET_SGB).left} }
-                    ),
-                ]
-            ),
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Show Button Overlay")
+                --
+                @multi_select(font.clone(), theme, button_overlay_config(settings.force_button_overlay as usize))
+                SettingsSelect { field: FIELD_FORCE_BUTTON_OVERLAY }
+                UiFocusId { id: TARGET_OVERLAY }
+                UiFocusNavIds { up: {focus_nav(TARGET_OVERLAY).up}, right: {focus_nav(TARGET_OVERLAY).right}, down: {focus_nav(TARGET_OVERLAY).down}, left: {focus_nav(TARGET_OVERLAY).left} }
+                InitialFocus { enabled: true }
+                DefaultFocusTarget
+            ]
+            --
+            @description(font.clone(), theme, "The overlay shows touch input zones and emulated button state. By default, it's hidden when using any non-touch input device.")
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Font Size")
+                --
+                @multi_select(font.clone(), theme, font_size_config(settings.font_size as usize))
+                SettingsSelect { field: FIELD_FONT_SIZE }
+                UiFocusId { id: TARGET_FONT_SIZE }
+                UiFocusNavIds { up: {focus_nav(TARGET_FONT_SIZE).up}, right: {focus_nav(TARGET_FONT_SIZE).right}, down: {focus_nav(TARGET_FONT_SIZE).down}, left: {focus_nav(TARGET_FONT_SIZE).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "UI Theme")
+                --
+                @multi_select(font.clone(), theme, theme_config(settings.ui_theme as usize))
+                SettingsSelect { field: FIELD_UI_THEME }
+                UiFocusId { id: TARGET_THEME }
+                UiFocusNavIds { up: {focus_nav(TARGET_THEME).up}, right: {focus_nav(TARGET_THEME).right}, down: {focus_nav(TARGET_THEME).down}, left: {focus_nav(TARGET_THEME).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Primary Input Device")
+                --
+                @multi_select(font.clone(), theme, input_config)
+                SettingsSelect { field: FIELD_PRIMARY_INPUT }
+                UiFocusId { id: TARGET_PRIMARY_INPUT }
+                UiFocusNavIds { up: {focus_nav(TARGET_PRIMARY_INPUT).up}, right: {focus_nav(TARGET_PRIMARY_INPUT).right}, down: {focus_nav(TARGET_PRIMARY_INPUT).down}, left: {focus_nav(TARGET_PRIMARY_INPUT).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::FlexEnd,
+            }
+            Children [
+                @button_with_width(font.clone(), "Edit Mappings", theme, UiFocusNav::default(), px(UI_MULTI_SELECT_WIDTH))
+                EditPrimaryMappingButton
+                UiFocusId { id: TARGET_EDIT_MAPPINGS }
+                UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPINGS).up}, right: {focus_nav(TARGET_EDIT_MAPPINGS).right}, down: {focus_nav(TARGET_EDIT_MAPPINGS).down}, left: {focus_nav(TARGET_EDIT_MAPPINGS).left} }
+            ]
+            --
+            @description(font.clone(), theme, "The primary input device will be used for showing action hints in the UI.")
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Audio Preset")
+                --
+                @multi_select(font.clone(), theme, audio_config)
+                SettingsSelect { field: FIELD_AUDIO_PRESET }
+                UiFocusId { id: TARGET_AUDIO_PRESET }
+                UiFocusNavIds { up: {focus_nav(TARGET_AUDIO_PRESET).up}, right: {focus_nav(TARGET_AUDIO_PRESET).right}, down: {focus_nav(TARGET_AUDIO_PRESET).down}, left: {focus_nav(TARGET_AUDIO_PRESET).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                column_gap: px(UI_BUTTON_ROW_GAP),
+            }
+            ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
+            Children [
+                @button(font.clone(), "Delete", theme, UiFocusNav::default())
+                DeleteAudioPresetButton
+                UiFocusId { id: TARGET_DELETE_MAPPING }
+                UiFocusNavIds { up: {focus_nav(TARGET_DELETE_MAPPING).up}, right: {focus_nav(TARGET_DELETE_MAPPING).right}, down: {focus_nav(TARGET_DELETE_MAPPING).down}, left: {focus_nav(TARGET_DELETE_MAPPING).left} }
+                --
+                @button(font.clone(), "Edit", theme, UiFocusNav::default())
+                EditAudioPresetButton
+                UiFocusId { id: TARGET_EDIT_MAPPING }
+                UiFocusNavIds { up: {focus_nav(TARGET_EDIT_MAPPING).up}, right: {focus_nav(TARGET_EDIT_MAPPING).right}, down: {focus_nav(TARGET_EDIT_MAPPING).down}, left: {focus_nav(TARGET_EDIT_MAPPING).left} }
+                --
+                @button(font.clone(), "Create", theme, UiFocusNav::default())
+                CreateAudioPresetButton
+                UiFocusId { id: TARGET_CREATE_MAPPING }
+                UiFocusNavIds { up: {focus_nav(TARGET_CREATE_MAPPING).up}, right: {focus_nav(TARGET_CREATE_MAPPING).right}, down: {focus_nav(TARGET_CREATE_MAPPING).down}, left: {focus_nav(TARGET_CREATE_MAPPING).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Game Audio Volume")
+                --
+                @multi_select(font.clone(), theme, game_audio_volume_config(settings.game_audio_volume))
+                SettingsSelect { field: FIELD_GAME_AUDIO_VOLUME }
+                UiFocusId { id: TARGET_GAME_AUDIO_VOLUME }
+                UiFocusNavIds { up: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).up}, right: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).right}, down: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).down}, left: {settings_focus_nav(TARGET_GAME_AUDIO_VOLUME).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Image Upscaling")
+                --
+                @multi_select(font.clone(), theme, upscaling_config(settings.upscaling_mode as usize))
+                SettingsSelect { field: FIELD_UPSCALING_MODE }
+                UiFocusId { id: TARGET_UPSCALING }
+                UiFocusNavIds { up: {focus_nav(TARGET_UPSCALING).up}, right: {focus_nav(TARGET_UPSCALING).right}, down: {focus_nav(TARGET_UPSCALING).down}, left: {focus_nav(TARGET_UPSCALING).left} }
+            ]
+            --
+            @description(font.clone(), theme, "Image upscaling enhances pixel art using the xBR algorithms.")
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Emulated Model")
+                --
+                @multi_select(font.clone(), theme, emulation_model_config(settings.emulation_model as usize))
+                SettingsSelect { field: FIELD_EMULATION_MODEL }
+                UiFocusId { id: TARGET_MODEL }
+                UiFocusNavIds { up: {focus_nav(TARGET_MODEL).up}, right: {focus_nav(TARGET_MODEL).right}, down: {focus_nav(TARGET_MODEL).down}, left: {focus_nav(TARGET_MODEL).left} }
+            ]
+            --
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: px(18.0),
+                padding: UiRect::bottom(px(120.0)),
+            }
+            ResponsiveFieldRow { gap: 18.0 }
+            Children [
+                @description(font.clone(), theme, "Enable Super GameBoy Border")
+                --
+                @multi_select(font.clone(), theme, yes_no_config(settings.sgb_overlay_enable as usize))
+                SettingsSelect { field: FIELD_SGB_OVERLAY_ENABLE }
+                UiFocusId { id: TARGET_SGB }
+                UiFocusNavIds { up: {focus_nav(TARGET_SGB).up}, right: {focus_nav(TARGET_SGB).right}, down: {focus_nav(TARGET_SGB).down}, left: {focus_nav(TARGET_SGB).left} }
+            ]
         ]
     }
 }
@@ -1169,78 +1141,66 @@ fn settings_body(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            (
+            Node {
+                width: percent(UI_PRIMARY_COLUMN_PERCENT),
+                min_height: px(0.0),
+            }
+            ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
+            Children [
+                @settings_left_column(left_font, theme, settings, input_config, audio_config, settings_portrait_focus_nav)
+            ]
+            --
+            Node {
+                width: percent(UI_SECONDARY_COLUMN_PERCENT),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_SECTION_GAP),
+            }
+            ResponsivePercentWidth { landscape: UI_SECONDARY_COLUMN_PERCENT }
+            Children [
                 Node {
-                    width: percent(UI_PRIMARY_COLUMN_PERCENT),
-                    min_height: px(0.0),
-                }
-                ResponsivePercentWidth { landscape: UI_PRIMARY_COLUMN_PERCENT }
-                Children [
-                    settings_left_column(left_font, theme, settings, input_config, audio_config, settings_portrait_focus_nav),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(UI_SECONDARY_COLUMN_PERCENT),
+                    width: percent(100),
                     min_height: px(0.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_SECTION_GAP),
+                    row_gap: px(14.0),
                 }
-                ResponsivePercentWidth { landscape: UI_SECONDARY_COLUMN_PERCENT }
                 Children [
-                    (
-                        Node {
-                            width: percent(100),
-                            min_height: px(0.0),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(14.0),
-                        }
-                        Children [
-                            description(right_font.clone(), theme, "ROM Providers"),
-                            (
-                                list_view(right_font.clone(), theme, provider_list_config(&providers))
-                                ProviderList
-                                UiFocusId { id: TARGET_PROVIDER_LIST }
-                                UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).left} }
-                            ),
-                            (
-                                Node {
-                                    width: percent(100),
-                                    justify_content: JustifyContent::FlexEnd,
-                                    column_gap: px(UI_BUTTON_ROW_GAP),
-                                }
-                                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
-                                Children [
-                                    (
-                                        button(right_font.clone(), "Sync", theme, UiFocusNav::default())
-                                        ProviderSyncButton
-                                        UiFocusId { id: TARGET_PROVIDER_SYNC }
-                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).left} }
-                                    ),
-                                    (
-                                        button(right_font.clone(), "Delete", theme, UiFocusNav::default())
-                                        ProviderDeleteButton
-                                        UiFocusId { id: TARGET_PROVIDER_DELETE }
-                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).left} }
-                                    ),
-                                    (
-                                        button(right_font.clone(), "Edit", theme, UiFocusNav::default())
-                                        ProviderEditButton
-                                        UiFocusId { id: TARGET_PROVIDER_EDIT }
-                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).left} }
-                                    ),
-                                    (
-                                        button(right_font, "Create", theme, UiFocusNav::default())
-                                        ProviderCreateButton
-                                        UiFocusId { id: TARGET_PROVIDER_CREATE }
-                                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).left} }
-                                    ),
-                                ]
-                            ),
-                        ]
-                    ),
+                    @description(right_font.clone(), theme, "ROM Providers")
+                    --
+                    @list_view(right_font.clone(), theme, provider_list_config(&providers))
+                    ProviderList
+                    UiFocusId { id: TARGET_PROVIDER_LIST }
+                    UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_LIST).left} }
+                    --
+                    Node {
+                        width: percent(100),
+                        justify_content: JustifyContent::FlexEnd,
+                        column_gap: px(UI_BUTTON_ROW_GAP),
+                    }
+                    ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
+                    Children [
+                        @button(right_font.clone(), "Sync", theme, UiFocusNav::default())
+                        ProviderSyncButton
+                        UiFocusId { id: TARGET_PROVIDER_SYNC }
+                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_SYNC).left} }
+                        --
+                        @button(right_font.clone(), "Delete", theme, UiFocusNav::default())
+                        ProviderDeleteButton
+                        UiFocusId { id: TARGET_PROVIDER_DELETE }
+                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_DELETE).left} }
+                        --
+                        @button(right_font.clone(), "Edit", theme, UiFocusNav::default())
+                        ProviderEditButton
+                        UiFocusId { id: TARGET_PROVIDER_EDIT }
+                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_EDIT).left} }
+                        --
+                        @button(right_font, "Create", theme, UiFocusNav::default())
+                        ProviderCreateButton
+                        UiFocusId { id: TARGET_PROVIDER_CREATE }
+                        UiFocusNavIds { up: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_portrait_focus_nav(TARGET_PROVIDER_CREATE).left} }
+                    ]
                 ]
-            ),
+            ]
         ]
     }
 }
@@ -1265,30 +1225,27 @@ fn settings_landscape_body(
             column_gap: px(UI_PANEL_GAP),
         }
         Children [
-            (
-                #LeftScrollBar
-                scroll_view(
-                    theme,
-                    #LeftScrollBar,
-                    ScrollViewConfig {
-                        width: percent(UI_PRIMARY_COLUMN_PERCENT),
-                        min_height: px(0.0),
-                        thumb_height: 112.0,
-                    },
-                    move |_| settings_left_column(left_font, theme, settings, input_config, audio_config, settings_focus_nav)
-                )
-            ),
-            (
-                Node {
-                    width: percent(UI_SECONDARY_COLUMN_PERCENT),
+            #LeftScrollBar
+            @scroll_view(
+                theme,
+                #LeftScrollBar,
+                ScrollViewConfig {
+                    width: percent(UI_PRIMARY_COLUMN_PERCENT),
                     min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_SECTION_GAP),
-                }
-                Children [
-                    settings_provider_column(right_font, theme, providers),
-                ]
-            ),
+                    thumb_height: 112.0,
+                },
+                move |_| settings_left_column(left_font, theme, settings, input_config, audio_config, settings_focus_nav)
+            )
+            --
+            Node {
+                width: percent(UI_SECONDARY_COLUMN_PERCENT),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_SECTION_GAP),
+            }
+            Children [
+                @settings_provider_column(right_font, theme, providers)
+            ]
         ]
     }
 }
@@ -1308,47 +1265,40 @@ fn settings_provider_column(
             row_gap: px(14.0),
         }
         Children [
-            description(font.clone(), theme, "ROM Providers"),
-            (
-                list_view(font.clone(), theme, provider_list_config(&providers))
-                ProviderList
-                UiFocusId { id: TARGET_PROVIDER_LIST }
-                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_focus_nav(TARGET_PROVIDER_LIST).left} }
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    justify_content: JustifyContent::FlexEnd,
-                    column_gap: px(UI_BUTTON_ROW_GAP),
-                }
-                ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
-                Children [
-                    (
-                        button(font.clone(), "Sync", theme, UiFocusNav::default())
-                        ProviderSyncButton
-                        UiFocusId { id: TARGET_PROVIDER_SYNC }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_focus_nav(TARGET_PROVIDER_SYNC).left} }
-                    ),
-                    (
-                        button(font.clone(), "Delete", theme, UiFocusNav::default())
-                        ProviderDeleteButton
-                        UiFocusId { id: TARGET_PROVIDER_DELETE }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_focus_nav(TARGET_PROVIDER_DELETE).left} }
-                    ),
-                    (
-                        button(font.clone(), "Edit", theme, UiFocusNav::default())
-                        ProviderEditButton
-                        UiFocusId { id: TARGET_PROVIDER_EDIT }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_focus_nav(TARGET_PROVIDER_EDIT).left} }
-                    ),
-                    (
-                        button(font, "Create", theme, UiFocusNav::default())
-                        ProviderCreateButton
-                        UiFocusId { id: TARGET_PROVIDER_CREATE }
-                        UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_focus_nav(TARGET_PROVIDER_CREATE).left} }
-                    ),
-                ]
-            ),
+            @description(font.clone(), theme, "ROM Providers")
+            --
+            @list_view(font.clone(), theme, provider_list_config(&providers))
+            ProviderList
+            UiFocusId { id: TARGET_PROVIDER_LIST }
+            UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_LIST).up}, right: {settings_focus_nav(TARGET_PROVIDER_LIST).right}, down: {settings_focus_nav(TARGET_PROVIDER_LIST).down}, left: {settings_focus_nav(TARGET_PROVIDER_LIST).left} }
+            --
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::FlexEnd,
+                column_gap: px(UI_BUTTON_ROW_GAP),
+            }
+            ResponsiveButtonRow { gap: UI_BUTTON_ROW_GAP }
+            Children [
+                @button(font.clone(), "Sync", theme, UiFocusNav::default())
+                ProviderSyncButton
+                UiFocusId { id: TARGET_PROVIDER_SYNC }
+                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_SYNC).up}, right: {settings_focus_nav(TARGET_PROVIDER_SYNC).right}, down: {settings_focus_nav(TARGET_PROVIDER_SYNC).down}, left: {settings_focus_nav(TARGET_PROVIDER_SYNC).left} }
+                --
+                @button(font.clone(), "Delete", theme, UiFocusNav::default())
+                ProviderDeleteButton
+                UiFocusId { id: TARGET_PROVIDER_DELETE }
+                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_DELETE).up}, right: {settings_focus_nav(TARGET_PROVIDER_DELETE).right}, down: {settings_focus_nav(TARGET_PROVIDER_DELETE).down}, left: {settings_focus_nav(TARGET_PROVIDER_DELETE).left} }
+                --
+                @button(font.clone(), "Edit", theme, UiFocusNav::default())
+                ProviderEditButton
+                UiFocusId { id: TARGET_PROVIDER_EDIT }
+                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_EDIT).up}, right: {settings_focus_nav(TARGET_PROVIDER_EDIT).right}, down: {settings_focus_nav(TARGET_PROVIDER_EDIT).down}, left: {settings_focus_nav(TARGET_PROVIDER_EDIT).left} }
+                --
+                @button(font, "Create", theme, UiFocusNav::default())
+                ProviderCreateButton
+                UiFocusId { id: TARGET_PROVIDER_CREATE }
+                UiFocusNavIds { up: {settings_focus_nav(TARGET_PROVIDER_CREATE).up}, right: {settings_focus_nav(TARGET_PROVIDER_CREATE).right}, down: {settings_focus_nav(TARGET_PROVIDER_CREATE).down}, left: {settings_focus_nav(TARGET_PROVIDER_CREATE).left} }
+            ]
         ]
     }
 }

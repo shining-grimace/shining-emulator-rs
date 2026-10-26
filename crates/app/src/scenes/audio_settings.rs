@@ -127,7 +127,7 @@ fn spawn_audio_settings_scene(
 }
 
 fn handle_audio_settings_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     save_buttons: Query<(), With<AudioSaveButton>>,
     delete_buttons: Query<(), With<AudioDeleteButton>>,
     restore_buttons: Query<(), With<AudioRestoreButton>>,
@@ -679,59 +679,55 @@ fn audio_settings_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
+            Node {
+                width: percent(100),
+                max_width: px(UI_WIDE_CONTENT_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                @settings_header(font.clone(), assets.icons.clone(), theme, "Audio Preset Settings")
+                --
                 Node {
                     width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
-                    height: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
                     min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
+                    display: Display::None,
                 }
+                ResponsiveLandscapeOnly
                 Children [
-                    settings_header(font.clone(), assets.icons.clone(), theme, "Audio Preset Settings"),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsiveLandscapeOnly
-                        Children [
-                            audio_landscape_body(landscape_font, theme, landscape_preset, landscape_preset_label),
-                        ]
-                    ),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsivePortraitOnly
-                        Children [
-                            (
-                                #AudioBodyScrollBar
-                                flow_scroll_view(
-                                    theme,
-                                    #AudioBodyScrollBar,
-                                    ScrollViewConfig {
-                                        width: percent(100),
-                                        min_height: px(0.0),
-                                        thumb_height: 132.0,
-                                    },
-                                    move |_| audio_body(body_font, theme, preset, preset_label)
-                                )
-                            )
-                        ]
-                    ),
-                    info_message_text(font.clone(), theme, load_message.unwrap_or_default(), false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
+                    @audio_landscape_body(landscape_font, theme, landscape_preset, landscape_preset_label)
                 ]
-            )
+                --
+                Node {
+                    width: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: px(0.0),
+                    display: Display::None,
+                }
+                ResponsivePortraitOnly
+                Children [
+                    #AudioBodyScrollBar
+                    @flow_scroll_view(
+                        theme,
+                        #AudioBodyScrollBar,
+                        ScrollViewConfig {
+                            width: percent(100),
+                            min_height: px(0.0),
+                            thumb_height: 132.0,
+                        },
+                        move |_| audio_body(body_font, theme, preset, preset_label)
+                    )
+                ]
+                --
+                @info_message_text(font.clone(), theme, load_message.unwrap_or_default(), false)
+                --
+                @action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select")
+            ]
         ]
     }
 }
@@ -755,17 +751,16 @@ fn audio_body(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            (
-                Node {
-                    width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
-                    min_height: px(0.0),
-                }
-                ResponsivePercentWidth { landscape: UI_WIDE_PRIMARY_COLUMN_PERCENT }
-                Children [
-                    audio_controls(controls_font, theme, preset, preset_label),
-                ]
-            ),
-            audio_buttons(buttons_font, theme),
+            Node {
+                width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
+                min_height: px(0.0),
+            }
+            ResponsivePercentWidth { landscape: UI_WIDE_PRIMARY_COLUMN_PERCENT }
+            Children [
+                @audio_controls(controls_font, theme, preset, preset_label)
+            ]
+            --
+            @audio_buttons(buttons_font, theme)
         ]
     }
 }
@@ -788,20 +783,19 @@ fn audio_landscape_body(
             column_gap: px(UI_PANEL_GAP),
         }
         Children [
-            (
-                #AudioScrollBar
-                scroll_view(
-                    theme,
-                    #AudioScrollBar,
-                    ScrollViewConfig {
-                        width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
-                        min_height: px(0.0),
-                        thumb_height: 132.0,
-                    },
-                    move |_| audio_controls(controls_font, theme, preset, preset_label)
-                )
-            ),
-            audio_buttons(buttons_font, theme),
+            #AudioScrollBar
+            @scroll_view(
+                theme,
+                #AudioScrollBar,
+                ScrollViewConfig {
+                    width: percent(UI_WIDE_PRIMARY_COLUMN_PERCENT),
+                    min_height: px(0.0),
+                    thumb_height: 132.0,
+                },
+                move |_| audio_controls(controls_font, theme, preset, preset_label)
+            )
+            --
+            @audio_buttons(buttons_font, theme)
         ]
     }
 }
@@ -833,11 +827,15 @@ fn audio_controls(
             },
         }
         Children [
-            preset_label_row(font.clone(), theme, preset_label),
-            channel_one_controls(font.clone(), theme, ch1, ch1_oscillator),
-            channel_two_controls(font.clone(), theme, ch2, ch2_oscillator),
-            channel_three_controls(font.clone(), theme, ch3),
-            channel_four_controls(font, theme, ch4, ch4_oscillator),
+            @preset_label_row(font.clone(), theme, preset_label)
+            --
+            @channel_one_controls(font.clone(), theme, ch1, ch1_oscillator)
+            --
+            @channel_two_controls(font.clone(), theme, ch2, ch2_oscillator)
+            --
+            @channel_three_controls(font.clone(), theme, ch3)
+            --
+            @channel_four_controls(font, theme, ch4, ch4_oscillator)
         ]
     }
 }
@@ -855,12 +853,17 @@ fn channel_one_controls(
             row_gap: px(UI_INNER_PADDING),
         }
         Children [
-            description(font.clone(), theme, "Channel 1"),
-            audio_select_row(font.clone(), theme, "Oscillator", 1, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH1_OSCILLATOR, UI_FOCUS_NONE, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, true),
-            built_in_sample_row(font.clone(), theme, 1, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            custom_sample_row(font.clone(), theme, 1, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            audio_select_row(font.clone(), theme, "Modulation 1", 1, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH1_MOD_A, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR), TARGET_CH1_MOD_B, TARGET_SAVE, UI_FOCUS_NONE, false),
-            audio_select_row(font, theme, "Modulation 2", 1, FIELD_MODULATION_B, modulation_config(selected_modulation(preset.modulation_b.as_deref().unwrap_or("Pitch Envelope"))), TARGET_CH1_MOD_B, TARGET_CH1_MOD_A, TARGET_CH2_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false),
+            @description(font.clone(), theme, "Channel 1")
+            --
+            @audio_select_row(font.clone(), theme, "Oscillator", 1, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH1_OSCILLATOR, UI_FOCUS_NONE, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, true)
+            --
+            @built_in_sample_row(font.clone(), theme, 1, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE)
+            --
+            @custom_sample_row(font.clone(), theme, 1, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR, TARGET_CH1_MOD_A, TARGET_SAVE, UI_FOCUS_NONE)
+            --
+            @audio_select_row(font.clone(), theme, "Modulation 1", 1, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH1_MOD_A, channel_detail_target(oscillator, TARGET_CH1_BUILT_IN_SAMPLE, TARGET_CH1_CUSTOM_SAMPLE, TARGET_CH1_OSCILLATOR), TARGET_CH1_MOD_B, TARGET_SAVE, UI_FOCUS_NONE, false)
+            --
+            @audio_select_row(font, theme, "Modulation 2", 1, FIELD_MODULATION_B, modulation_config(selected_modulation(preset.modulation_b.as_deref().unwrap_or("Pitch Envelope"))), TARGET_CH1_MOD_B, TARGET_CH1_MOD_A, TARGET_CH2_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false)
         ]
     }
 }
@@ -878,11 +881,15 @@ fn channel_two_controls(
             row_gap: px(UI_INNER_PADDING),
         }
         Children [
-            description(font.clone(), theme, "Channel 2"),
-            audio_select_row(font.clone(), theme, "Oscillator", 2, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH2_OSCILLATOR, TARGET_CH1_MOD_B, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, false),
-            built_in_sample_row(font.clone(), theme, 2, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            custom_sample_row(font.clone(), theme, 2, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE),
-            audio_select_row(font, theme, "Modulation", 2, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH2_MOD_A, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR), TARGET_CH3_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
+            @description(font.clone(), theme, "Channel 2")
+            --
+            @audio_select_row(font.clone(), theme, "Oscillator", 2, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH2_OSCILLATOR, TARGET_CH1_MOD_B, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_MOD_A), TARGET_SAVE, UI_FOCUS_NONE, false)
+            --
+            @built_in_sample_row(font.clone(), theme, 2, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE)
+            --
+            @custom_sample_row(font.clone(), theme, 2, preset.custom_sample_path.clone(), oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR, TARGET_CH2_MOD_A, TARGET_SAVE, UI_FOCUS_NONE)
+            --
+            @audio_select_row(font, theme, "Modulation", 2, FIELD_MODULATION_A, modulation_config(selected_modulation(&preset.modulation_a)), TARGET_CH2_MOD_A, channel_detail_target(oscillator, TARGET_CH2_BUILT_IN_SAMPLE, TARGET_CH2_CUSTOM_SAMPLE, TARGET_CH2_OSCILLATOR), TARGET_CH3_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false)
         ]
     }
 }
@@ -899,8 +906,9 @@ fn channel_three_controls(
             row_gap: px(UI_INNER_PADDING),
         }
         Children [
-            description(font.clone(), theme, "Channel 3"),
-            audio_select_row(font, theme, "Wave Sample", 3, FIELD_BUILT_IN_SAMPLE, sample_config(selected_sample(&preset.built_in_sample)), TARGET_CH3_SAMPLE, TARGET_CH2_MOD_A, TARGET_CH4_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false),
+            @description(font.clone(), theme, "Channel 3")
+            --
+            @audio_select_row(font, theme, "Wave Sample", 3, FIELD_BUILT_IN_SAMPLE, sample_config(selected_sample(&preset.built_in_sample)), TARGET_CH3_SAMPLE, TARGET_CH2_MOD_A, TARGET_CH4_OSCILLATOR, TARGET_SAVE, UI_FOCUS_NONE, false)
         ]
     }
 }
@@ -918,10 +926,13 @@ fn channel_four_controls(
             row_gap: px(UI_INNER_PADDING),
         }
         Children [
-            description(font.clone(), theme, "Channel 4"),
-            audio_select_row(font.clone(), theme, "Oscillator", 4, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH4_OSCILLATOR, TARGET_CH3_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false),
-            built_in_sample_row(font.clone(), theme, 4, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_CH4_OSCILLATOR, TARGET_CH4_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE),
-            custom_sample_row(font, theme, 4, preset.custom_sample_path, oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH4_CUSTOM_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, UI_FOCUS_NONE, TARGET_SAVE, UI_FOCUS_NONE),
+            @description(font.clone(), theme, "Channel 4")
+            --
+            @audio_select_row(font.clone(), theme, "Oscillator", 4, FIELD_OSCILLATOR, oscillator_config(oscillator), TARGET_CH4_OSCILLATOR, TARGET_CH3_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE, false)
+            --
+            @built_in_sample_row(font.clone(), theme, 4, preset.built_in_sample.clone(), oscillator == OSCILLATOR_BUILT_IN_SAMPLER, TARGET_CH4_BUILT_IN_SAMPLE, TARGET_CH4_OSCILLATOR, TARGET_CH4_CUSTOM_SAMPLE, TARGET_SAVE, UI_FOCUS_NONE)
+            --
+            @custom_sample_row(font, theme, 4, preset.custom_sample_path, oscillator == OSCILLATOR_CUSTOM_SAMPLER, TARGET_CH4_CUSTOM_SAMPLE, TARGET_CH4_BUILT_IN_SAMPLE, UI_FOCUS_NONE, TARGET_SAVE, UI_FOCUS_NONE)
         ]
     }
 }
@@ -936,24 +947,20 @@ fn audio_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene {
         }
         ResponsivePercentWidth { landscape: UI_WIDE_SECONDARY_COLUMN_PERCENT }
         Children [
-            (
-                button(font.clone(), "Save", theme, UiFocusNav::default())
-                AudioSaveButton
-                UiFocusId { id: TARGET_SAVE }
-                UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE, left: TARGET_CH1_OSCILLATOR }
-            ),
-            (
-                button(font.clone(), "Delete", theme, UiFocusNav::default())
-                AudioDeleteButton
-                UiFocusId { id: TARGET_DELETE }
-                UiFocusNavIds { up: TARGET_SAVE, right: UI_FOCUS_NONE, down: TARGET_RESTORE, left: TARGET_CH1_OSCILLATOR }
-            ),
-            (
-                button(font, "Restore Defaults", theme, UiFocusNav::default())
-                AudioRestoreButton
-                UiFocusId { id: TARGET_RESTORE }
-                UiFocusNavIds { up: TARGET_DELETE, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_CH1_OSCILLATOR }
-            ),
+            @button(font.clone(), "Save", theme, UiFocusNav::default())
+            AudioSaveButton
+            UiFocusId { id: TARGET_SAVE }
+            UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE, left: TARGET_CH1_OSCILLATOR }
+            --
+            @button(font.clone(), "Delete", theme, UiFocusNav::default())
+            AudioDeleteButton
+            UiFocusId { id: TARGET_DELETE }
+            UiFocusNavIds { up: TARGET_SAVE, right: UI_FOCUS_NONE, down: TARGET_RESTORE, left: TARGET_CH1_OSCILLATOR }
+            --
+            @button(font, "Restore Defaults", theme, UiFocusNav::default())
+            AudioRestoreButton
+            UiFocusId { id: TARGET_RESTORE }
+            UiFocusNavIds { up: TARGET_DELETE, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_CH1_OSCILLATOR }
         ]
     }
 }
@@ -970,18 +977,17 @@ fn preset_label_row(font: Handle<Font>, theme: ActiveTheme, preset_name: String)
         }
         ResponsiveFieldRow { gap: 18.0 }
         Children [
-            description(font, theme, "Preset:"),
-            (
-                Text(preset_name)
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
-                    font_size: px(UI_BODY_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                IgnorePicking
-                TextLayout::new(Justify::Right, LineBreak::NoWrap)
-            )
+            @description(font, theme, "Preset:")
+            --
+            Text(preset_name)
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                font_size: px(UI_BODY_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            IgnorePicking
+            TextLayout::new(Justify::Right, LineBreak::NoWrap)
         ]
     }
 }
@@ -1009,14 +1015,13 @@ fn audio_select_row(
         }
         ResponsiveFieldRow { gap: 18.0 }
         Children [
-            description(font.clone(), theme, label),
-            (
-                multi_select(font, theme, config)
-                AudioSelect { channel: {channel}, field: {field} }
-                UiFocusId { id: {id} }
-                UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
-                InitialFocus { enabled: {initial_focus} }
-            ),
+            @description(font.clone(), theme, label)
+            --
+            @multi_select(font, theme, config)
+            AudioSelect { channel: {channel}, field: {field} }
+            UiFocusId { id: {id} }
+            UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+            InitialFocus { enabled: {initial_focus} }
         ]
     }
 }
@@ -1034,27 +1039,24 @@ fn built_in_sample_row(
     left: u16,
 ) -> impl Scene {
     bsn! {
-        (
-            Node {
-                width: percent(100),
-                display: {display_for(visible)},
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::SpaceBetween,
-                column_gap: px(18.0),
-            }
-            ResponsiveFieldRow { gap: 18.0 }
-            DespawnOnExit::<AppState>(AppState::AudioSettings)
-            AudioConditionalSection { channel: {channel}, section: SECTION_BUILT_IN_SAMPLE }
-            Children [
-                description(font.clone(), theme, "Built-in Sample"),
-                (
-                    multi_select(font, theme, sample_config(selected_sample(&sample)))
-                    AudioSelect { channel: {channel}, field: FIELD_BUILT_IN_SAMPLE }
-                    UiFocusId { id: {id} }
-                    UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
-                ),
-            ]
-        )
+        Node {
+            width: percent(100),
+            display: {display_for(visible)},
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            column_gap: px(18.0),
+        }
+        ResponsiveFieldRow { gap: 18.0 }
+        DespawnOnExit::<AppState>(AppState::AudioSettings)
+        AudioConditionalSection { channel: {channel}, section: SECTION_BUILT_IN_SAMPLE }
+        Children [
+            @description(font.clone(), theme, "Built-in Sample")
+            --
+            @multi_select(font, theme, sample_config(selected_sample(&sample)))
+            AudioSelect { channel: {channel}, field: FIELD_BUILT_IN_SAMPLE }
+            UiFocusId { id: {id} }
+            UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+        ]
     }
 }
 
@@ -1071,25 +1073,21 @@ fn custom_sample_row(
     left: u16,
 ) -> impl Scene {
     bsn! {
-        (
-            Node {
-                width: percent(100),
-                display: {display_for(visible)},
-                justify_content: JustifyContent::FlexEnd,
-            }
+        Node {
+            width: percent(100),
+            display: {display_for(visible)},
+            justify_content: JustifyContent::FlexEnd,
+        }
+        DespawnOnExit::<AppState>(AppState::AudioSettings)
+        AudioConditionalSection { channel: {channel}, section: SECTION_CUSTOM_SAMPLE }
+        Children [
+            @file_picker_with_value(font, "Choose a WAV sample...", value, theme, UiFocusNav::default())
             DespawnOnExit::<AppState>(AppState::AudioSettings)
-            AudioConditionalSection { channel: {channel}, section: SECTION_CUSTOM_SAMPLE }
-            Children [
-                (
-                    file_picker_with_value(font, "Choose a WAV sample...", value, theme, UiFocusNav::default())
-                    DespawnOnExit::<AppState>(AppState::AudioSettings)
-                    UiAudioFilePicker
-                    AudioSamplePicker { channel: {channel} }
-                    UiFocusId { id: {id} }
-                    UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
-                )
-            ]
-        )
+            UiAudioFilePicker
+            AudioSamplePicker { channel: {channel} }
+            UiFocusId { id: {id} }
+            UiFocusNavIds { up: {up}, right: {right}, down: {down}, left: {left} }
+        ]
     }
 }
 

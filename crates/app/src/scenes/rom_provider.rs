@@ -176,7 +176,7 @@ fn spawn_rom_provider_scene(
 }
 
 fn handle_provider_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     save_buttons: Query<(), With<ProviderSaveButton>>,
     test_buttons: Query<(), With<ProviderTestButton>>,
     text_fields: Query<(Entity, &ProviderTextField, &UiTextInput)>,
@@ -571,22 +571,23 @@ fn rom_provider_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
-                    height: percent(100),
-                    min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
-                }
-                Children [
-                    settings_header(font.clone(), assets.icons.clone(), theme, "ROM Provider"),
-                    provider_form(left_font, right_font, heroes, theme, provider.clone()),
-                    info_message(font.clone(), theme, "", false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
-                ]
-            ),
+            Node {
+                width: percent(100),
+                max_width: px(UI_WIDE_CONTENT_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                @settings_header(font.clone(), assets.icons.clone(), theme, "ROM Provider")
+                --
+                @provider_form(left_font, right_font, heroes, theme, provider.clone())
+                --
+                @info_message(font.clone(), theme, "", false)
+                --
+                @action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select")
+            ]
         ]
     }
 }
@@ -614,43 +615,38 @@ fn provider_form(
             min_height: px(0.0),
         }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    min_height: px(0.0),
-                    display: Display::None,
-                }
-                ResponsiveLandscapeOnly
-                Children [
-                    provider_landscape_body(landscape_left_font, landscape_right_font, landscape_heroes, theme, landscape_left_provider, landscape_right_provider),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    min_height: px(0.0),
-                    display: Display::None,
-                }
-                ResponsivePortraitOnly
-                Children [
-                    (
-                        #ProviderBodyScrollBar
-                        flow_scroll_view(
-                            theme,
-                            #ProviderBodyScrollBar,
-                            ScrollViewConfig {
-                                width: percent(100),
-                                min_height: px(0.0),
-                                thumb_height: 120.0,
-                            },
-                            move |_| provider_body(left_font, right_font, heroes, theme, left_provider, right_provider)
-                        )
-                    )
-                ]
-            ),
+            Node {
+                width: percent(100),
+                height: percent(100),
+                min_height: px(0.0),
+                display: Display::None,
+            }
+            ResponsiveLandscapeOnly
+            Children [
+                @provider_landscape_body(landscape_left_font, landscape_right_font, landscape_heroes, theme, landscape_left_provider, landscape_right_provider)
+            ]
+            --
+            Node {
+                width: percent(100),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: px(0.0),
+                display: Display::None,
+            }
+            ResponsivePortraitOnly
+            Children [
+                #ProviderBodyScrollBar
+                @flow_scroll_view(
+                    theme,
+                    #ProviderBodyScrollBar,
+                    ScrollViewConfig {
+                        width: percent(100),
+                        min_height: px(0.0),
+                        thumb_height: 120.0,
+                    },
+                    move |_| provider_body(left_font, right_font, heroes, theme, left_provider, right_provider)
+                )
+            ]
         ]
     }
 }
@@ -674,67 +670,59 @@ fn provider_landscape_body(
             column_gap: px(UI_PANEL_GAP),
         }
         Children [
-            (
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                min_height: px(0.0),
+                flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
+                flex_shrink: 1.0,
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTROL_GAP),
+            }
+            Children [
                 Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                    flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
+                    width: percent(100),
+                    flex_grow: 1.0,
                     flex_shrink: 1.0,
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTROL_GAP),
+                    min_height: px(0.0),
                 }
                 Children [
-                    (
-                        Node {
+                    #ProviderLeftScrollBar
+                    @scroll_view(
+                        theme,
+                        #ProviderLeftScrollBar,
+                        ScrollViewConfig {
                             width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
                             min_height: px(0.0),
-                        }
-                        Children [
-                            (
-                                #ProviderLeftScrollBar
-                                scroll_view(
-                                    theme,
-                                    #ProviderLeftScrollBar,
-                                    ScrollViewConfig {
-                                        width: percent(100),
-                                        min_height: px(0.0),
-                                        thumb_height: 120.0,
-                                    },
-                                    move |_| provider_left_column(left_font, heroes, theme, left_provider)
-                                )
-                            ),
-                        ]
-                    ),
-                    provider_action_buttons(button_font, theme),
+                            thumb_height: 120.0,
+                        },
+                        move |_| provider_left_column(left_font, heroes, theme, left_provider)
+                    )
                 ]
-            ),
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                    flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
-                    flex_shrink: 1.0,
-                }
-                Children [
-                    (
-                        #ProviderRightScrollBar
-                        scroll_view(
-                            theme,
-                            #ProviderRightScrollBar,
-                            ScrollViewConfig {
-                                width: percent(100),
-                                min_height: px(0.0),
-                                thumb_height: 120.0,
-                            },
-                            move |_| provider_right_column(right_font, theme, right_provider)
-                        )
-                    ),
-                ]
-            ),
+                --
+                @provider_action_buttons(button_font, theme)
+            ]
+            --
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                min_height: px(0.0),
+                flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
+                flex_shrink: 1.0,
+            }
+            Children [
+                #ProviderRightScrollBar
+                @scroll_view(
+                    theme,
+                    #ProviderRightScrollBar,
+                    ScrollViewConfig {
+                        width: percent(100),
+                        min_height: px(0.0),
+                        thumb_height: 120.0,
+                    },
+                    move |_| provider_right_column(right_font, theme, right_provider)
+                )
+            ]
         ]
     }
 }
@@ -759,35 +747,33 @@ fn provider_body(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                    flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
-                    flex_shrink: 1.0,
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTROL_GAP),
-                }
-                ResponsiveFlexWidth { landscape: UI_FORM_LEFT_COLUMN_FLEX }
-                Children [
-                    provider_left_column(left_font, heroes, theme, left_provider),
-                    provider_action_buttons(button_font, theme),
-                ]
-            ),
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                    flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
-                    flex_shrink: 1.0,
-                }
-                ResponsiveFlexWidth { landscape: UI_FORM_RIGHT_COLUMN_FLEX }
-                Children [
-                    provider_right_column(right_font, theme, right_provider),
-                ]
-            ),
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                min_height: px(0.0),
+                flex_grow: UI_FORM_LEFT_COLUMN_FLEX,
+                flex_shrink: 1.0,
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTROL_GAP),
+            }
+            ResponsiveFlexWidth { landscape: UI_FORM_LEFT_COLUMN_FLEX }
+            Children [
+                @provider_left_column(left_font, heroes, theme, left_provider)
+                --
+                @provider_action_buttons(button_font, theme)
+            ]
+            --
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                min_height: px(0.0),
+                flex_grow: UI_FORM_RIGHT_COLUMN_FLEX,
+                flex_shrink: 1.0,
+            }
+            ResponsiveFlexWidth { landscape: UI_FORM_RIGHT_COLUMN_FLEX }
+            Children [
+                @provider_right_column(right_font, theme, right_provider)
+            ]
         ]
     }
 }
@@ -816,31 +802,33 @@ fn provider_left_column(
             },
         }
         Children [
-            labeled_input(font.clone(), theme, "Display name", "Enter your text here...", friendly_name, FIELD_NAME, TARGET_NAME, true),
-            labeled_select(font.clone(), theme, "Status", status_config(provider.enabled), SELECT_STATUS, TARGET_STATUS),
-            labeled_select(font.clone(), theme, "Priority", priority_config(provider.priority), SELECT_PRIORITY, TARGET_PRIORITY),
-            labeled_select(font.clone(), theme, "Type", provider_type_config(&provider), SELECT_TYPE, TARGET_TYPE),
-            (
-                ProviderConditionalSection { section: SECTION_LOCAL_DIR }
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Column,
-                }
-                Children [
-                    labeled_directory_picker(font.clone(), theme, "Local directory", "Choose directory...", local_dir, FIELD_LOCAL_DIR, TARGET_LOCAL_DIR),
-                ]
-            ),
-            (
-                ProviderConditionalSection { section: SECTION_REMOTE_FILE }
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Column,
-                }
-                Children [
-                    labeled_input(font.clone(), theme, "Remote file URL", "Enter URL...", remote_file_url, FIELD_REMOTE_FILE_URL, TARGET_REMOTE_FILE_URL, false),
-                ]
-            ),
-            provider_hero_image(heroes, theme),
+            @labeled_input(font.clone(), theme, "Display name", "Enter your text here...", friendly_name, FIELD_NAME, TARGET_NAME, true)
+            --
+            @labeled_select(font.clone(), theme, "Status", status_config(provider.enabled), SELECT_STATUS, TARGET_STATUS)
+            --
+            @labeled_select(font.clone(), theme, "Priority", priority_config(provider.priority), SELECT_PRIORITY, TARGET_PRIORITY)
+            --
+            @labeled_select(font.clone(), theme, "Type", provider_type_config(&provider), SELECT_TYPE, TARGET_TYPE)
+            --
+            ProviderConditionalSection { section: SECTION_LOCAL_DIR }
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+            }
+            Children [
+                @labeled_directory_picker(font.clone(), theme, "Local directory", "Choose directory...", local_dir, FIELD_LOCAL_DIR, TARGET_LOCAL_DIR)
+            ]
+            --
+            ProviderConditionalSection { section: SECTION_REMOTE_FILE }
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+            }
+            Children [
+                @labeled_input(font.clone(), theme, "Remote file URL", "Enter URL...", remote_file_url, FIELD_REMOTE_FILE_URL, TARGET_REMOTE_FILE_URL, false)
+            ]
+            --
+            @provider_hero_image(heroes, theme)
         ]
     }
 }
@@ -854,18 +842,15 @@ fn provider_action_buttons(font: Handle<Font>, theme: ActiveTheme) -> impl Scene
         }
         ResponsiveButtonRow { gap: UI_SECTION_GAP }
         Children [
-            (
-                button(font.clone(), "Test Connection", theme, UiFocusNav::default())
-                ProviderTestButton
-                UiFocusId { id: TARGET_TEST }
-                UiFocusNavIds { up: TARGET_REMOTE_FILE_URL, right: TARGET_SAVE, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
-            ),
-            (
-                button(font, "Save", theme, UiFocusNav::default())
-                ProviderSaveButton
-                UiFocusId { id: TARGET_SAVE }
-                UiFocusNavIds { up: TARGET_REMOTE_FILE_URL, right: TARGET_API_URL, down: UI_FOCUS_NONE, left: TARGET_TEST }
-            ),
+            @button(font.clone(), "Test Connection", theme, UiFocusNav::default())
+            ProviderTestButton
+            UiFocusId { id: TARGET_TEST }
+            UiFocusNavIds { up: TARGET_REMOTE_FILE_URL, right: TARGET_SAVE, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
+            --
+            @button(font, "Save", theme, UiFocusNav::default())
+            ProviderSaveButton
+            UiFocusId { id: TARGET_SAVE }
+            UiFocusNavIds { up: TARGET_REMOTE_FILE_URL, right: TARGET_API_URL, down: UI_FOCUS_NONE, left: TARGET_TEST }
         ]
     }
 }
@@ -927,78 +912,82 @@ fn provider_right_column(
             },
         }
         Children [
-            (
-                ProviderConditionalSection { section: SECTION_REMOTE_API }
+            ProviderConditionalSection { section: SECTION_REMOTE_API }
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTROL_GAP),
+            }
+            Children [
+                @labeled_input(font.clone(), theme, "API URL", "Enter URL...", api_url, FIELD_API_URL, TARGET_API_URL, false)
+                --
+                @labeled_input(font.clone(), theme, "Download URL (placeholders may include {id} or {filename})", "Enter URL...", download_url, FIELD_DOWNLOAD_URL, TARGET_DOWNLOAD_URL, false)
+                --
+                @description(font.clone(), theme, "For remaining properties, path items use JSONPath syntax. For ROM item properties, include the [*] marker.")
+                --
+                @labeled_input(font.clone(), theme, "ROM items path", "Enter path...", items_path, FIELD_ITEMS_PATH, TARGET_ITEMS_PATH, false)
+                --
+                @pagination_controls(
+                    font.clone(),
+                    theme,
+                    pagination_config(pagination.is_some()),
+                    max_pages,
+                )
+                --
+                ProviderConditionalSection { section: SECTION_PAGINATION }
                 Node {
                     width: percent(100),
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTROL_GAP),
                 }
                 Children [
-                    labeled_input(font.clone(), theme, "API URL", "Enter URL...", api_url, FIELD_API_URL, TARGET_API_URL, false),
-                    labeled_input(font.clone(), theme, "Download URL (placeholders may include {id} or {filename})", "Enter URL...", download_url, FIELD_DOWNLOAD_URL, TARGET_DOWNLOAD_URL, false),
-                    description(font.clone(), theme, "For remaining properties, path items use JSONPath syntax. For ROM item properties, include the [*] marker."),
-                    labeled_input(font.clone(), theme, "ROM items path", "Enter path...", items_path, FIELD_ITEMS_PATH, TARGET_ITEMS_PATH, false),
-                    pagination_controls(
+                    @two_column_fields(
                         font.clone(),
                         theme,
-                        pagination_config(pagination.is_some()),
-                        max_pages,
-                    ),
-                    (
-                        ProviderConditionalSection { section: SECTION_PAGINATION }
-                        Node {
-                            width: percent(100),
-                            flex_direction: FlexDirection::Column,
-                        }
-                        Children [
-                            two_column_fields(
-                                font.clone(),
-                                theme,
-                                "Pagination count path",
-                                "Enter path...",
-                                page_count_path,
-                                FIELD_PAGE_COUNT_PATH,
-                                TARGET_PAGE_COUNT,
-                                "Pagination page param",
-                                "Enter param...",
-                                page_param,
-                                FIELD_PAGE_PARAM,
-                                TARGET_PAGE_PARAM,
-                            ),
-                        ]
-                    ),
-                    two_column_fields(
-                        font.clone(),
-                        theme,
-                        "ROM Item ID path",
+                        "Pagination count path",
                         "Enter path...",
-                        id_path,
-                        FIELD_ID_PATH,
-                        TARGET_ID_PATH,
-                        "ROM file name path",
-                        "Enter path...",
-                        filename_path,
-                        FIELD_FILENAME_PATH,
-                        TARGET_FILENAME_PATH,
-                    ),
-                    two_column_fields(
-                        font.clone(),
-                        theme,
-                        "ROM name path",
-                        "Enter path...",
-                        name_path,
-                        FIELD_NAME_PATH,
-                        TARGET_NAME_PATH,
-                        "ROM author path",
-                        "Enter path...",
-                        author_path,
-                        FIELD_AUTHOR_PATH,
-                        TARGET_AUTHOR_PATH,
-                    ),
-                    labeled_input(font.clone(), theme, "ROM license path", "Enter path...", license_path, FIELD_LICENSE_PATH, TARGET_LICENSE_PATH, false),
+                        page_count_path,
+                        FIELD_PAGE_COUNT_PATH,
+                        TARGET_PAGE_COUNT,
+                        "Pagination page param",
+                        "Enter param...",
+                        page_param,
+                        FIELD_PAGE_PARAM,
+                        TARGET_PAGE_PARAM,
+                    )
                 ]
-            ),
+                --
+                @two_column_fields(
+                    font.clone(),
+                    theme,
+                    "ROM Item ID path",
+                    "Enter path...",
+                    id_path,
+                    FIELD_ID_PATH,
+                    TARGET_ID_PATH,
+                    "ROM file name path",
+                    "Enter path...",
+                    filename_path,
+                    FIELD_FILENAME_PATH,
+                    TARGET_FILENAME_PATH,
+                )
+                --
+                @two_column_fields(
+                    font.clone(),
+                    theme,
+                    "ROM name path",
+                    "Enter path...",
+                    name_path,
+                    FIELD_NAME_PATH,
+                    TARGET_NAME_PATH,
+                    "ROM author path",
+                    "Enter path...",
+                    author_path,
+                    FIELD_AUTHOR_PATH,
+                    TARGET_AUTHOR_PATH,
+                )
+                --
+                @labeled_input(font.clone(), theme, "ROM license path", "Enter path...", license_path, FIELD_LICENSE_PATH, TARGET_LICENSE_PATH, false)
+            ]
         ]
     }
 }
@@ -1020,15 +1009,14 @@ fn labeled_input(
             row_gap: px(UI_FIELD_GAP),
         }
         Children [
-            description(font.clone(), theme, label),
-            (
-                text_input_with_value_width(font, placeholder, value, theme, UiFocusNav::default(), percent(100))
-                ProviderTextField { field: {field} }
-                UiFocusId { id: target }
-                UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
-                InitialFocus { enabled: initial_focus }
-                DefaultFocusTarget
-            ),
+            @description(font.clone(), theme, label)
+            --
+            @text_input_with_value_width(font, placeholder, value, theme, UiFocusNav::default(), percent(100))
+            ProviderTextField { field: {field} }
+            UiFocusId { id: target }
+            UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
+            InitialFocus { enabled: initial_focus }
+            DefaultFocusTarget
         ]
     }
 }
@@ -1049,13 +1037,12 @@ fn labeled_directory_picker(
             row_gap: px(UI_FIELD_GAP),
         }
         Children [
-            description(font.clone(), theme, label),
-            (
-                directory_picker_with_value(font, placeholder, value, theme, UiFocusNav::default())
-                ProviderFilePicker { field: {field} }
-                UiFocusId { id: target }
-                UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
-            ),
+            @description(font.clone(), theme, label)
+            --
+            @directory_picker_with_value(font, placeholder, value, theme, UiFocusNav::default())
+            ProviderFilePicker { field: {field} }
+            UiFocusId { id: target }
+            UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
         ]
     }
 }
@@ -1077,13 +1064,12 @@ fn labeled_select(
         }
         ResponsiveFieldRow { gap: 18.0 }
         Children [
-            description(font.clone(), theme, label),
-            (
-                multi_select_with_width(font, theme, config, px(UI_MULTI_SELECT_WIDTH))
-                ProviderSelect { field: {field} }
-                UiFocusId { id: target }
-                UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
-            ),
+            @description(font.clone(), theme, label)
+            --
+            @multi_select_with_width(font, theme, config, px(UI_MULTI_SELECT_WIDTH))
+            ProviderSelect { field: {field} }
+            UiFocusId { id: target }
+            UiFocusNavIds { up: {provider_focus_nav(target).up}, right: {provider_focus_nav(target).right}, down: {provider_focus_nav(target).down}, left: {provider_focus_nav(target).left} }
         ]
     }
 }
@@ -1102,45 +1088,39 @@ fn pagination_controls(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            (
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+            }
+            ResponsiveFlexWidth { landscape: 1.0 }
+            Children [
                 Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
+                    width: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(UI_FIELD_GAP),
                 }
-                ResponsiveFlexWidth { landscape: 1.0 }
                 Children [
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(UI_FIELD_GAP),
-                        }
-                        Children [
-                            description(font.clone(), theme, "Pagination"),
-                            (
-                                multi_select_with_width(font.clone(), theme, pagination_config, percent(100))
-                                ProviderSelect { field: SELECT_PAGINATION }
-                                UiFocusId { id: TARGET_PAGINATION }
-                                UiFocusNavIds { up: {provider_focus_nav(TARGET_PAGINATION).up}, right: {provider_focus_nav(TARGET_PAGINATION).right}, down: {provider_focus_nav(TARGET_PAGINATION).down}, left: {provider_focus_nav(TARGET_PAGINATION).left} }
-                            ),
-                        ]
-                    ),
+                    @description(font.clone(), theme, "Pagination")
+                    --
+                    @multi_select_with_width(font.clone(), theme, pagination_config, percent(100))
+                    ProviderSelect { field: SELECT_PAGINATION }
+                    UiFocusId { id: TARGET_PAGINATION }
+                    UiFocusNavIds { up: {provider_focus_nav(TARGET_PAGINATION).up}, right: {provider_focus_nav(TARGET_PAGINATION).right}, down: {provider_focus_nav(TARGET_PAGINATION).down}, left: {provider_focus_nav(TARGET_PAGINATION).left} }
                 ]
-            ),
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                }
-                ResponsiveFlexWidth { landscape: 1.0 }
-                Children [
-                    labeled_input(font, theme, "Max pages", "Enter number...", max_pages, FIELD_MAX_PAGES, TARGET_MAX_PAGES, false),
-                ]
-            ),
+            ]
+            --
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+            }
+            ResponsiveFlexWidth { landscape: 1.0 }
+            Children [
+                @labeled_input(font, theme, "Max pages", "Enter number...", max_pages, FIELD_MAX_PAGES, TARGET_MAX_PAGES, false)
+            ]
         ]
     }
 }
@@ -1167,30 +1147,27 @@ fn two_column_fields(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                }
-                ResponsiveFlexWidth { landscape: 1.0 }
-                Children [
-                    labeled_input(font.clone(), theme, left_label, left_placeholder, left_value, left_field, left_target, false),
-                ]
-            ),
-            (
-                Node {
-                    width: px(0.0),
-                    min_width: px(0.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                }
-                ResponsiveFlexWidth { landscape: 1.0 }
-                Children [
-                    labeled_input(font, theme, right_label, right_placeholder, right_value, right_field, right_target, false),
-                ]
-            ),
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+            }
+            ResponsiveFlexWidth { landscape: 1.0 }
+            Children [
+                @labeled_input(font.clone(), theme, left_label, left_placeholder, left_value, left_field, left_target, false)
+            ]
+            --
+            Node {
+                width: px(0.0),
+                min_width: px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+            }
+            ResponsiveFlexWidth { landscape: 1.0 }
+            Children [
+                @labeled_input(font, theme, right_label, right_placeholder, right_value, right_field, right_target, false)
+            ]
         ]
     }
 }
@@ -1206,19 +1183,17 @@ fn provider_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
         }
         IgnorePicking
         Children [
-            (
-                Node {
-                    width: px(HERO_IMAGE_SIZE),
-                    height: px(HERO_IMAGE_SIZE),
-                }
-                ImageNode {
-                    image: {image},
-                    color: {theme.primary},
-                    rect: {Some(hero_grid_rect(CLOUD_SYNC_HERO_X, CLOUD_SYNC_HERO_Y))},
-                }
-                UiThemeImageColor::Primary
-                IgnorePicking
-            ),
+            Node {
+                width: px(HERO_IMAGE_SIZE),
+                height: px(HERO_IMAGE_SIZE),
+            }
+            ImageNode {
+                image: {image},
+                color: {theme.primary},
+                rect: {Some(hero_grid_rect(CLOUD_SYNC_HERO_X, CLOUD_SYNC_HERO_Y))},
+            }
+            UiThemeImageColor::Primary
+            IgnorePicking
         ]
     }
 }

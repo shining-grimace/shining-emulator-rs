@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{
@@ -75,65 +76,58 @@ pub fn file_picker_with_value(
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: Color::NONE, hover_fill: Color::NONE }
         UiFilePicker { value: {value} }
         Children [
-            (
-                Node {
-                    width: px(UI_FILE_PICKER_WIDTH - UI_BUTTON_WIDTH - FILE_PICKER_GAP),
-                    flex_shrink: 0.0,
-                    height: px(UI_ELEMENT_HEIGHT),
-                    border: ui_border(),
-                    border_radius: ui_radius(),
-                    padding: UiRect::horizontal(px(UI_INNER_PADDING)),
-                    align_items: AlignItems::Center,
-                    overflow: Overflow::clip(),
+            Node {
+                width: px(UI_FILE_PICKER_WIDTH - UI_BUTTON_WIDTH - FILE_PICKER_GAP),
+                flex_shrink: 0.0,
+                height: px(UI_ELEMENT_HEIGHT),
+                border: ui_border(),
+                border_radius: ui_radius(),
+                padding: UiRect::horizontal(px(UI_INNER_PADDING)),
+                align_items: AlignItems::Center,
+                overflow: Overflow::clip(),
+            }
+            BorderColor { top: Color::NONE, right: Color::NONE, bottom: Color::NONE, left: Color::NONE }
+            BackgroundColor({background})
+            UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+            DisabledUiElement
+            Children [
+                Text({display_value})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
                 }
-                BorderColor { top: Color::NONE, right: Color::NONE, bottom: Color::NONE, left: Color::NONE }
-                BackgroundColor({background})
-                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
-                DisabledUiElement
-                Children [
-                    (
-                        Text({display_value})
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.tertiary})
-                        UiThemeTextColor::Tertiary
-                        TextLayout::new(Justify::Left, LineBreak::NoWrap)
-                        IgnorePicking
-                        UiFilePickerValue { picker: Entity::PLACEHOLDER }
-                    )
-                ]
-            ),
-            (
-                Node {
-                    width: px(UI_BUTTON_WIDTH),
-                    height: px(UI_ELEMENT_HEIGHT),
-                    border: ui_border(),
-                    border_radius: ui_radius(),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                }
-                BorderColor::all(theme.primary)
-                UiThemeBorderColor::Primary
-                BackgroundColor({background})
-                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+                TextColor({theme.tertiary})
+                UiThemeTextColor::Tertiary
+                TextLayout::new(Justify::Left, LineBreak::NoWrap)
                 IgnorePicking
-                Children [
-                    (
-                        Text("Browse Files")
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        UiElementLabel
-                        IgnorePicking
-                        TextLayout::new(Justify::Center, LineBreak::NoWrap)
-                    )
-                ]
-            )
+                UiFilePickerValue { picker: Entity::PLACEHOLDER }
+            ]
+            --
+            Node {
+                width: px(UI_BUTTON_WIDTH),
+                height: px(UI_ELEMENT_HEIGHT),
+                border: ui_border(),
+                border_radius: ui_radius(),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            BorderColor::all(theme.primary)
+            UiThemeBorderColor::Primary
+            BackgroundColor({background})
+            UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+            IgnorePicking
+            Children [
+                Text("Browse Files")
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                UiElementLabel
+                IgnorePicking
+                TextLayout::new(Justify::Center, LineBreak::NoWrap)
+            ]
         ]
     }
 }
@@ -165,66 +159,59 @@ pub fn directory_picker_with_value(
         UiFilePicker { value: {value} }
         UiDirectoryPicker
         Children [
-            (
-                Node {
-                    width: px(0.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    height: px(UI_ELEMENT_HEIGHT),
-                    border: ui_border(),
-                    border_radius: ui_radius(),
-                    padding: UiRect::horizontal(px(UI_INNER_PADDING)),
-                    align_items: AlignItems::Center,
-                    overflow: Overflow::clip(),
+            Node {
+                width: px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                height: px(UI_ELEMENT_HEIGHT),
+                border: ui_border(),
+                border_radius: ui_radius(),
+                padding: UiRect::horizontal(px(UI_INNER_PADDING)),
+                align_items: AlignItems::Center,
+                overflow: Overflow::clip(),
+            }
+            BorderColor { top: Color::NONE, right: Color::NONE, bottom: Color::NONE, left: Color::NONE }
+            BackgroundColor({background})
+            UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+            DisabledUiElement
+            Children [
+                Text({display_value})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
                 }
-                BorderColor { top: Color::NONE, right: Color::NONE, bottom: Color::NONE, left: Color::NONE }
-                BackgroundColor({background})
-                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
-                DisabledUiElement
-                Children [
-                    (
-                        Text({display_value})
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.tertiary})
-                        UiThemeTextColor::Tertiary
-                        TextLayout::new(Justify::Left, LineBreak::NoWrap)
-                        IgnorePicking
-                        UiFilePickerValue { picker: Entity::PLACEHOLDER }
-                    )
-                ]
-            ),
-            (
-                Node {
-                    width: px(UI_BUTTON_WIDTH),
-                    height: px(UI_ELEMENT_HEIGHT),
-                    border: ui_border(),
-                    border_radius: ui_radius(),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                }
-                BorderColor::all(theme.primary)
-                UiThemeBorderColor::Primary
-                BackgroundColor({background})
-                UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+                TextColor({theme.tertiary})
+                UiThemeTextColor::Tertiary
+                TextLayout::new(Justify::Left, LineBreak::NoWrap)
                 IgnorePicking
-                Children [
-                    (
-                        Text("Browse Folder")
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        UiElementLabel
-                        IgnorePicking
-                        TextLayout::new(Justify::Center, LineBreak::NoWrap)
-                    )
-                ]
-            )
+                UiFilePickerValue { picker: Entity::PLACEHOLDER }
+            ]
+            --
+            Node {
+                width: px(UI_BUTTON_WIDTH),
+                height: px(UI_ELEMENT_HEIGHT),
+                border: ui_border(),
+                border_radius: ui_radius(),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            BorderColor::all(theme.primary)
+            UiThemeBorderColor::Primary
+            BackgroundColor({background})
+            UiFilePickerHoverFill { fill: {background}, hover_fill: {hover_background} }
+            IgnorePicking
+            Children [
+                Text("Browse Folder")
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
+                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                UiElementLabel
+                IgnorePicking
+                TextLayout::new(Justify::Center, LineBreak::NoWrap)
+            ]
         ]
     }
 }

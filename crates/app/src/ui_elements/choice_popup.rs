@@ -67,7 +67,7 @@ pub fn choice_popup_menu(
         ChoicePopupContext { context_index: {context_index} }
         DismissChoicePopupOnOutsideClick
         Children [
-            choice_popup(font, theme, config)
+            @choice_popup(font, theme, config)
         ]
     }
 }
@@ -92,7 +92,8 @@ pub fn choice_popup(
         ModalUiElement
         ChoicePopupRoot
         Children [
-            popup_label(font.clone(), theme, config.title),
+            @popup_label(font.clone(), theme, config.title)
+            --
             {choice_popup_options(font, theme, config.options)}
         ]
     }
@@ -118,13 +119,13 @@ fn choice_popup_options(
             } else {
                 UI_FOCUS_NONE
             };
-            Box::new(bsn_list![(
-                button(font.clone(), label, theme, UiFocusNav::default())
+            Box::new(bsn_list! {
+                @button(font.clone(), label, theme, UiFocusNav::default())
                 UiFocusId { id: {focus_id} }
                 UiFocusNavIds { up: {up}, right: UI_FOCUS_NONE, down: {down}, left: UI_FOCUS_NONE }
                 ChoicePopupOption { option_index }
                 InitialFocus { enabled: {option_index == 0} }
-            )]) as Box<dyn SceneList>
+            }) as Box<dyn SceneList>
         })
         .collect()
 }

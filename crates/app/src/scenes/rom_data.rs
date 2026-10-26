@@ -93,7 +93,7 @@ fn spawn_rom_data_scene(
 }
 
 fn handle_delete_button_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     check_updates_buttons: Query<(), With<CheckUpdatesButton>>,
     delete_sram_buttons: Query<(), With<DeleteSramButton>>,
     delete_all_buttons: Query<(), With<DeleteAllFilesButton>>,
@@ -223,59 +223,55 @@ fn rom_data_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
+            Node {
+                width: percent(100),
+                max_width: px(UI_WIDE_CONTENT_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_CONTENT_GAP),
+            }
+            Children [
+                @settings_header(font.clone(), assets.icons.clone(), theme, "ROM Storage Details")
+                --
                 Node {
                     width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
-                    height: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
                     min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_CONTENT_GAP),
+                    display: Display::None,
                 }
+                ResponsiveLandscapeOnly
                 Children [
-                    settings_header(font.clone(), assets.icons.clone(), theme, "ROM Storage Details"),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsiveLandscapeOnly
-                        Children [
-                            rom_data_landscape_body(landscape_font, landscape_heroes, theme, storage, landscape_rom, landscape_left_files, landscape_files),
-                        ]
-                    ),
-                    (
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            flex_shrink: 1.0,
-                            min_height: px(0.0),
-                            display: Display::None,
-                        }
-                        ResponsivePortraitOnly
-                        Children [
-                            (
-                                #RomDataBodyScrollBar
-                                flow_scroll_view(
-                                    theme,
-                                    #RomDataBodyScrollBar,
-                                    ScrollViewConfig {
-                                        width: percent(100),
-                                        min_height: px(0.0),
-                                        thumb_height: 112.0,
-                                    },
-                                    move |_| rom_data_body(body_font, body_heroes, theme, storage, rom, left_files, files)
-                                )
-                            )
-                        ]
-                    ),
-                    info_message(font.clone(), theme, "", false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
+                    @rom_data_landscape_body(landscape_font, landscape_heroes, theme, storage, landscape_rom, landscape_left_files, landscape_files)
                 ]
-            )
+                --
+                Node {
+                    width: percent(100),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: px(0.0),
+                    display: Display::None,
+                }
+                ResponsivePortraitOnly
+                Children [
+                    #RomDataBodyScrollBar
+                    @flow_scroll_view(
+                        theme,
+                        #RomDataBodyScrollBar,
+                        ScrollViewConfig {
+                            width: percent(100),
+                            min_height: px(0.0),
+                            thumb_height: 112.0,
+                        },
+                        move |_| rom_data_body(body_font, body_heroes, theme, storage, rom, left_files, files)
+                    )
+                ]
+                --
+                @info_message(font.clone(), theme, "", false)
+                --
+                @action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select")
+            ]
         ]
     }
 }
@@ -302,8 +298,9 @@ fn rom_data_body(
         }
         ResponsiveColumns { gap: UI_PANEL_GAP }
         Children [
-            left_panel(left_font, heroes, theme, storage, rom, left_files),
-            right_panel(right_font, theme, files),
+            @left_panel(left_font, heroes, theme, storage, rom, left_files)
+            --
+            @right_panel(right_font, theme, files)
         ]
     }
 }
@@ -330,32 +327,29 @@ fn rom_data_landscape_body(
             column_gap: px(UI_PANEL_GAP),
         }
         Children [
-            (
-                #RomDataLeftScrollBar
-                scroll_view(
-                    theme,
-                    #RomDataLeftScrollBar,
-                    ScrollViewConfig {
-                        width: percent(UI_PRIMARY_COLUMN_PERCENT),
-                        min_height: px(0.0),
-                        thumb_height: 112.0,
-                    },
-                    move |_| left_panel(left_font, left_heroes, theme, storage, rom, left_files)
-                )
-            ),
-            (
-                #RomDataRightScrollBar
-                scroll_view(
-                    theme,
-                    #RomDataRightScrollBar,
-                    ScrollViewConfig {
-                        width: percent(UI_SECONDARY_COLUMN_PERCENT),
-                        min_height: px(0.0),
-                        thumb_height: 112.0,
-                    },
-                    move |_| right_panel(right_font, theme, files)
-                )
-            ),
+            #RomDataLeftScrollBar
+            @scroll_view(
+                theme,
+                #RomDataLeftScrollBar,
+                ScrollViewConfig {
+                    width: percent(UI_PRIMARY_COLUMN_PERCENT),
+                    min_height: px(0.0),
+                    thumb_height: 112.0,
+                },
+                move |_| left_panel(left_font, left_heroes, theme, storage, rom, left_files)
+            )
+            --
+            #RomDataRightScrollBar
+            @scroll_view(
+                theme,
+                #RomDataRightScrollBar,
+                ScrollViewConfig {
+                    width: percent(UI_SECONDARY_COLUMN_PERCENT),
+                    min_height: px(0.0),
+                    thumb_height: 112.0,
+                },
+                move |_| right_panel(right_font, theme, files)
+            )
         ]
     }
 }
@@ -398,40 +392,42 @@ fn left_panel(
             row_gap: px(UI_PANEL_GAP),
         }
         Children [
-            description(font.clone(), theme, "Storage Location:"),
-            description(font.clone(), theme, storage_location),
-            (
-                Node {
-                    width: percent(100),
-                    height: px(8.0),
+            @description(font.clone(), theme, "Storage Location:")
+            --
+            @description(font.clone(), theme, storage_location)
+            --
+            Node {
+                width: percent(100),
+                height: px(8.0),
+            }
+            --
+            @description(font.clone(), theme, "Overview")
+            --
+            @detail_row(font.clone(), theme, "ROM Name:", rom_name)
+            --
+            @detail_row(font.clone(), theme, "ROM Size:", rom_size)
+            --
+            @detail_row(font.clone(), theme, "Downloaded from remote origin:", remote_origin.to_string())
+            --
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::FlexEnd,
+                padding: UiRect::right(px(22.0)),
+            }
+            Children [
+                @button(font.clone(), "Check for Updates", theme, UiFocusNav::default())
+                CheckUpdatesButton
+                UiFocusId { id: TARGET_CHECK_UPDATES }
+                UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
+                ResponsiveFocusNavIds {
+                    landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
+                    portrait: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_FILE_LIST, left: UI_FOCUS_NONE },
                 }
-            ),
-            description(font.clone(), theme, "Overview"),
-            detail_row(font.clone(), theme, "ROM Name:", rom_name),
-            detail_row(font.clone(), theme, "ROM Size:", rom_size),
-            detail_row(font.clone(), theme, "Downloaded from remote origin:", remote_origin.to_string()),
-            (
-                Node {
-                    width: percent(100),
-                    justify_content: JustifyContent::FlexEnd,
-                    padding: UiRect::right(px(22.0)),
-                }
-                Children [
-                    (
-                        button(font.clone(), "Check for Updates", theme, UiFocusNav::default())
-                        CheckUpdatesButton
-                        UiFocusId { id: TARGET_CHECK_UPDATES }
-                        UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE }
-                        ResponsiveFocusNavIds {
-                            landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: TARGET_FILE_LIST, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
-                            portrait: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_FILE_LIST, left: UI_FOCUS_NONE },
-                        }
-                        InitialFocus { enabled: true }
-                        DefaultFocusTarget
-                    ),
-                ]
-            ),
-            storage_hero_image(heroes, theme),
+                InitialFocus { enabled: true }
+                DefaultFocusTarget
+            ]
+            --
+            @storage_hero_image(heroes, theme)
         ]
     }
 }
@@ -445,46 +441,41 @@ fn right_panel(font: Handle<Font>, theme: ActiveTheme, files: Vec<StorageFile>) 
             row_gap: px(20.0),
         }
         Children [
-            description(font.clone(), theme, "All Files"),
-            (
-                list_view(font.clone(), theme, file_list_config(&files))
-                UiFocusId { id: TARGET_FILE_LIST }
-                UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES }
+            @description(font.clone(), theme, "All Files")
+            --
+            @list_view(font.clone(), theme, file_list_config(&files))
+            UiFocusId { id: TARGET_FILE_LIST }
+            UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES }
+            ResponsiveFocusNavIds {
+                landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES },
+                portrait: UiFocusNavIds { up: TARGET_CHECK_UPDATES, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: UI_FOCUS_NONE },
+            }
+            --
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::FlexEnd,
+                column_gap: px(22.0),
+            }
+            ResponsiveButtonRow { gap: 22.0 }
+            Children [
+                @button(font.clone(), "Delete SRAM", theme, UiFocusNav::default())
+                DeleteSramButton
+                UiFocusId { id: TARGET_DELETE_SRAM }
+                UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES }
                 ResponsiveFocusNavIds {
-                    landscape: UiFocusNavIds { up: UI_FOCUS_NONE, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: TARGET_CHECK_UPDATES },
-                    portrait: UiFocusNavIds { up: TARGET_CHECK_UPDATES, right: UI_FOCUS_NONE, down: TARGET_DELETE_SRAM, left: UI_FOCUS_NONE },
+                    landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES },
+                    portrait: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: TARGET_DELETE_ALL, left: UI_FOCUS_NONE },
                 }
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    justify_content: JustifyContent::FlexEnd,
-                    column_gap: px(22.0),
+                --
+                @button(font, "Delete All Files", theme, UiFocusNav::default())
+                DeleteAllFilesButton
+                UiFocusId { id: TARGET_DELETE_ALL }
+                UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM }
+                ResponsiveFocusNavIds {
+                    landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM },
+                    portrait: UiFocusNavIds { up: TARGET_DELETE_SRAM, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
                 }
-                ResponsiveButtonRow { gap: 22.0 }
-                Children [
-                    (
-                        button(font.clone(), "Delete SRAM", theme, UiFocusNav::default())
-                        DeleteSramButton
-                        UiFocusId { id: TARGET_DELETE_SRAM }
-                        UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES }
-                        ResponsiveFocusNavIds {
-                            landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: TARGET_DELETE_ALL, down: UI_FOCUS_NONE, left: TARGET_CHECK_UPDATES },
-                            portrait: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: TARGET_DELETE_ALL, left: UI_FOCUS_NONE },
-                        }
-                    ),
-                    (
-                        button(font, "Delete All Files", theme, UiFocusNav::default())
-                        DeleteAllFilesButton
-                        UiFocusId { id: TARGET_DELETE_ALL }
-                        UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM }
-                        ResponsiveFocusNavIds {
-                            landscape: UiFocusNavIds { up: TARGET_FILE_LIST, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: TARGET_DELETE_SRAM },
-                            portrait: UiFocusNavIds { up: TARGET_DELETE_SRAM, right: UI_FOCUS_NONE, down: UI_FOCUS_NONE, left: UI_FOCUS_NONE },
-                        }
-                    ),
-                ]
-            ),
+            ]
         ]
     }
 }
@@ -505,39 +496,34 @@ fn detail_row(
         }
         ResponsiveFieldRow { gap: 18.0 }
         Children [
-            (
-                Node {
-                    flex_grow: 1.0,
-                    min_width: px(0.0),
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0.0),
+            }
+            Children [
+                @description(font.clone(), theme, label)
+            ]
+            --
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0.0),
+                padding: UiRect::right(px(22.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexEnd,
+                overflow: Overflow::clip(),
+            }
+            IgnorePicking
+            Children [
+                Text({value})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
+                    font_size: px(20.0),
                 }
-                Children [
-                    description(font.clone(), theme, label),
-                ]
-            ),
-            (
-                Node {
-                    flex_grow: 1.0,
-                    min_width: px(0.0),
-                    padding: UiRect::right(px(22.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::FlexEnd,
-                    overflow: Overflow::clip(),
-                }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
                 IgnorePicking
-                Children [
-                    (
-                        Text({value})
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(value_font)),
-                            font_size: px(20.0),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        IgnorePicking
-                        TextLayout::new(Justify::Right, LineBreak::NoWrap)
-                    )
-                ]
-            )
+                TextLayout::new(Justify::Right, LineBreak::NoWrap)
+            ]
         ]
     }
 }
@@ -553,19 +539,17 @@ fn storage_hero_image(image: Handle<Image>, theme: ActiveTheme) -> impl Scene {
         }
         IgnorePicking
         Children [
-            (
-                Node {
-                    width: px(HERO_IMAGE_SIZE),
-                    height: px(HERO_IMAGE_SIZE),
-                }
-                ImageNode {
-                    image: {image},
-                    color: {theme.primary},
-                    rect: {Some(hero_grid_rect(STORAGE_HERO_X, STORAGE_HERO_Y))},
-                }
-                UiThemeImageColor::Primary
-                IgnorePicking
-            )
+            Node {
+                width: px(HERO_IMAGE_SIZE),
+                height: px(HERO_IMAGE_SIZE),
+            }
+            ImageNode {
+                image: {image},
+                color: {theme.primary},
+                rect: {Some(hero_grid_rect(STORAGE_HERO_X, STORAGE_HERO_Y))},
+            }
+            UiThemeImageColor::Primary
+            IgnorePicking
         ]
     }
 }

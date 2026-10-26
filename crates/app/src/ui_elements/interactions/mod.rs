@@ -1,3 +1,4 @@
+use bevy::ui_widgets::Button;
 mod activation;
 mod focus;
 mod list_view;
@@ -64,6 +65,8 @@ impl Plugin for UiInteractionsPlugin {
             .add_message::<crate::ui_elements::file_picker::UiFilePickerActivated>()
             .add_message::<crate::ui_elements::file_picker::UiFilePickerResult>()
             .add_observer(focus::bind_focus_nav_ids)
+            .add_observer(visual_state::disable_button)
+            .add_observer(visual_state::enable_button)
             .configure_sets(
                 Update,
                 (
@@ -105,6 +108,8 @@ impl Plugin for UiInteractionsPlugin {
             .add_systems(
                 Update,
                 (
+                    picking::finish_pointer_presses,
+                    scroll::finish_scroll_thumb_drags,
                     picking::resolve_pointer_activations,
                     picking::sync_pointer_states.run_if(pointer_state_may_have_changed),
                 )
@@ -114,6 +119,7 @@ impl Plugin for UiInteractionsPlugin {
             .add_systems(
                 Update,
                 (
+                    focus::clear_unavailable_focus,
                     focus::ensure_initial_focus.run_if(initial_focus_added),
                     focus::focus_pressed_element,
                     focus::restore_focus_from_input,
@@ -374,4 +380,66 @@ fn has_focus_auto_scroll_suppression(
     suppressed: Query<(), With<scroll::SuppressFocusAutoScroll>>,
 ) -> bool {
     !suppressed.is_empty()
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use bevy::camera::NormalizedRenderTarget;
+    use bevy::picking::{
+        backend::HitData,
+        events::Pointer,
+        pointer::{Location, PointerButton, PointerId},
+    };
+    use bevy::prelude::*;
+    use bevy::window::WindowRef;
+
+    pub fn pointer(id: u64) -> Pointer {
+        Pointer::new(
+            PointerId::Touch(id),
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Entity(Entity::PLACEHOLDER)
+                        .normalize(None)
+                        .unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+        )
+    }
+    pub fn hit() -> HitData {
+        HitData::new(Entity::PLACEHOLDER, 0.0, Some(Vec3::ZERO), None)
+    }
+    pub fn press(entity: Entity, id: u64) -> PointerPress {
+        PointerPress {
+            entity,
+            pointer: pointer(id),
+            button: PointerButton::Primary,
+            hit: hit(),
+            count: 1,
+        }
+    }
+    pub fn release(entity: Entity, id: u64) -> PointerRelease {
+        PointerRelease {
+            entity,
+            pointer: pointer(id),
+            button: PointerButton::Primary,
+            hit: hit(),
+        }
+    }
+    pub fn cancel(entity: Entity, id: u64) -> PointerCancel {
+        PointerCancel {
+            entity,
+            pointer: pointer(id),
+            hit: hit(),
+        }
+    }
+    pub fn drag(entity: Entity, id: u64, delta: Vec2) -> PointerDrag {
+        PointerDrag {
+            entity,
+            pointer: pointer(id),
+            button: PointerButton::Primary,
+            distance: delta,
+            delta,
+        }
+    }
 }

@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::app_theme::{ActiveTheme, ActiveThemeChanged};
 use crate::audio::preset_graph::{
     GAME_AUDIO_CHANNEL_NODE_IDS, apply_audio_preset_to_gameplay, apply_audio_preset_to_playback,
-    default_audio_preset, game_audio_channel_amplitude, load_audio_preset,
+    default_audio_preset, load_audio_preset,
 };
 use crate::game_boy::{
     GameBoyAudioChannel, GameBoyAudioCommand, GameBoyAudioEvent, GameBoyCore, GameBoyEmulator,
@@ -311,17 +311,13 @@ fn queue_game_boy_audio_event(sender: &MessageSender, event: GameBoyAudioEvent, 
             let target = game_audio_channel_target(channel);
             queue_game_audio_message(sender, target, Event::SourceBalance(balance.into()), frame);
             queue_game_audio_message(sender, target, Event::Volume(volume.clamp(0.0, 1.0)), frame);
-            queue_game_audio_message(
-                sender,
-                target,
-                Event::NoteOn { note: 69, vel: 1.0 },
-                frame.saturating_add(1),
-            );
+            queue_game_audio_message(sender, target, Event::NoteOn { note: 69, vel: 1.0 }, frame);
+            // Generators reset pitch on NoteOn, and equal-frame events are not stably ordered.
             queue_game_audio_message(
                 sender,
                 target,
                 Event::PitchMultiplier(frequency_multiplier(frequency_hz)),
-                frame.saturating_add(2),
+                frame.saturating_add(1),
             );
         }
         (Some(channel), GameBoyAudioCommand::NoteOff) => {
@@ -368,7 +364,7 @@ fn queue_game_boy_audio_event(sender: &MessageSender, event: GameBoyAudioEvent, 
             queue_game_audio_message(
                 sender,
                 game_audio_channel_target(channel),
-                Event::Wavetable(game_audio_wavetable_samples(channel, samples)),
+                Event::Wavetable(samples.into()),
                 frame,
             );
         }
@@ -411,11 +407,6 @@ fn frequency_multiplier(frequency_hz: f32) -> f32 {
     } else {
         1.0
     }
-}
-
-fn game_audio_wavetable_samples(channel: GameBoyAudioChannel, samples: [f32; 32]) -> Vec<f32> {
-    let gain = game_audio_channel_amplitude(channel.index());
-    samples.into_iter().map(|sample| sample * gain).collect()
 }
 
 impl From<crate::game_boy::GameBoyAudioBalance> for Balance {
@@ -500,14 +491,14 @@ mod tests {
     }
 
     #[test]
-    fn wave_channel_wavetable_samples_use_channel_gain() {
+    fn wavetable_events_preserve_game_boy_dac_samples() {
         let mut samples = [0.0; 32];
         samples[0] = -1.0;
         samples[1] = 1.0;
 
-        let scaled = game_audio_wavetable_samples(GameBoyAudioChannel::Wave, samples);
+        let wavetable = Vec::from(samples);
 
-        assert_eq!(scaled[0], -game_audio_channel_amplitude(2));
-        assert_eq!(scaled[1], game_audio_channel_amplitude(2));
+        assert_eq!(wavetable[0], -1.0);
+        assert_eq!(wavetable[1], 1.0);
     }
 }

@@ -5,6 +5,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::math::Rect;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_assets::AppAssets;
 use crate::app_state::AppState;
@@ -148,7 +149,7 @@ fn clear_mapping_capture(
 }
 
 fn handle_mapping_activation(
-    activated: On<Add, ActivatedUiElement>,
+    activated: On<Add<ActivatedUiElement>>,
     reset_buttons: Query<(), With<MappingResetButton>>,
     action_buttons: Query<&MappingActionButton>,
     mut capture: ResMut<MappingCaptureState>,
@@ -323,34 +324,33 @@ fn input_mapping_scene(
         }
         ResponsiveScreenPadding { landscape: UI_SCREEN_PADDING, portrait: UI_PORTRAIT_SCREEN_PADDING }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    max_width: px(UI_WIDE_CONTENT_WIDTH),
-                    height: percent(100),
-                    min_height: px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(UI_PANEL_GAP),
-                }
-                Children [
-                    settings_header(font.clone(), assets.icons.clone(), theme, "Input Mapping"),
-                    (
-                        #InputMappingScrollBar
-                        scroll_view(
-                            theme,
-                            #InputMappingScrollBar,
-                            ScrollViewConfig {
-                                width: percent(100),
-                                min_height: px(0.0),
-                                thumb_height: 110.0,
-                            },
-                            move |_| mapping_content(content_font, heroes, theme, mapping.clone())
-                        )
-                    ),
-                    info_message(font.clone(), theme, "", false),
-                    action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select"),
-                ]
-            )
+            Node {
+                width: percent(100),
+                max_width: px(UI_WIDE_CONTENT_WIDTH),
+                height: percent(100),
+                min_height: px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(UI_PANEL_GAP),
+            }
+            Children [
+                @settings_header(font.clone(), assets.icons.clone(), theme, "Input Mapping")
+                --
+                #InputMappingScrollBar
+                @scroll_view(
+                    theme,
+                    #InputMappingScrollBar,
+                    ScrollViewConfig {
+                        width: percent(100),
+                        min_height: px(0.0),
+                        thumb_height: 110.0,
+                    },
+                    move |_| mapping_content(content_font, heroes, theme, mapping.clone())
+                )
+                --
+                @info_message(font.clone(), theme, "", false)
+                --
+                @action_hints_with_labels(font, assets.icons.clone(), theme, storage, primary_input, "Back", "Select")
+            ]
         ]
     }
 }
@@ -382,8 +382,9 @@ fn mapping_content(
         }
         ResponsiveColumns { gap: ACTION_HINT_GAP }
         Children [
-            gameboy_mapping_panel(left_font, centre_font, heroes, theme, mapping.clone(), mapping_name),
-            right_column(right_font, theme, mapping, save_action, load_action),
+            @gameboy_mapping_panel(left_font, centre_font, heroes, theme, mapping.clone(), mapping_name)
+            --
+            @right_column(right_font, theme, mapping, save_action, load_action)
         ]
     }
 }
@@ -404,30 +405,29 @@ fn gameboy_mapping_panel(
         }
         ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_COLUMNS_PERCENT }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(ACTION_HINT_GAP),
-                }
-                ResponsiveColumns { gap: ACTION_HINT_GAP }
-                Children [
-                    mapping_intro(left_font.clone(), theme, mapping_name),
-                    controller_hero_panel(centre_font.clone(), heroes, theme),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(ACTION_HINT_GAP),
-                }
-                ResponsiveColumns { gap: ACTION_HINT_GAP }
-                Children [
-                    core_left_column(left_font, theme, mapping.clone()),
-                    core_centre_column(centre_font, theme, mapping),
-                ]
-            ),
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Row,
+                column_gap: px(ACTION_HINT_GAP),
+            }
+            ResponsiveColumns { gap: ACTION_HINT_GAP }
+            Children [
+                @mapping_intro(left_font.clone(), theme, mapping_name)
+                --
+                @controller_hero_panel(centre_font.clone(), heroes, theme)
+            ]
+            --
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Row,
+                column_gap: px(ACTION_HINT_GAP),
+            }
+            ResponsiveColumns { gap: ACTION_HINT_GAP }
+            Children [
+                @core_left_column(left_font, theme, mapping.clone())
+                --
+                @core_centre_column(centre_font, theme, mapping)
+            ]
         ]
     }
 }
@@ -442,62 +442,55 @@ fn mapping_intro(font: Handle<Font>, theme: ActiveTheme, mapping_name: String) -
         }
         ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_LEFT_COLUMN_PERCENT }
         Children [
-            (
+            Node {
+                width: percent(100),
+                align_items: AlignItems::Center,
+                column_gap: px(28.0),
+            }
+            ResponsiveFieldRow { gap: 28.0 }
+            Children [
                 Node {
-                    width: percent(100),
+                    flex_grow: 1.0,
+                    min_width: px(0.0),
                     align_items: AlignItems::Center,
                     column_gap: px(28.0),
                 }
-                ResponsiveFieldRow { gap: 28.0 }
                 Children [
-                    (
-                        Node {
-                            flex_grow: 1.0,
-                            min_width: px(0.0),
-                            align_items: AlignItems::Center,
-                            column_gap: px(28.0),
+                    @description(font.clone(), theme, "Name:")
+                    --
+                    Node {
+                        flex_grow: 1.0,
+                        min_width: px(0.0),
+                        justify_content: JustifyContent::FlexEnd,
+                    }
+                    Children [
+                        Text({mapping_name})
+                        TextFont {
+                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(mapping_name_font)),
+                            font_size: px(UI_BODY_FONT_SIZE),
                         }
-                        Children [
-                            description(font.clone(), theme, "Name:"),
-                            (
-                                Node {
-                                    flex_grow: 1.0,
-                                    min_width: px(0.0),
-                                    justify_content: JustifyContent::FlexEnd,
-                                }
-                                Children [
-                                    (
-                                        Text({mapping_name})
-                                        TextFont {
-                                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(mapping_name_font)),
-                                            font_size: px(UI_BODY_FONT_SIZE),
-                                        }
-                                        TextColor({theme.primary})
-                                        UiThemeTextColor::Primary
-                                        UiElementLabel
-                                        IgnorePicking
-                                        TextLayout::new(Justify::Right, LineBreak::WordBoundary)
-                                    )
-                                ]
-                            ),
-                        ]
-                    ),
+                        TextColor({theme.primary})
+                        UiThemeTextColor::Primary
+                        UiElementLabel
+                        IgnorePicking
+                        TextLayout::new(Justify::Right, LineBreak::WordBoundary)
+                    ]
                 ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    height: px(32.0),
-                }
-            ),
-            description(font.clone(), theme, "Map buttons on your input device to emulated GameBoy buttons. These will be used in-game as well as in menus."),
-            (
-                Node {
-                    width: percent(100),
-                    height: px(18.0),
-                }
-            ),
-            description(font, theme, "Other actions can be mapped to buttons, or left unassigned. Use the button assigned to the A key to map the next button press to the given action, or press B while listening to cancel."),
+            ]
+            --
+            Node {
+                width: percent(100),
+                height: px(32.0),
+            }
+            --
+            @description(font.clone(), theme, "Map buttons on your input device to emulated GameBoy buttons. These will be used in-game as well as in menus.")
+            --
+            Node {
+                width: percent(100),
+                height: px(18.0),
+            }
+            --
+            @description(font, theme, "Other actions can be mapped to buttons, or left unassigned. Use the button assigned to the A key to map the next button press to the given action, or press B while listening to cancel.")
         ]
     }
 }
@@ -685,27 +678,24 @@ fn mapping_row(
         }
         ResponsiveFieldRow { gap: 20.0 }
         Children [
-            (
-                Node {
-                    flex_grow: 1.0,
-                    min_width: px(0.0),
-                }
-                Children [
-                    description(font.clone(), theme, label)
-                ]
-            ),
-            (
-                mapping_button(font, theme, value)
-                MappingActionButton { action: {action} }
-                UiFocusId { id: target }
-                UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
-                ResponsiveFocusNavIds {
-                    landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
-                    portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
-                }
-                InitialFocus { enabled: {target == TARGET_DPAD_UP} }
-                DefaultFocusTarget
-            )
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0.0),
+            }
+            Children [
+                @description(font.clone(), theme, label)
+            ]
+            --
+            @mapping_button(font, theme, value)
+            MappingActionButton { action: {action} }
+            UiFocusId { id: target }
+            UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
+            ResponsiveFocusNavIds {
+                landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
+                portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
+            }
+            InitialFocus { enabled: {target == TARGET_DPAD_UP} }
+            DefaultFocusTarget
         ]
     }
 }
@@ -735,19 +725,17 @@ fn mapping_button(font: Handle<Font>, theme: ActiveTheme, label: String) -> impl
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Text({label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.primary})
-                UiThemeTextColor::Primary
-                UiElementLabel
-                MappingButtonLabel
-                IgnorePicking
-                TextLayout::new(Justify::Center, LineBreak::NoWrap)
-            )
+            Text({label})
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.primary})
+            UiThemeTextColor::Primary
+            UiElementLabel
+            MappingButtonLabel
+            IgnorePicking
+            TextLayout::new(Justify::Center, LineBreak::NoWrap)
         ]
     }
 }
@@ -771,37 +759,32 @@ fn controller_hero_panel(
         }
         ResponsivePercentWidth { landscape: UI_MAPPING_GAMEBOY_CENTRE_COLUMN_PERCENT }
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    justify_content: JustifyContent::FlexEnd,
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::FlexEnd,
+            }
+            Children [
+                @button(font, "Reset Defaults", theme, UiFocusNav::default())
+                MappingResetButton
+                UiFocusId { id: TARGET_RESET }
+                UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
+                ResponsiveFocusNavIds {
+                    landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
+                    portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
                 }
-                Children [
-                    (
-                        button(font, "Reset Defaults", theme, UiFocusNav::default())
-                        MappingResetButton
-                        UiFocusId { id: TARGET_RESET }
-                        UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} }
-                        ResponsiveFocusNavIds {
-                            landscape: UiFocusNavIds { up: {nav.up}, right: {nav.right}, down: {nav.down}, left: {nav.left} },
-                            portrait: UiFocusNavIds { up: {portrait_nav.up}, right: {portrait_nav.right}, down: {portrait_nav.down}, left: {portrait_nav.left} },
-                        }
-                    )
-                ]
-            ),
-            (
-                Node {
-                    width: px(HERO_IMAGE_SIZE),
-                    height: px(HERO_IMAGE_SIZE),
-                }
-                ImageNode {
-                    image: {image},
-                    color: {theme.primary},
-                    rect: {Some(hero_grid_rect(CONTROLLER_HERO_X, CONTROLLER_HERO_Y))},
-                }
-                UiThemeImageColor::Primary
-                IgnorePicking
-            )
+            ]
+            --
+            Node {
+                width: px(HERO_IMAGE_SIZE),
+                height: px(HERO_IMAGE_SIZE),
+            }
+            ImageNode {
+                image: {image},
+                color: {theme.primary},
+                rect: {Some(hero_grid_rect(CONTROLLER_HERO_X, CONTROLLER_HERO_Y))},
+            }
+            UiThemeImageColor::Primary
+            IgnorePicking
         ]
     }
 }

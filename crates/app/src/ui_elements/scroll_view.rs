@@ -1,5 +1,6 @@
 use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::UI_SCROLLBAR_WIDTH;
@@ -36,30 +37,27 @@ where
         UiScrollArea { offset: 0.0, max_offset: 0.0 }
         AutoScrollFocusedChild
         Children [
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(0.0),
-                    left: px(0.0),
-                    width: percent(100),
-                }
-                UiScrollContent
-                Children [
-                    content(focus_target)
-                ]
-            ),
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(0.0),
-                    right: px(0.0),
-                    width: px(UI_SCROLLBAR_WIDTH),
-                    height: percent(100),
-                }
-                Children [
-                    scrollbar(theme, config.thumb_height, 0.0)
-                ]
-            ),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(0.0),
+                left: px(0.0),
+                width: percent(100),
+            }
+            UiScrollContent
+            Children [
+                @content(focus_target)
+            ]
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(0.0),
+                right: px(0.0),
+                width: px(UI_SCROLLBAR_WIDTH),
+                height: percent(100),
+            }
+            Children [
+                @scrollbar(theme, config.thumb_height, 0.0)
+            ]
         ]
     }
 }
@@ -88,30 +86,27 @@ where
         UiScrollArea { offset: 0.0, max_offset: 0.0 }
         AutoScrollFocusedChild
         Children [
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(0.0),
-                    left: px(0.0),
-                    width: percent(100),
-                }
-                UiScrollContent
-                Children [
-                    content(focus_target)
-                ]
-            ),
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(0.0),
-                    right: px(0.0),
-                    width: px(UI_SCROLLBAR_WIDTH),
-                    height: percent(100),
-                }
-                Children [
-                    scrollbar(theme, config.thumb_height, 0.0)
-                ]
-            ),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(0.0),
+                left: px(0.0),
+                width: percent(100),
+            }
+            UiScrollContent
+            Children [
+                @content(focus_target)
+            ]
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(0.0),
+                right: px(0.0),
+                width: px(UI_SCROLLBAR_WIDTH),
+                height: percent(100),
+            }
+            Children [
+                @scrollbar(theme, config.thumb_height, 0.0)
+            ]
         ]
     }
 }

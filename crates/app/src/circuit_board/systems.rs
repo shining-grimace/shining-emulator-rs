@@ -50,7 +50,9 @@ pub(super) fn spawn_circuit_board(
     let window_size = Vec2::new(window.width(), window.height());
     let hidden = theme.primary.with_alpha(0.0);
 
-    for screen in CIRCUIT_SCREEN_NODES {
+    let node_parts = rounded_rect_strokes();
+    let node_stroke_count = CIRCUIT_SCREEN_NODES.len() * node_parts.len();
+    for (screen_index, screen) in CIRCUIT_SCREEN_NODES.into_iter().enumerate() {
         let base_rect = base_rect(screen, window_size);
         commands.spawn((
             CircuitBoardLayer,
@@ -62,23 +64,36 @@ pub(super) fn spawn_circuit_board(
             },
         ));
 
-        for part in rounded_rect_strokes() {
+        for (part_index, part) in node_parts.iter().copied().enumerate() {
             commands.spawn((
                 CircuitBoardLayer,
                 CircuitNodeStroke { screen, part },
                 Sprite::from_color(hidden, Vec2::ONE),
-                Transform::from_xyz(0.0, 0.0, CIRCUIT_NODE_Z),
+                Transform::from_xyz(
+                    0.0,
+                    0.0,
+                    ordered_layer_z(
+                        CIRCUIT_NODE_Z,
+                        screen_index * node_parts.len() + part_index,
+                        node_stroke_count,
+                    ),
+                ),
             ));
         }
     }
 
     let base_rects = base_node_rects(window_size);
-    for index in 0..schematic_segments(&base_rects, window_size).len() {
+    let segments = schematic_segments(&base_rects, window_size);
+    for (index, segment) in segments.iter().enumerate() {
         commands.spawn((
             CircuitBoardLayer,
             CircuitSchematicStroke { index },
             Sprite::from_color(hidden, Vec2::ONE),
-            Transform::from_xyz(0.0, 0.0, CIRCUIT_Z),
+            Transform::from_xyz(
+                0.0,
+                0.0,
+                schematic_stroke_z(segment.role, index, segments.len()),
+            ),
         ));
     }
 }
@@ -213,10 +228,21 @@ pub(super) fn update_circuit_schematic(
         sprite.custom_size = Some(size);
         transform.translation.x = center.x;
         transform.translation.y = center.y;
-        transform.translation.z = match role {
-            SegmentRole::Trace => CIRCUIT_Z,
-            SegmentRole::Element => CIRCUIT_ELEMENT_Z,
-        };
+        transform.translation.z = schematic_stroke_z(role, stroke.index, segments.len());
         transform.rotation = Quat::from_rotation_z(angle);
     }
+}
+
+// Use a stable geometry index rather than entity/query order. The half-unit band
+// breaks ties without crossing the two-unit gaps between circuit layers.
+fn ordered_layer_z(base: f32, index: usize, count: usize) -> f32 {
+    base + 0.5 * index as f32 / count.max(1) as f32
+}
+
+fn schematic_stroke_z(role: SegmentRole, index: usize, count: usize) -> f32 {
+    let base = match role {
+        SegmentRole::Trace => CIRCUIT_Z,
+        SegmentRole::Element => CIRCUIT_ELEMENT_Z,
+    };
+    ordered_layer_z(base, index, count)
 }

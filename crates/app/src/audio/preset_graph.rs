@@ -228,7 +228,10 @@ fn midi_channel_source_json(
     let channel = channel_for_graph(preset, index, target);
     let channel_node_id = game_audio_channel_node_id(index);
     let uses_envelope = matches!(target, AudioGraphTarget::Menu) && channel_uses_envelope(&channel);
-    let source_node_id = match uses_envelope {
+    let uses_volume_fader = matches!(target, AudioGraphTarget::Gameplay)
+        && index == 2
+        && channel.oscillator == OSCILLATOR_WAVE_TABLE;
+    let source_node_id = match uses_envelope || uses_volume_fader {
         true => game_audio_source_node_id(index),
         false => channel_node_id,
     };
@@ -247,6 +250,13 @@ fn midi_channel_source_json(
             "decay_time": 0.08,
             "sustain_multiplier": 0.4,
             "release_time": 0.08,
+            "source": source
+        })
+    } else if uses_volume_fader {
+        json!({
+            "type": "Fader",
+            "node_id": channel_node_id,
+            "initial_volume": 0.0,
             "source": source
         })
     } else {
@@ -323,7 +333,7 @@ fn oscillator_source_json(
             "amplitude": game_audio_channel_amplitude(channel_index) * 0.6,
             "inside_feedback": false
         }),
-        OSCILLATOR_WAVE_TABLE => wavetable_source_json(node_id),
+        OSCILLATOR_WAVE_TABLE => wavetable_source_json(channel_index, node_id),
         OSCILLATOR_BUILT_IN_SAMPLER => built_in_sample_source_json(preset, node_id),
         OSCILLATOR_CUSTOM_SAMPLER => custom_sample_source_json(preset, node_id),
         _ => json!({
@@ -378,7 +388,7 @@ fn built_in_sample_path(sample: &str) -> &'static str {
         .unwrap_or(BUILT_IN_AUDIO_SAMPLE_PATHS[0].1)
 }
 
-fn wavetable_source_json(node_id: u64) -> Value {
+fn wavetable_source_json(channel_index: usize, node_id: u64) -> Value {
     let wavetable = [
         0.0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375, 0.5, 0.4375, 0.375, 0.3125, 0.25,
         0.1875, 0.125, 0.0625, 0.0, -0.0625, -0.125, -0.1875, -0.25, -0.3125, -0.375, -0.4375,
@@ -388,6 +398,7 @@ fn wavetable_source_json(node_id: u64) -> Value {
         "type": "SampleLoop",
         "node_id": node_id,
         "balance": "Both",
+        "volume": game_audio_channel_amplitude(channel_index),
         "source": {
             "WavetableWithSampleRate": [WAVETABLE_SAMPLE_RATE, wavetable]
         },
@@ -477,9 +488,16 @@ mod tests {
     #[test]
     fn default_wave_table_channel_uses_wavetable_sampler_config() {
         let graph = game_audio_graph_json_from_audio_preset(&default_audio_preset(), 25);
-        let wavetable_channel = &gameplay_graph_sources(&graph)[2];
+        let wave_channel = &gameplay_graph_sources(&graph)[2];
+        let wavetable_channel = &wave_channel["source"];
 
+        assert_eq!(wave_channel["type"], json!("Fader"));
+        assert_eq!(wave_channel["initial_volume"], json!(0.0));
         assert_eq!(wavetable_channel["type"], json!("SampleLoop"));
+        assert_eq!(
+            wavetable_channel["volume"],
+            json!(game_audio_channel_amplitude(2))
+        );
         assert_eq!(
             wavetable_channel["source"]["WavetableWithSampleRate"][0],
             json!(WAVETABLE_SAMPLE_RATE)
@@ -584,7 +602,7 @@ mod tests {
         preset.channels[2].built_in_sample = "Bell".to_string();
 
         let graph = game_audio_graph_json_from_audio_preset(&preset, 25);
-        let source = &gameplay_graph_sources(&graph)[2];
+        let source = &gameplay_graph_sources(&graph)[2]["source"];
 
         assert_eq!(source["type"], json!("SampleLoop"));
         assert_eq!(

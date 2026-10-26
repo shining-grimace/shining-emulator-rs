@@ -31,30 +31,27 @@ pub fn scrollbar_with_display(
         }
         UiScrollbar
         Children [
-            (
-                Node {
-                    width: px(UI_SCROLLBAR_WIDTH),
-                    height: percent(100),
-                    border_radius: BorderRadius::MAX,
-                }
-                BackgroundColor({track_colour})
-                UiThemeBackgroundColor::ControlFill
-                IgnorePicking
-            ),
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: px(UI_SCROLLBAR_WIDTH),
-                    height: px(thumb_height),
-                    top: px(6.0),
-                    border_radius: BorderRadius::MAX,
-                }
-                BackgroundColor({thumb_colour})
-                DraggableUiElement
-                UiScrollThumb { height: {thumb_height}, travel: {travel} }
-                UiScrollThumbTheme
-                UiScrollThumbColors { primary: {theme.primary}, secondary: {theme.secondary} }
-            ),
+            Node {
+                width: px(UI_SCROLLBAR_WIDTH),
+                height: percent(100),
+                border_radius: BorderRadius::MAX,
+            }
+            BackgroundColor({track_colour})
+            UiThemeBackgroundColor::ControlFill
+            IgnorePicking
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                width: px(UI_SCROLLBAR_WIDTH),
+                height: px(thumb_height),
+                top: px(6.0),
+                border_radius: BorderRadius::MAX,
+            }
+            BackgroundColor({thumb_colour})
+            DraggableUiElement
+            UiScrollThumb { height: {thumb_height}, travel: {travel} }
+            UiScrollThumbTheme
+            UiScrollThumbColors { primary: {theme.primary}, secondary: {theme.secondary} }
         ]
     }
 }

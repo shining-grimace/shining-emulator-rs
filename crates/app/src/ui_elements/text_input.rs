@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT, UI_INNER_PADDING};
@@ -44,19 +45,17 @@ pub fn text_input_with_value_width(
         UiTextInput { value: {value}, placeholder: {label.to_string()}, cursor: {cursor} }
         EditableUiElement
         Children [
-            (
-                Text({label})
-                TextFont {
-                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                    font_size: px(UI_CONTROL_FONT_SIZE),
-                }
-                TextColor({theme.tertiary})
-                UiThemeTextColor::Tertiary
-                UiElementLabel
-                IgnorePicking
-                UiTextInputText
-                TextLayout::new(Justify::Left, LineBreak::NoWrap)
-            )
+            Text({label})
+            TextFont {
+                font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                font_size: px(UI_CONTROL_FONT_SIZE),
+            }
+            TextColor({theme.tertiary})
+            UiThemeTextColor::Tertiary
+            UiElementLabel
+            IgnorePicking
+            UiTextInputText
+            TextLayout::new(Justify::Left, LineBreak::NoWrap)
         ]
     }
 }

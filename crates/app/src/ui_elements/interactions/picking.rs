@@ -1,10 +1,11 @@
 use bevy::picking::{
     Pickable,
-    events::{Pointer, Press, Release},
+    events::{PointerPress, PointerRelease},
     pointer::{PointerButton, PointerId},
 };
 use bevy::prelude::*;
-use std::collections::HashMap;
+use bevy::ui_widgets::Button;
+use std::collections::{HashMap, HashSet};
 
 use crate::ui_elements::back_button::UiBackButton;
 
@@ -14,6 +15,7 @@ use super::ui_input::UiInputCapture;
 use super::visual_state::{ActivatedUiElement, UiElementKind};
 
 const TOUCH_TAP_SLOP_PIXELS: f32 = 18.0;
+const MOUSE_TAP_SLOP_PIXELS: f32 = 5.0;
 
 #[derive(Clone, Copy, Component, Debug, Default, FromTemplate)]
 pub struct HoveredUiElement;
@@ -38,6 +40,9 @@ pub struct UiPointerState {
     pub hovered: bool,
     pub pressed: bool,
 }
+
+#[derive(Component, Default)]
+pub(super) struct UiPressedPointers(HashSet<PointerId>);
 
 #[derive(Default, Resource)]
 pub(super) struct UiPointerPressState {
@@ -77,17 +82,19 @@ pub(super) fn setup_pointer_tracking(
     {
         commands
             .entity(entity)
-            .insert(UiPointerState::default())
+            .insert((UiPointerState::default(), UiPressedPointers::default()))
             .observe(pointer_over)
             .observe(pointer_out)
-            .observe(pointer_press)
-            .observe(pointer_release);
+            .observe(pointer_press);
     }
 }
 
 pub(super) fn resolve_pointer_activations(
-    mut pointer_presses: MessageReader<Pointer<Press>>,
-    mut pointer_releases: MessageReader<Pointer<Release>>,
+    mut pointer_presses: MessageReader<PointerPress>,
+    mut pointer_releases: MessageReader<PointerRelease>,
+    mut pointer_cancels: MessageReader<PointerCancel>,
+    mut pointer_drags: MessageReader<PointerDrag>,
+    mut pointer_drag_ends: MessageReader<PointerDragEnd>,
     capture: Res<UiInputCapture>,
     mut press_state: ResMut<UiPointerPressState>,
     interactive: Query<(), Or<(With<UiElementKind>, With<UiBackButton>)>>,
@@ -97,6 +104,9 @@ pub(super) fn resolve_pointer_activations(
     if capture.active {
         for _ in pointer_presses.read() {}
         for _ in pointer_releases.read() {}
+        pointer_cancels.clear();
+        pointer_drags.clear();
+        pointer_drag_ends.clear();
         press_state.primary_targets.clear();
         return;
     }
@@ -107,15 +117,15 @@ pub(super) fn resolve_pointer_activations(
         if press.button != PointerButton::Primary {
             continue;
         }
-        pressed_pointers.push(press.pointer_id);
+        pressed_pointers.push(press.pointer.id);
         if let Some(target) = interactive_ancestor(
             press.entity,
-            press.pointer_location.position,
-            press.pointer_id.is_touch(),
+            press.pointer.position,
+            press.pointer.id.is_touch(),
             &interactive,
             &parents,
         ) {
-            retain_deepest_target(&mut press_targets, press.pointer_id, target);
+            retain_deepest_target(&mut press_targets, press.pointer.id, target);
         }
     }
 
@@ -127,21 +137,36 @@ pub(super) fn resolve_pointer_activations(
         }
     }
 
+    // Buffered messages also reach us when headless widgets stop event propagation.
+    for cancel in pointer_cancels.read() {
+        press_state.primary_targets.remove(&cancel.pointer.id);
+    }
+    for drag in pointer_drags.read() {
+        let slop = if drag.pointer.id.is_touch() {
+            TOUCH_TAP_SLOP_PIXELS
+        } else {
+            MOUSE_TAP_SLOP_PIXELS
+        };
+        if drag.button == PointerButton::Primary && drag.distance.length() > slop {
+            press_state.primary_targets.remove(&drag.pointer.id);
+        }
+    }
+
     let mut released_pointers = Vec::new();
     let mut release_targets = HashMap::new();
     for release in pointer_releases.read() {
         if release.button != PointerButton::Primary {
             continue;
         }
-        released_pointers.push(release.pointer_id);
+        released_pointers.push(release.pointer.id);
         if let Some(target) = interactive_ancestor(
             release.entity,
-            release.pointer_location.position,
-            release.pointer_id.is_touch(),
+            release.pointer.position,
+            release.pointer.id.is_touch(),
             &interactive,
             &parents,
         ) {
-            retain_deepest_target(&mut release_targets, release.pointer_id, target);
+            retain_deepest_target(&mut release_targets, release.pointer.id, target);
         }
     }
 
@@ -156,6 +181,12 @@ pub(super) fn resolve_pointer_activations(
             clicked.write(UiPointerClicked {
                 entity: pressed_target.entity,
             });
+        }
+    }
+    // DragEnd targets the original press even when release occurs over empty space.
+    for end in pointer_drag_ends.read() {
+        if end.button == PointerButton::Primary {
+            press_state.primary_targets.remove(&end.pointer.id);
         }
     }
 }
@@ -305,8 +336,8 @@ pub(super) fn clear_activation_markers(
     }
 }
 
-fn pointer_over(event: On<Pointer<Over>>, mut states: Query<&mut UiPointerState>) {
-    if !event.pointer_id.is_mouse() {
+fn pointer_over(event: On<PointerOver>, mut states: Query<&mut UiPointerState>) {
+    if !event.pointer.id.is_mouse() {
         return;
     }
     if let Ok(mut state) = states.get_mut(event.entity) {
@@ -314,20 +345,204 @@ fn pointer_over(event: On<Pointer<Over>>, mut states: Query<&mut UiPointerState>
     }
 }
 
-fn pointer_out(event: On<Pointer<Out>>, mut states: Query<&mut UiPointerState>) {
+fn pointer_out(event: On<PointerOut>, mut states: Query<&mut UiPointerState>) {
+    if !event.pointer.id.is_mouse() {
+        return;
+    }
     if let Ok(mut state) = states.get_mut(event.entity) {
         state.hovered = false;
     }
 }
 
-fn pointer_press(event: On<Pointer<Press>>, mut states: Query<&mut UiPointerState>) {
-    if let Ok(mut state) = states.get_mut(event.entity) {
+fn pointer_press(
+    event: On<PointerPress>,
+    mut states: Query<(&mut UiPointerState, &mut UiPressedPointers)>,
+) {
+    if event.button != PointerButton::Primary {
+        return;
+    }
+    if let Ok((mut state, mut pointers)) = states.get_mut(event.entity) {
+        pointers.0.insert(event.pointer.id);
         state.pressed = true;
     }
 }
 
-fn pointer_release(event: On<Pointer<Release>>, mut states: Query<&mut UiPointerState>) {
-    if let Ok(mut state) = states.get_mut(event.entity) {
-        state.pressed = false;
+pub(super) fn finish_pointer_presses(
+    mut releases: MessageReader<PointerRelease>,
+    mut cancels: MessageReader<PointerCancel>,
+    mut drag_ends: MessageReader<PointerDragEnd>,
+    capture: Res<UiInputCapture>,
+    mut states: Query<(&mut UiPointerState, &mut UiPressedPointers)>,
+) {
+    let finished: HashSet<_> = releases
+        .read()
+        .filter(|event| event.button == PointerButton::Primary)
+        .map(|event| event.pointer.id)
+        .chain(cancels.read().map(|event| event.pointer.id))
+        .chain(
+            drag_ends
+                .read()
+                .filter(|event| event.button == PointerButton::Primary)
+                .map(|event| event.pointer.id),
+        )
+        .collect();
+    for (mut state, mut pointers) in &mut states {
+        if capture.active {
+            pointers.0.clear();
+        } else {
+            pointers.0.retain(|id| !finished.contains(id));
+        }
+        let pressed = !pointers.0.is_empty();
+        if state.pressed != pressed {
+            state.pressed = pressed;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::*;
+    use super::*;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(bevy::ui_widgets::ButtonPlugin)
+            .init_resource::<UiInputCapture>()
+            .init_resource::<UiPointerPressState>()
+            .add_message::<PointerPress>()
+            .add_message::<PointerRelease>()
+            .add_message::<PointerCancel>()
+            .add_message::<PointerDrag>()
+            .add_message::<PointerDragEnd>()
+            .add_message::<UiPointerClicked>()
+            .add_systems(
+                Update,
+                (
+                    setup_pointer_tracking,
+                    finish_pointer_presses,
+                    resolve_pointer_activations,
+                )
+                    .chain(),
+            );
+        app
+    }
+
+    #[test]
+    fn pointer_touch_leaving_does_not_clear_mouse_hover() {
+        let mut app = app();
+        let button = app.world_mut().spawn((Button, UiElementKind::Button)).id();
+        app.update();
+        let mut mouse = pointer(1);
+        mouse.id = PointerId::Mouse;
+        app.world_mut().trigger(PointerOver {
+            entity: button,
+            pointer: mouse.clone(),
+            hit: hit(),
+        });
+        app.world_mut().trigger(PointerOut {
+            entity: button,
+            pointer: pointer(1),
+            hit: hit(),
+        });
+        assert!(app.world().get::<UiPointerState>(button).unwrap().hovered);
+        app.world_mut().trigger(PointerOut {
+            entity: button,
+            pointer: mouse,
+            hit: hit(),
+        });
+        assert!(!app.world().get::<UiPointerState>(button).unwrap().hovered);
+    }
+
+    #[test]
+    fn pointer_releasing_or_cancelling_one_finger_preserves_the_other_press() {
+        let mut app = app();
+        let button = app.world_mut().spawn((Button, UiElementKind::Button)).id();
+        app.update();
+        app.world_mut().trigger(press(button, 1));
+        app.world_mut().trigger(press(button, 2));
+        // Release over a different entity must still clear the original control.
+        app.world_mut()
+            .write_message(release(Entity::PLACEHOLDER, 1));
+        app.update();
+        assert!(app.world().get::<UiPointerState>(button).unwrap().pressed);
+        app.world_mut().write_message(cancel(button, 2));
+        app.update();
+        assert!(!app.world().get::<UiPointerState>(button).unwrap().pressed);
+    }
+
+    #[test]
+    fn pointer_cancelled_and_dragged_presses_do_not_click_or_cancel_another_finger() {
+        for cancelled in [true, false] {
+            let mut app = app();
+            let button = app.world_mut().spawn(UiElementKind::Button).id();
+            app.world_mut().write_message(press(button, 1));
+            app.world_mut().write_message(press(button, 2));
+            app.update();
+            if cancelled {
+                app.world_mut().write_message(cancel(button, 1));
+            } else {
+                app.world_mut()
+                    .write_message(drag(button, 1, Vec2::new(0.0, 50.0)));
+            }
+            app.world_mut().write_message(release(button, 1));
+            app.world_mut().write_message(release(button, 2));
+            app.update();
+            let clicks: Vec<_> = app
+                .world_mut()
+                .resource_mut::<Messages<UiPointerClicked>>()
+                .drain()
+                .collect();
+            assert_eq!(clicks.len(), 1);
+            assert_eq!(clicks[0].entity, button);
+            assert!(
+                app.world()
+                    .resource::<UiPointerPressState>()
+                    .primary_targets
+                    .is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn pointer_drag_ending_over_empty_space_clears_visuals_and_pending_click() {
+        let mut app = app();
+        let button = app.world_mut().spawn((Button, UiElementKind::Button)).id();
+        app.update();
+        app.world_mut().trigger(press(button, 1));
+        app.world_mut().write_message(press(button, 1));
+        app.update();
+        app.world_mut().write_message(PointerDragEnd {
+            entity: button,
+            pointer: pointer(1),
+            button: PointerButton::Primary,
+            distance: Vec2::new(100.0, 0.0),
+        });
+        app.update();
+        assert!(!app.world().get::<UiPointerState>(button).unwrap().pressed);
+        assert!(
+            app.world()
+                .resource::<UiPointerPressState>()
+                .primary_targets
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<UiPointerClicked>>()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn pointer_small_touch_movement_still_allows_a_tap() {
+        let mut app = app();
+        let button = app.world_mut().spawn(UiElementKind::Button).id();
+        app.world_mut().write_message(press(button, 1));
+        app.world_mut().write_message(drag(button, 1, Vec2::ONE));
+        app.world_mut().write_message(release(button, 1));
+        app.update();
+        assert_eq!(
+            app.world().resource::<Messages<UiPointerClicked>>().len(),
+            1
+        );
     }
 }

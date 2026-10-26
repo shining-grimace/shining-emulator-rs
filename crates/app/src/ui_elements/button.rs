@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{UI_BUTTON_WIDTH, UI_CONTROL_FONT_SIZE, UI_ELEMENT_HEIGHT};
@@ -47,27 +48,23 @@ pub fn button_with_width(
         UiElementTheme::Control
         UiElementColors { primary: {theme.primary}, secondary: {theme.secondary}, tertiary: {theme.tertiary}, fill: {background}, hover_fill: {hover_background} }
         Children [
-            (
-                Node {
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
+            Node {
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            IgnorePicking
+            Children [
+                Text({label})
+                TextFont {
+                    font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
+                    font_size: px(UI_CONTROL_FONT_SIZE),
                 }
+                TextColor({theme.primary})
+                UiThemeTextColor::Primary
+                UiElementLabel
                 IgnorePicking
-                Children [
-                    (
-                        Text({label})
-                        TextFont {
-                            font: FontSourceTemplate::Handle(HandleTemplate::Handle(font)),
-                            font_size: px(UI_CONTROL_FONT_SIZE),
-                        }
-                        TextColor({theme.primary})
-                        UiThemeTextColor::Primary
-                        UiElementLabel
-                        IgnorePicking
-                        TextLayout::new(Justify::Center, LineBreak::NoWrap)
-                    ),
-                ]
-            ),
+                TextLayout::new(Justify::Center, LineBreak::NoWrap)
+            ]
         ]
     }
 }

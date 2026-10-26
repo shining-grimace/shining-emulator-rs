@@ -1,6 +1,7 @@
 use bevy::asset::HandleTemplate;
 use bevy::math::Rect;
 use bevy::prelude::*;
+use bevy::ui_widgets::Button;
 
 use crate::app_theme::ActiveTheme;
 use crate::dimensions::{BACK_BUTTON_SIZE, BACK_ICON_SIZE_PX};
@@ -27,19 +28,17 @@ pub fn back_button(icons: Handle<Image>, theme: ActiveTheme) -> impl Scene {
         Button
         UiBackButton
         Children [
-            (
-                Node {
-                    width: px(BACK_ICON_SIZE_PX),
-                    height: px(BACK_ICON_SIZE_PX),
-                }
-                ImageNode {
-                    image: HandleTemplate::Handle(icons),
-                    color: {theme.primary},
-                    rect: {Some(back_icon_rect())},
-                }
-                UiThemeImageColor::Primary
-                IgnorePicking
-            )
+            Node {
+                width: px(BACK_ICON_SIZE_PX),
+                height: px(BACK_ICON_SIZE_PX),
+            }
+            ImageNode {
+                image: HandleTemplate::Handle(icons),
+                color: {theme.primary},
+                rect: {Some(back_icon_rect())},
+            }
+            UiThemeImageColor::Primary
+            IgnorePicking
         ]
     }
 }

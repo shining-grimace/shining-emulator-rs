@@ -1,5 +1,7 @@
+use bevy::ecs::system::SystemParam;
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
+use bevy::ui::InteractionDisabled;
 
 use crate::app_state::AppState;
 use crate::settings_transition::SettingsNavigation;
@@ -20,13 +22,40 @@ use super::visual_state::{
     ActivatedUiElement, DisabledUiElement, SelectedUiElement, UiElementKind,
 };
 
+#[derive(SystemParam)]
+pub(super) struct UiActivationTargets<'w, 's> {
+    kinds: Query<'w, 's, &'static UiElementKind>,
+    nodes: Query<'w, 's, &'static Node>,
+    parents: Query<'w, 's, &'static ChildOf>,
+    disabled: Query<'w, 's, (), Or<(With<DisabledUiElement>, With<InteractionDisabled>)>>,
+    capture: Res<'w, UiInputCapture>,
+}
+
+impl UiActivationTargets<'_, '_> {
+    fn enabled(&self, entity: Entity) -> bool {
+        let mut current = Some(entity);
+        while let Some(entity) = current {
+            if self.disabled.contains(entity)
+                || self
+                    .nodes
+                    .get(entity)
+                    .is_ok_and(|node| node.display == Display::None)
+            {
+                return false;
+            }
+            current = self.parents.get(entity).ok().map(|parent| parent.0);
+        }
+        true
+    }
+}
+
 pub(super) fn activate_controls(
     mut commands: Commands,
     mut clicked: MessageReader<UiPointerClicked>,
     input: Res<UiInputState>,
     mut multi_selects: MultiSelectQuery,
     options: Query<(Entity, &UiMultiSelectOption)>,
-    kinds: Query<&UiElementKind>,
+    targets: UiActivationTargets,
     focused: Query<(Entity, &UiElementKind), With<FocusedUiElement>>,
     selected_rows: Query<Entity, With<SelectedUiElement>>,
     back_buttons: Query<(), With<UiBackButton>>,
@@ -40,10 +69,18 @@ pub(super) fn activate_controls(
     child_query: Query<&Children>,
     mut navigation: SettingsNavigation,
 ) {
+    if targets.capture.active {
+        clicked.clear();
+        return;
+    }
     let keyboard_activation = input.select;
     let state_value = navigation.current();
     let back_activation = input.back && back_input_enabled(state_value);
-    let clicked_entities = clicked.read().map(|click| click.entity).collect::<Vec<_>>();
+    let clicked_entities = clicked
+        .read()
+        .map(|click| click.entity)
+        .filter(|entity| targets.enabled(*entity))
+        .collect::<Vec<_>>();
     if clicked_entities.is_empty() && !input.select && !input.back && !input.quit_app {
         return;
     }
@@ -70,7 +107,7 @@ pub(super) fn activate_controls(
     }
 
     for (entity, kind) in &focused {
-        if !keyboard_activation || *kind == UiElementKind::TextInput {
+        if !keyboard_activation || *kind == UiElementKind::TextInput || !targets.enabled(entity) {
             continue;
         }
         commands.entity(entity).insert(ActivatedUiElement);
@@ -114,7 +151,7 @@ pub(super) fn activate_controls(
     for entity in clicked_entities
         .iter()
         .copied()
-        .filter(|entity| kinds.get(*entity).is_ok())
+        .filter(|entity| targets.kinds.get(*entity).is_ok())
     {
         commands.entity(entity).insert(ActivatedUiElement);
     }
@@ -160,7 +197,8 @@ pub(super) fn activate_controls(
     }
 
     for clicked_entity in clicked_entities.iter().copied().filter(|entity| {
-        kinds
+        targets
+            .kinds
             .get(*entity)
             .is_ok_and(|kind| *kind == UiElementKind::ListItem)
     }) {
@@ -177,6 +215,9 @@ pub(super) fn activate_controls(
     }
 
     for (entity, children) in &file_pickers {
+        if !targets.enabled(entity) {
+            continue;
+        }
         if clicked_entities.iter().any(|clicked| {
             *clicked == entity
                 || children
