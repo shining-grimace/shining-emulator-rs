@@ -1,6 +1,6 @@
 
 // Required for building dependencies that need CC, etc. to be set; else all of that can go
-val NDK_TOOLCHAIN_PATH = "/home/thomas/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64"
+val NDK_TOOLCHAIN_PATH = "/home/thomas/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64"
 val TARGET_SDK = 35
 
 tasks.register<Exec>("cargoBuildAarch64") {
