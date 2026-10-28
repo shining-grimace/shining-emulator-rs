@@ -10,12 +10,12 @@ use crate::game_boy::emulator::input::{
 };
 use crate::game_boy::emulator::memory::GameBoyMemory;
 use crate::game_boy::emulator::runtime::RuntimeControl;
-use crate::game_boy::emulator::video::select_objects_for_line;
 use crate::game_boy::emulator::{GameBoyCore, GameBoyEmulator};
 use crate::game_boy::frame_buffer::GameBoyFrameRing;
 use crate::storage::LocalStorage;
 
 mod interrupts;
+mod oam_pipeline;
 use interrupts::{InterruptAction, handle_interrupts, service_interrupt};
 
 const JOYP_IO_INDEX: usize = 0x00;
@@ -220,6 +220,7 @@ pub(in crate::game_boy::emulator) fn step_machine_cycle(
         step_system_counter(emulator, MACHINE_CYCLE_CLOCKS as u16);
     }
     advance_cartridge_rtc(emulator);
+    let dma_owned_oam = emulator.dma.oam.active;
     step_oam_dma(emulator);
     emulator.audio_unit.advance_ticks(
         MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1),
@@ -230,7 +231,7 @@ pub(in crate::game_boy::emulator) fn step_machine_cycle(
     if display_enabled {
         emulator.gpu_timing.blanked_screen = false;
         let gpu_clocks = MACHINE_CYCLE_CLOCKS / emulator.gpu_timing.clock_factor.max(1);
-        advance_ppu_timing(gpu_clocks, emulator, frames);
+        advance_ppu_timing_with_dma(gpu_clocks, emulator, frames, dma_owned_oam);
     } else {
         handle_lcd_disabled(emulator, frames);
     }
@@ -304,20 +305,30 @@ fn update_serial(emulator: &mut GameBoyCore, clocks_passed: i32) {
     }
 }
 
+#[cfg(test)]
 fn advance_ppu_timing(clocks: i32, emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) {
-    emulator.gpu_timing.time_in_mode = emulator
-        .gpu_timing
-        .time_in_mode
-        .saturating_add(clocks.max(0));
+    let owned = emulator.dma.oam.active;
+    advance_ppu_timing_with_dma(clocks, emulator, frames, owned);
+}
 
-    loop {
-        let mode_clock_target = mode_clock_target(emulator);
-
-        if emulator.gpu_timing.time_in_mode < mode_clock_target {
+fn advance_ppu_timing_with_dma(
+    clocks: i32,
+    emulator: &mut GameBoyCore,
+    frames: &mut GameBoyFrameRing,
+    dma_owned: bool,
+) {
+    let mut remaining = clocks.max(0);
+    while remaining > 0 {
+        let target = mode_clock_target(emulator).max(1);
+        let start = emulator.gpu_timing.time_in_mode;
+        let elapsed = remaining.min((target - start).max(0));
+        oam_pipeline::observe(emulator, start, start + elapsed, dma_owned);
+        emulator.gpu_timing.time_in_mode += elapsed;
+        remaining -= elapsed;
+        if emulator.gpu_timing.time_in_mode < target {
             break;
         }
-
-        emulator.gpu_timing.time_in_mode -= mode_clock_target;
+        emulator.gpu_timing.time_in_mode -= target;
         match emulator.gpu_mode {
             GpuMode::ScanOam => {
                 emulator.gpu_timing.line_scan_vram_clocks = scan_vram_clocks(emulator);
@@ -405,8 +416,13 @@ fn scan_vram_clocks(emulator: &GameBoyCore) -> i32 {
     }
 
     if lcd_control & LCDC_OBJ_ENABLE != 0 {
-        clocks +=
-            object_penalty_clocks(memory, lcd_control, line, emulator.rom.properties.cgb_flag);
+        clocks += object_penalty_clocks(
+            memory,
+            lcd_control,
+            line,
+            emulator.rom.properties.cgb_flag,
+            oam_pipeline::line_objects(emulator),
+        );
     }
 
     clocks.min(MAX_SCAN_VRAM_CLOCKS)
@@ -425,8 +441,14 @@ fn window_visible_on_line(
         && io(memory, WX_IO_INDEX) < 167
 }
 
-fn object_penalty_clocks(memory: &GameBoyMemory, lcd_control: u8, line: u8, cgb_mode: bool) -> i32 {
-    let mut objects: Vec<_> = select_objects_for_line(memory, lcd_control, usize::from(line))
+fn object_penalty_clocks(
+    memory: &GameBoyMemory,
+    lcd_control: u8,
+    line: u8,
+    cgb_mode: bool,
+    selected: Vec<crate::game_boy::emulator::video::SelectedObject>,
+) -> i32 {
+    let mut objects: Vec<_> = selected
         .into_iter()
         .filter(|object| object.oam_x < 168)
         .collect();
@@ -471,24 +493,32 @@ fn object_penalty_tile(screen_x: i32, scroll_x: i32, window_start_x: Option<i32>
 }
 
 fn write_visible_line(emulator: &mut GameBoyCore, line: u8) {
+    let objects = oam_pipeline::line_objects(emulator);
     match emulator.line_renderer {
         crate::game_boy::emulator::gpu::LineRenderer::Gb => {
-            emulator
-                .video_frame
-                .write_gb_line(line, &emulator.memory, &emulator.palettes);
+            emulator.video_frame.write_gb_line_with_objects(
+                line,
+                &emulator.memory,
+                &emulator.palettes,
+                &objects,
+            );
         }
         crate::game_boy::emulator::gpu::LineRenderer::Sgb => {
-            emulator.video_frame.write_sgb_line(
+            emulator.video_frame.write_sgb_line_with_objects(
                 line,
                 &emulator.memory,
                 &emulator.palettes,
                 &mut emulator.sgb,
+                &objects,
             );
         }
         crate::game_boy::emulator::gpu::LineRenderer::Cgb => {
-            emulator
-                .video_frame
-                .write_cgb_line(line, &emulator.memory, &emulator.palettes);
+            emulator.video_frame.write_cgb_line_with_objects(
+                line,
+                &emulator.memory,
+                &emulator.palettes,
+                &objects,
+            );
         }
     }
 }
@@ -502,6 +532,7 @@ fn handle_lcd_disabled(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing
     emulator.memory_access.vram = true;
     set_ly(emulator, 0, false);
     emulator.gpu_timing.time_in_mode = 0;
+    emulator.gpu_timing.oam_scanline.valid = false;
     emulator.gpu_mode = GpuMode::HBlank;
     let stat = io(&emulator.memory, STAT_IO_INDEX);
     write_io(&mut emulator.memory, STAT_IO_INDEX, stat & 0xfc);

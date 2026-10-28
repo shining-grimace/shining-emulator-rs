@@ -1,5 +1,9 @@
 use bevy::prelude::warn;
 
+mod oam_dma;
+use oam_dma::oam_dma_blocks_cpu_access;
+pub(crate) use oam_dma::{begin_deferred_oam_dma, step_oam_dma};
+
 use crate::game_boy::emulator::GameBoyCore;
 use crate::game_boy::emulator::constants::ROM_BANK_SIZE;
 use crate::game_boy::emulator::cpu::CpuMode;
@@ -43,7 +47,6 @@ const NR52_IO_INDEX: usize = 0x26;
 const INTERRUPT_JOYPAD: u8 = 0x10;
 const INTERRUPT_TIMER: u8 = 0x04;
 const TIMER_RELOAD_DELAY_M_CYCLES: u8 = 1;
-const OAM_DMA_BYTES: u8 = 160;
 const HDMA_BLOCK_BYTES: usize = 16;
 const HDMA_BLOCK_M_CYCLES: i32 = 8;
 
@@ -64,7 +67,11 @@ pub(crate) fn step_system_counter(core: &mut GameBoyCore, clocks: u16) {
 
 pub(crate) fn read8(core: &GameBoyCore, address: u16) -> u8 {
     if oam_dma_blocks_cpu_access(core, address) {
-        return 0xff;
+        return if address < 0xfe00 {
+            core.dma.oam.bus_value
+        } else {
+            0xff
+        };
     }
     let value = read8_unrestricted(core, address);
     core.cheats.read_patch(address, value).unwrap_or(value)
@@ -231,41 +238,6 @@ pub(crate) fn run_hblank_dma(core: &mut GameBoyCore) {
         core.memory.write_io_port(HDMA5_IO_INDEX, 0xff);
     } else {
         core.memory.write_io_port(HDMA5_IO_INDEX, remaining - 1);
-    }
-}
-
-pub(crate) fn begin_deferred_oam_dma(core: &mut GameBoyCore) {
-    let Some(source_high) = core.dma.oam.pending_source_high.take() else {
-        return;
-    };
-
-    core.dma.oam.source_high = source_high;
-    core.dma.oam.next_index = 0;
-    core.dma.oam.active = true;
-    core.dma.oam.startup_pending = true;
-}
-
-pub(crate) fn step_oam_dma(core: &mut GameBoyCore) {
-    if !core.dma.oam.active {
-        return;
-    }
-    // The M-cycle following the FF46 write prepares the transfer; copying
-    // begins on the next cycle (GBCTR, OAM DMA transfer timing).
-    if core.dma.oam.startup_pending {
-        core.dma.oam.startup_pending = false;
-        return;
-    }
-
-    let index = core.dma.oam.next_index;
-    let source = (u16::from(core.dma.oam.source_high) << 8) | u16::from(index);
-    let byte = read8_unrestricted(core, source);
-    if let Some(slot) = core.memory.oam.get_mut(usize::from(index)) {
-        *slot = byte;
-    }
-
-    core.dma.oam.next_index = core.dma.oam.next_index.saturating_add(1);
-    if core.dma.oam.next_index >= OAM_DMA_BYTES {
-        core.dma.oam.active = false;
     }
 }
 
@@ -976,21 +948,6 @@ fn add_vram_dma_cpu_halt(core: &mut GameBoyCore, blocks: usize) {
     core.dma.vram.cpu_halt_m_cycles = core.dma.vram.cpu_halt_m_cycles.saturating_add(cycles);
 }
 
-fn oam_dma_blocks_cpu_access(core: &GameBoyCore, address: u16) -> bool {
-    if !core.dma.oam.active || core.rom.properties.cgb_flag {
-        return false;
-    }
-    // A VRAM-sourced transfer does not own the external ROM/WRAM bus.
-    // Mooneye's instruction timing tests execute from WRAM while DMA reads
-    // VRAM, crossing into blocked OAM on the cycle under test.
-    if (0x80..=0x9f).contains(&core.dma.oam.source_high)
-        && (address < 0x8000 || (0xa000..0xfe00).contains(&address))
-    {
-        return false;
-    }
-    !(0xff80..=0xfffe).contains(&address)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1490,13 +1447,13 @@ mod tests {
     }
 
     #[test]
-    fn oam_dma_does_not_block_cgb_cpu_bus() {
+    fn oam_dma_blocks_cgb_source_bus() {
         let mut core = GameBoyCore::default();
         core.rom.properties.cgb_flag = true;
         core.memory.rom[0x0100] = 0x12;
         core.dma.oam.active = true;
 
-        assert_eq!(read8(&core, 0x0100), 0x12);
+        assert_eq!(read8(&core, 0x0100), 0xff);
     }
 
     #[test]

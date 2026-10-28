@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::game_boy::emulator::GameBoyCore;
 use crate::game_boy::emulator::cpu::{CpuMode, CpuRegisters, CpuTiming, SerialState};
 use crate::game_boy::emulator::dma::{DmaState, OamDmaState, VramDmaState};
-use crate::game_boy::emulator::gpu::{GpuMode, GpuTiming, LineRenderer, MemoryAccess};
+use crate::game_boy::emulator::gpu::{GpuMode, GpuTiming, LineRenderer, MemoryAccess, OamScanline};
 use crate::game_boy::emulator::input::JoypadInputNibbles;
 use crate::game_boy::emulator::memory::GameBoyMemory;
 use crate::game_boy::emulator::palettes::{CgbPaletteRegisters, PaletteState};
@@ -393,6 +393,17 @@ struct OamDmaSnapshot {
     active: bool,
     #[serde(default)]
     startup_pending: bool,
+    #[serde(default = "dma_open_bus")]
+    bus_value: u8,
+    #[serde(default = "dma_open_word")]
+    oam_word: [u8; 2],
+}
+
+fn dma_open_bus() -> u8 {
+    0xff
+}
+fn dma_open_word() -> [u8; 2] {
+    [0xff; 2]
 }
 
 impl From<OamDmaState> for OamDmaSnapshot {
@@ -403,6 +414,8 @@ impl From<OamDmaState> for OamDmaSnapshot {
             next_index: oam.next_index,
             active: oam.active,
             startup_pending: oam.startup_pending,
+            bus_value: oam.bus_value,
+            oam_word: oam.oam_word,
         }
     }
 }
@@ -415,6 +428,8 @@ impl From<OamDmaSnapshot> for OamDmaState {
             next_index: snapshot.next_index,
             active: snapshot.active,
             startup_pending: snapshot.startup_pending,
+            bus_value: snapshot.bus_value,
+            oam_word: snapshot.oam_word,
         }
     }
 }
@@ -449,6 +464,8 @@ struct GpuTimingSnapshot {
     last_ly_compare: u32,
     blanked_screen: bool,
     need_clear: bool,
+    #[serde(default)]
+    oam_scanline: OamScanline,
 }
 
 fn default_line_scan_vram_clocks() -> i32 {
@@ -464,6 +481,7 @@ impl From<GpuTiming> for GpuTimingSnapshot {
             last_ly_compare: timing.last_ly_compare,
             blanked_screen: timing.blanked_screen,
             need_clear: timing.need_clear,
+            oam_scanline: timing.oam_scanline,
         }
     }
 }
@@ -477,6 +495,7 @@ impl From<GpuTimingSnapshot> for GpuTiming {
             last_ly_compare: snapshot.last_ly_compare,
             blanked_screen: snapshot.blanked_screen,
             need_clear: snapshot.need_clear,
+            oam_scanline: snapshot.oam_scanline,
         }
     }
 }
@@ -1067,10 +1086,14 @@ mod tests {
         assert!(OamDmaState::from(restored).startup_pending);
 
         value.as_object_mut().unwrap().remove("startup_pending");
+        value.as_object_mut().unwrap().remove("bus_value");
+        value.as_object_mut().unwrap().remove("oam_word");
         let legacy: OamDmaSnapshot = serde_json::from_value(value).unwrap();
         let restored = OamDmaState::from(legacy);
         assert!(restored.active);
         assert!(!restored.startup_pending);
+        assert_eq!(restored.bus_value, 0xff);
+        assert_eq!(restored.oam_word, [0xff; 2]);
     }
 
     #[test]
@@ -1089,8 +1112,14 @@ mod tests {
         core.dma.oam.source_high = 0xd0;
         core.dma.oam.next_index = 0x20;
         core.dma.oam.active = true;
+        core.dma.oam.bus_value = 0x55;
+        core.dma.oam.oam_word = [0x12, 0x34];
         core.dma.vram.cpu_halt_m_cycles = 3;
         core.gpu_timing.line_scan_vram_clocks = 180;
+        core.gpu_timing.oam_scanline.valid = true;
+        core.gpu_timing.oam_scanline.selected = 1;
+        core.gpu_timing.oam_scanline.fetched = 1;
+        core.gpu_timing.oam_scanline.bytes[..4].copy_from_slice(&[16, 8, 3, 4]);
         core.rom.fixed_bank_offset = 0x8000;
         core.rom.bank_offset = 0xc000;
         core.rom.mbc1_lower_bank = 3;
@@ -1112,6 +1141,7 @@ mod tests {
         core.cpu_timing.tima_reload_active = false;
         core.dma.reset_for_rom_load();
         core.gpu_timing.line_scan_vram_clocks = 0;
+        core.gpu_timing.oam_scanline = OamScanline::default();
         core.rom.fixed_bank_offset = 0;
         core.rom.bank_offset = 0;
         core.rom.mbc1_lower_bank = 1;
@@ -1135,8 +1165,13 @@ mod tests {
         assert_eq!(core.dma.oam.source_high, 0xd0);
         assert_eq!(core.dma.oam.next_index, 0x20);
         assert!(core.dma.oam.active);
+        assert_eq!(core.dma.oam.bus_value, 0x55);
+        assert_eq!(core.dma.oam.oam_word, [0x12, 0x34]);
         assert_eq!(core.dma.vram.cpu_halt_m_cycles, 3);
         assert_eq!(core.gpu_timing.line_scan_vram_clocks, 180);
+        assert_eq!(core.gpu_timing.oam_scanline.selected, 1);
+        assert_eq!(core.gpu_timing.oam_scanline.fetched, 1);
+        assert_eq!(&core.gpu_timing.oam_scanline.bytes[..4], &[16, 8, 3, 4]);
         assert_eq!(core.rom.fixed_bank_offset, 0x8000);
         assert_eq!(core.rom.bank_offset, 0xc000);
         assert_eq!(core.rom.mbc1_lower_bank, 3);

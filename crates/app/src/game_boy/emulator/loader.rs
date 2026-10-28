@@ -262,7 +262,7 @@ fn restore_auto_save_if_present(
     Ok(())
 }
 
-fn parse_rom_properties(bytes: &[u8]) -> Result<RomProperties, GameBoyLoadError> {
+pub(super) fn parse_rom_properties(bytes: &[u8]) -> Result<RomProperties, GameBoyLoadError> {
     if bytes.len() < MIN_ROM_BYTES {
         return Err(GameBoyLoadError::NotGameBoyRom);
     }
@@ -538,7 +538,7 @@ struct LoadedRomBytes {
 }
 
 #[derive(Debug)]
-enum GameBoyLoadError {
+pub(super) enum GameBoyLoadError {
     NoRomSelected,
     RomMetadataMissing,
     ProviderMissing,

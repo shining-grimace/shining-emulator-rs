@@ -1,5 +1,8 @@
 use crate::game_boy::emulator::constants::{INITIAL_VRAM_BANK_OFFSET, INITIAL_WRAM_BANK_OFFSET};
 
+mod oam;
+pub(crate) use oam::OamScanline;
+
 const DEFAULT_SCAN_VRAM_CLOCKS: i32 = 172;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,6 +46,7 @@ pub(crate) struct GpuTiming {
     pub(crate) last_ly_compare: u32,
     pub(crate) blanked_screen: bool,
     pub(crate) need_clear: bool,
+    pub(crate) oam_scanline: OamScanline,
 }
 
 impl Default for GpuTiming {
@@ -54,6 +58,7 @@ impl Default for GpuTiming {
             last_ly_compare: 0,
             blanked_screen: false,
             need_clear: true,
+            oam_scanline: OamScanline::default(),
         }
     }
 }
@@ -66,6 +71,7 @@ impl GpuTiming {
         self.last_ly_compare = 1;
         self.blanked_screen = false;
         self.need_clear = false;
+        self.oam_scanline = OamScanline::default();
     }
 }
 

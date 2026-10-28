@@ -30,8 +30,8 @@ MGB, SGB2, and AGB/AGS-specific ROMs are reported as unsupported skips, not
 emulation failures. The core does not model separate CGB revisions.
 
 This harness currently covers the 75 pinned acceptance ROMs, not Mooneye's
-`emulator-only`, `misc`, or manual suites. Its loader intentionally uses no
-mapper, so mapper ROMs must not be added without extending the loader.
+`emulator-only`, `misc`, or manual suites. Cartridge headers select the mapper
+and RAM size (the acceptance `sources-GS` DMA test requires MBC5 and RAM).
 
 ## Baseline maintenance
 

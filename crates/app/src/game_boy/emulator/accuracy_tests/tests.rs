@@ -52,6 +52,19 @@ fn mooneye_selected_hardware_controls_boot_state() {
     }
 }
 
+#[test]
+fn mooneye_acceptance_loader_preserves_declared_mapper_and_ram() {
+    let mut bytes = vec![0; 32768];
+    bytes[0x0147] = 0x1b;
+    bytes[0x0149] = 2;
+    let core = models::load_rom(&bytes, "sources-GS", Model::Dmg);
+    assert_eq!(
+        core.rom.properties.mbc,
+        super::super::rom::MemoryBankController::Mbc5
+    );
+    assert_eq!(core.sram.persistence_len(), Some(8192));
+}
+
 fn program(bytes: &[u8]) -> super::GameBoyCore {
     let mut rom = vec![0; 32768];
     rom[0x0100..0x0100 + bytes.len()].copy_from_slice(bytes);

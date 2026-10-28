@@ -5,7 +5,6 @@ use std::fmt::Write as _;
 use std::fs;
 
 use super::GameBoyCore;
-use super::rom::{MemoryBankController, RomProperties};
 use baseline::Status;
 use models::Targets;
 

@@ -56,6 +56,17 @@ impl VideoFrameAssembler {
         memory: &GameBoyMemory,
         palettes: &PaletteState,
     ) {
+        let objects = select_objects_for_line(memory, io(memory, 0x40), usize::from(line));
+        self.write_gb_line_with_objects(line, memory, palettes, &objects);
+    }
+
+    pub(crate) fn write_gb_line_with_objects(
+        &mut self,
+        line: u8,
+        memory: &GameBoyMemory,
+        palettes: &PaletteState,
+        objects: &[SelectedObject],
+    ) {
         if !self.frame_in_progress {
             return;
         }
@@ -95,7 +106,7 @@ impl VideoFrameAssembler {
         }
 
         if lcd_control & LCDC_OBJ_ENABLE != 0 {
-            self.draw_gb_sprite_line(line_no, lcd_control, memory, palettes, &bg_colour_numbers);
+            self.draw_gb_sprite_line(line_no, memory, palettes, &bg_colour_numbers, objects);
         }
     }
 
@@ -104,6 +115,17 @@ impl VideoFrameAssembler {
         line: u8,
         memory: &GameBoyMemory,
         palettes: &PaletteState,
+    ) {
+        let objects = select_objects_for_line(memory, io(memory, 0x40), usize::from(line));
+        self.write_cgb_line_with_objects(line, memory, palettes, &objects);
+    }
+
+    pub(crate) fn write_cgb_line_with_objects(
+        &mut self,
+        line: u8,
+        memory: &GameBoyMemory,
+        palettes: &PaletteState,
+        objects: &[SelectedObject],
     ) {
         if !self.frame_in_progress {
             return;
@@ -144,11 +166,11 @@ impl VideoFrameAssembler {
         if lcd_control & LCDC_OBJ_ENABLE != 0 {
             self.draw_cgb_sprite_line(
                 line_no,
-                lcd_control,
                 memory,
                 palettes,
                 &bg_colour_numbers,
                 &bg_display_priorities,
+                objects,
             );
         }
     }
@@ -159,6 +181,18 @@ impl VideoFrameAssembler {
         memory: &GameBoyMemory,
         palettes: &PaletteState,
         sgb: &mut SgbState,
+    ) {
+        let objects = select_objects_for_line(memory, io(memory, 0x40), usize::from(line));
+        self.write_sgb_line_with_objects(line, memory, palettes, sgb, &objects);
+    }
+
+    pub(crate) fn write_sgb_line_with_objects(
+        &mut self,
+        line: u8,
+        memory: &GameBoyMemory,
+        palettes: &PaletteState,
+        sgb: &mut SgbState,
+        objects: &[SelectedObject],
     ) {
         let line_no = usize::from(line);
         if line_no >= GAME_BOY_SCREEN_HEIGHT {
@@ -183,7 +217,7 @@ impl VideoFrameAssembler {
         }
 
         if lcd_control & LCDC_OBJ_ENABLE != 0 {
-            draw_sgb_sprite_line(line_no, lcd_control, memory, palettes, sgb);
+            draw_sgb_sprite_line(line_no, memory, palettes, sgb, objects);
         }
     }
 
@@ -310,13 +344,13 @@ impl VideoFrameAssembler {
     fn draw_gb_sprite_line(
         &mut self,
         line_no: usize,
-        lcd_control: u8,
         memory: &GameBoyMemory,
         palettes: &PaletteState,
         bg_colour_numbers: &[u32; GAME_BOY_SCREEN_WIDTH],
+        objects: &[SelectedObject],
     ) {
-        let objects = select_objects_for_line(memory, lcd_control, line_no);
-        let priority_objects = dmg_priority_objects(&objects);
+        let lcd_control = io(memory, 0x40);
+        let priority_objects = dmg_priority_objects(objects);
 
         for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
             let Some(pixel) = priority_objects.iter().find_map(|&object| {
@@ -407,14 +441,14 @@ impl VideoFrameAssembler {
     fn draw_cgb_sprite_line(
         &mut self,
         line_no: usize,
-        lcd_control: u8,
         memory: &GameBoyMemory,
         palettes: &PaletteState,
         bg_colour_numbers: &[u32; GAME_BOY_SCREEN_WIDTH],
         bg_display_priorities: &[bool; GAME_BOY_SCREEN_WIDTH],
+        objects: &[SelectedObject],
     ) {
-        let objects = select_objects_for_line(memory, lcd_control, line_no);
-        let priority_objects = cgb_priority_objects(&objects);
+        let lcd_control = io(memory, 0x40);
+        let priority_objects = cgb_priority_objects(objects);
 
         for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
             let Some(pixel) = priority_objects.iter().find_map(|&object| {
@@ -483,26 +517,34 @@ pub(crate) fn select_objects_for_line(
     lcd_control: u8,
     line_no: usize,
 ) -> Vec<SelectedObject> {
+    select_objects_from_oam(&memory.oam, lcd_control, line_no)
+}
+
+pub(crate) fn select_objects_from_oam(
+    oam: &[u8; 160],
+    lcd_control: u8,
+    line_no: usize,
+) -> Vec<SelectedObject> {
     let sprite_height = sprite_height(lcd_control);
     let line = i32::try_from(line_no).unwrap_or_default();
     let mut objects = Vec::with_capacity(MAX_OBJECTS_PER_LINE);
 
     for index in 0..OBJECT_COUNT {
         let offset = index * 4;
-        let oam_y = memory.oam[offset];
+        let oam_y = oam[offset];
         let sprite_top = i32::from(oam_y) - OBJECT_Y_OFFSET as i32;
         if line < sprite_top || line >= sprite_top + sprite_height as i32 {
             continue;
         }
 
-        let oam_x = memory.oam[offset + 1];
+        let oam_x = oam[offset + 1];
         objects.push(SelectedObject {
             index,
             screen_x: i32::from(oam_x) - OBJECT_X_OFFSET as i32,
             oam_x,
             oam_y,
-            tile_no: memory.oam[offset + 2],
-            flags: memory.oam[offset + 3],
+            tile_no: oam[offset + 2],
+            flags: oam[offset + 3],
         });
         if objects.len() >= MAX_OBJECTS_PER_LINE {
             break;
@@ -760,13 +802,13 @@ fn draw_sgb_window_line(
 
 fn draw_sgb_sprite_line(
     line_no: usize,
-    lcd_control: u8,
     memory: &GameBoyMemory,
     palettes: &PaletteState,
     sgb: &mut SgbState,
+    objects: &[SelectedObject],
 ) {
-    let objects = select_objects_for_line(memory, lcd_control, line_no);
-    let priority_objects = dmg_priority_objects(&objects);
+    let lcd_control = io(memory, 0x40);
+    let priority_objects = dmg_priority_objects(objects);
 
     for screen_x in 0..GAME_BOY_SCREEN_WIDTH {
         let Some(pixel) = priority_objects.iter().find_map(|&object| {

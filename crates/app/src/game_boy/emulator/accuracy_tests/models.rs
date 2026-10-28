@@ -1,6 +1,6 @@
 //! Mooneye suffixes describe hardware, not cartridge capabilities.
 //! <https://github.com/Gekkio/mooneye-test-suite#test-naming>
-use super::{GameBoyCore, MemoryBankController, RomProperties};
+use super::GameBoyCore;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Model {
@@ -72,16 +72,11 @@ pub(super) fn targets(path: &str) -> Result<Targets, String> {
 
 pub(super) fn load_rom(bytes: &[u8], name: &str, model: Model) -> GameBoyCore {
     let mut core = GameBoyCore::default();
-    // Acceptance ROMs use no mapper. Do not reuse this loader for mapper tests.
-    let properties = RomProperties {
-        valid: true,
-        mbc: MemoryBankController::None,
-        cgb_flag: model == Model::Cgb,
-        sgb_flag: model == Model::Sgb,
-        size_bytes: i32::try_from(bytes.len()).expect("Mooneye ROM size fits i32"),
-        check_sum: u32::from(*bytes.get(0x014d).expect("Mooneye ROM has a header")),
-        ..Default::default()
-    };
+    // The acceptance sources-GS test itself requires MBC5 and cartridge RAM.
+    let mut properties = crate::game_boy::emulator::loader::parse_rom_properties(bytes)
+        .expect("Mooneye ROM has a supported cartridge header");
+    properties.cgb_flag = model == Model::Cgb;
+    properties.sgb_flag = model == Model::Sgb;
     assert!(core.reset_for_rom_load(properties, name.to_owned(), name.to_owned(), bytes));
     core
 }

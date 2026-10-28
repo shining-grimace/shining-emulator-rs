@@ -2,9 +2,7 @@
 BUGS:
 - The current GameBoy homebrew integration (pull pages indiscriminately from the API) seems to produce duplicates
 - Emulation accuracy fixes:
-  - Sequence interrupt acknowledgement and stack writes across the five M-cycles rather than applying their effects before advancing those cycles
   - Replace whole-scanline rendering and estimated mode 3 penalties with a dot-stepped pixel fetcher/FIFO, so mid-scanline register changes and fetch stalls take effect at the correct time
-  - Implement CGB bus-specific CPU conflicts, PPU/OAM conflicts, and hardware DMA source decoding. Tie DMA start/restart timing to the actual register-write M-cycle
   - Replace independent length/envelope/sweep countdowns with hardware frame-sequencer timing tied to DIV. Complete register-driven oscillator details, including the NR43 noise-width setting, and validate channel timing against hardware test ROMs
 - MIDI Graph hardware-accuracy updates:
   - Equal-timestamp events are unordered: BinaryHeap compares only audio frames, allowing NoteOn, NoteOff, and pitch events to be reordered (fix: Add a monotonic sequence number as a secondary ordering key)
