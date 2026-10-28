@@ -18,6 +18,9 @@ fi
 if [[ ! -f "$READY_MARKER" ]]; then
     needs_download=true
 fi
+if [[ ! -d "$ACCEPTANCE_ROOT" ]] || [[ "$(find "$ACCEPTANCE_ROOT" -type f -name '*.gb' | wc -l)" -ne 75 ]]; then
+    needs_download=true
+fi
 
 if [[ "$needs_download" == true ]]; then
     TMP_DIR="$(mktemp -d)"
@@ -33,4 +36,4 @@ if [[ "$needs_download" == true ]]; then
     touch "$READY_MARKER"
 fi
 
-SHINING_MOONEYE_ROM_ROOT="$ROM_ROOT" cargo test -p app mooneye -- --ignored "$@"
+SHINING_MOONEYE_ROM_ROOT="$ROM_ROOT" cargo test -p app mooneye -- --include-ignored --nocapture "$@"
