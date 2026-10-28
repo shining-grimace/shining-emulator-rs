@@ -242,10 +242,17 @@ pub(crate) fn begin_deferred_oam_dma(core: &mut GameBoyCore) {
     core.dma.oam.source_high = source_high;
     core.dma.oam.next_index = 0;
     core.dma.oam.active = true;
+    core.dma.oam.startup_pending = true;
 }
 
 pub(crate) fn step_oam_dma(core: &mut GameBoyCore) {
     if !core.dma.oam.active {
+        return;
+    }
+    // The M-cycle following the FF46 write prepares the transfer; copying
+    // begins on the next cycle (GBCTR, OAM DMA transfer timing).
+    if core.dma.oam.startup_pending {
+        core.dma.oam.startup_pending = false;
         return;
     }
 
@@ -970,7 +977,18 @@ fn add_vram_dma_cpu_halt(core: &mut GameBoyCore, blocks: usize) {
 }
 
 fn oam_dma_blocks_cpu_access(core: &GameBoyCore, address: u16) -> bool {
-    core.dma.oam.active && !core.rom.properties.cgb_flag && !(0xff80..=0xfffe).contains(&address)
+    if !core.dma.oam.active || core.rom.properties.cgb_flag {
+        return false;
+    }
+    // A VRAM-sourced transfer does not own the external ROM/WRAM bus.
+    // Mooneye's instruction timing tests execute from WRAM while DMA reads
+    // VRAM, crossing into blocked OAM on the cycle under test.
+    if (0x80..=0x9f).contains(&core.dma.oam.source_high)
+        && (address < 0x8000 || (0xa000..0xfe00).contains(&address))
+    {
+        return false;
+    }
+    !(0xff80..=0xfffe).contains(&address)
 }
 
 #[cfg(test)]
@@ -1440,6 +1458,10 @@ mod tests {
         begin_deferred_oam_dma(&mut core);
         step_oam_dma(&mut core);
 
+        assert_eq!(core.memory.oam[0], 0x00);
+        assert!(!core.dma.oam.startup_pending);
+        step_oam_dma(&mut core);
+
         assert_eq!(core.memory.oam[0], 0x12);
         assert_eq!(core.memory.oam[1], 0x00);
         assert!(core.dma.oam.active);
@@ -1475,6 +1497,22 @@ mod tests {
         core.dma.oam.active = true;
 
         assert_eq!(read8(&core, 0x0100), 0x12);
+    }
+
+    #[test]
+    fn vram_sourced_oam_dma_leaves_external_bus_available() {
+        let mut core = GameBoyCore::default();
+        core.dma.oam.active = true;
+        core.dma.oam.source_high = 0x80;
+        core.memory_access.vram = true;
+        core.memory_access.oam = true;
+        core.memory.rom[0x0100] = 0x12;
+        assert_eq!(read8(&core, 0x0100), 0x12);
+        write8(&mut core, 0xc000, 0x34);
+        assert_eq!(read8(&core, 0xc000), 0x34);
+        assert_eq!(read8(&core, 0xe000), 0x34);
+        assert_eq!(read8(&core, 0x8000), 0xff);
+        assert_eq!(read8(&core, 0xfe00), 0xff);
     }
 
     #[test]

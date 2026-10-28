@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_boy::emulator::bus::{
-    begin_deferred_oam_dma, run_hblank_dma, step_oam_dma, step_system_counter,
-};
+use crate::game_boy::emulator::bus::{run_hblank_dma, step_oam_dma, step_system_counter};
 use crate::game_boy::emulator::constants::{MAX_ACCUMULATED_CLOCKS, MIN_CLOCKS_TO_EXECUTE};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuTiming};
 use crate::game_boy::emulator::execution::perform_op;
@@ -185,10 +183,8 @@ fn execute_next_step(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) 
         }
     }
 
-    let clocks_passed = perform_op(emulator);
+    perform_op(emulator, frames);
     emulator.cpu_registers.pc &= 0xffff;
-    step_machine_cycles(emulator, frames, machine_cycles_for_clocks(clocks_passed));
-    begin_deferred_oam_dma(emulator);
     finish_instruction_interrupt_state(emulator);
 }
 
@@ -209,7 +205,10 @@ fn step_machine_cycles(
     }
 }
 
-fn step_machine_cycle(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) {
+pub(in crate::game_boy::emulator) fn step_machine_cycle(
+    emulator: &mut GameBoyCore,
+    frames: &mut GameBoyFrameRing,
+) {
     emulator.cpu_timing.clocks_acc = emulator
         .cpu_timing
         .clocks_acc

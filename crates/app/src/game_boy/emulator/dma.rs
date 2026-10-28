@@ -17,6 +17,7 @@ pub(crate) struct OamDmaState {
     pub(crate) source_high: u8,
     pub(crate) next_index: u8,
     pub(crate) active: bool,
+    pub(crate) startup_pending: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

@@ -128,6 +128,6 @@ fn stack_write_to_dma_register_starts_transfer_before_next_stack_write() {
     // DMA requested in M3 blocks M4's low-byte write to LYC.
     assert_eq!(core.memory.io_ports[0x45], 0);
     assert!(core.dma.oam.active);
-    assert_eq!(core.dma.oam.next_index, 2);
+    assert_eq!(core.dma.oam.next_index, 1);
     assert_eq!(core.dma.oam.pending_source_high, None);
 }

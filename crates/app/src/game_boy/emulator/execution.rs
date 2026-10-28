@@ -1,8 +1,14 @@
 use bevy::prelude::warn;
 
 use crate::game_boy::emulator::GameBoyCore;
-use crate::game_boy::emulator::bus::{read8, read16, write8, write16};
+use crate::game_boy::frame_buffer::GameBoyFrameRing;
+
+mod clock;
 use crate::game_boy::emulator::cpu::CpuMode;
+use clock::{CpuClock, read8, write8, write16};
+
+#[cfg(test)]
+mod timing_tests;
 
 const FLAG_Z: u8 = 0x80;
 const FLAG_N: u8 = 0x40;
@@ -39,24 +45,28 @@ enum Condition {
     C,
 }
 
-pub(crate) fn perform_op(core: &mut GameBoyCore) -> i32 {
+/// Executes one instruction, advancing peripherals on each CPU machine cycle.
+pub(crate) fn perform_op(core: &mut GameBoyCore, frames: &mut GameBoyFrameRing) -> i32 {
     let consume_halt_bug = core.cpu_registers.halt_bug;
-    let cycles = perform_op_inner(core);
+    let mut clock = CpuClock::new(frames);
+    let expected = perform_op_inner(core, &mut clock);
+    debug_assert_eq!(clock.clocks, expected, "CPU instruction cycle accounting");
     if consume_halt_bug {
         core.cpu_registers.halt_bug = false;
     }
-    cycles
+    clock.clocks
 }
 
-fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
+fn perform_op_inner(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> i32 {
     if core.cpu_mode == CpuMode::Halted {
+        clock.idle(core);
         return 4;
     }
 
     let pc = pc(core);
-    let opcode = read8(core, pc);
+    let opcode = read8(core, clock, pc);
 
-    if let Some(cycles) = execute_regular_family(core, opcode) {
+    if let Some(cycles) = execute_regular_family(core, clock, opcode) {
         return cycles;
     }
 
@@ -73,8 +83,8 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             4
         }
         0x08 => {
-            let address = imm16(core);
-            write16(core, address, core.cpu_registers.sp as u16);
+            let address = imm16(core, clock);
+            write16(core, clock, address, core.cpu_registers.sp as u16);
             advance_pc(core, 3);
             20
         }
@@ -99,7 +109,7 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             4
         }
         0x18 => {
-            relative_jump(core);
+            relative_jump(core, clock);
             12
         }
         0x1f => {
@@ -110,26 +120,26 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             advance_pc(core, 1);
             4
         }
-        0x20 => conditional_relative_jump(core, Condition::Nz),
+        0x20 => conditional_relative_jump(core, clock, Condition::Nz),
         0x27 => {
             daa(core);
             advance_pc(core, 1);
             4
         }
-        0x28 => conditional_relative_jump(core, Condition::Z),
+        0x28 => conditional_relative_jump(core, clock, Condition::Z),
         0x2f => {
             core.cpu_registers.a = !core.cpu_registers.a;
             core.cpu_registers.f = (core.cpu_registers.f & (FLAG_Z | FLAG_C)) | FLAG_N | FLAG_H;
             advance_pc(core, 1);
             4
         }
-        0x30 => conditional_relative_jump(core, Condition::Nc),
+        0x30 => conditional_relative_jump(core, clock, Condition::Nc),
         0x37 => {
             core.cpu_registers.f = (core.cpu_registers.f & FLAG_Z) | FLAG_C;
             advance_pc(core, 1);
             4
         }
-        0x38 => conditional_relative_jump(core, Condition::C),
+        0x38 => conditional_relative_jump(core, clock, Condition::C),
         0x3f => {
             let next_carry = !carry(core);
             core.cpu_registers.f &= FLAG_Z;
@@ -152,85 +162,87 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             }
             4
         }
-        0xc0 => conditional_return(core, Condition::Nz),
-        0xc1 => pop_rr(core, Reg16::Bc),
-        0xc2 => conditional_absolute_jump(core, Condition::Nz),
+        0xc0 => conditional_return(core, clock, Condition::Nz),
+        0xc1 => pop_rr(core, clock, Reg16::Bc),
+        0xc2 => conditional_absolute_jump(core, clock, Condition::Nz),
         0xc3 => {
-            core.cpu_registers.pc = u32::from(imm16(core));
+            let target = imm16(core, clock);
+            clock.idle(core);
+            core.cpu_registers.pc = u32::from(target);
             16
         }
-        0xc4 => conditional_call(core, Condition::Nz),
-        0xc5 => push_rr(core, Reg16::Bc),
+        0xc4 => conditional_call(core, clock, Condition::Nz),
+        0xc5 => push_rr(core, clock, Reg16::Bc),
         0xc6 => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             add_a(core, value, false);
             advance_pc(core, 2);
             8
         }
-        0xc7 => restart(core, 0x00),
-        0xc8 => conditional_return(core, Condition::Z),
-        0xc9 => return_from_call(core, false),
-        0xca => conditional_absolute_jump(core, Condition::Z),
-        0xcb => execute_cb(core),
-        0xcc => conditional_call(core, Condition::Z),
-        0xcd => call(core),
+        0xc7 => restart(core, clock, 0x00),
+        0xc8 => conditional_return(core, clock, Condition::Z),
+        0xc9 => return_from_call(core, clock, false),
+        0xca => conditional_absolute_jump(core, clock, Condition::Z),
+        0xcb => execute_cb(core, clock),
+        0xcc => conditional_call(core, clock, Condition::Z),
+        0xcd => call(core, clock),
         0xce => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             add_a(core, value, carry(core));
             advance_pc(core, 2);
             8
         }
-        0xcf => restart(core, 0x08),
-        0xd0 => conditional_return(core, Condition::Nc),
-        0xd1 => pop_rr(core, Reg16::De),
-        0xd2 => conditional_absolute_jump(core, Condition::Nc),
+        0xcf => restart(core, clock, 0x08),
+        0xd0 => conditional_return(core, clock, Condition::Nc),
+        0xd1 => pop_rr(core, clock, Reg16::De),
+        0xd2 => conditional_absolute_jump(core, clock, Condition::Nc),
         0xd3 => invalid_instruction(core, opcode),
-        0xd4 => conditional_call(core, Condition::Nc),
-        0xd5 => push_rr(core, Reg16::De),
+        0xd4 => conditional_call(core, clock, Condition::Nc),
+        0xd5 => push_rr(core, clock, Reg16::De),
         0xd6 => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             sub_a(core, value, false);
             advance_pc(core, 2);
             8
         }
-        0xd7 => restart(core, 0x10),
-        0xd8 => conditional_return(core, Condition::C),
-        0xd9 => return_from_call(core, true),
-        0xda => conditional_absolute_jump(core, Condition::C),
+        0xd7 => restart(core, clock, 0x10),
+        0xd8 => conditional_return(core, clock, Condition::C),
+        0xd9 => return_from_call(core, clock, true),
+        0xda => conditional_absolute_jump(core, clock, Condition::C),
         0xdb => invalid_instruction(core, opcode),
-        0xdc => conditional_call(core, Condition::C),
+        0xdc => conditional_call(core, clock, Condition::C),
         0xdd => invalid_instruction(core, opcode),
         0xde => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             sub_a(core, value, carry(core));
             advance_pc(core, 2);
             8
         }
-        0xdf => restart(core, 0x18),
+        0xdf => restart(core, clock, 0x18),
         0xe0 => {
-            let address = 0xff00 | u16::from(imm8(core));
-            write8(core, address, core.cpu_registers.a);
+            let address = 0xff00 | u16::from(imm8(core, clock));
+            write8(core, clock, address, core.cpu_registers.a);
             advance_pc(core, 2);
             12
         }
-        0xe1 => pop_rr(core, Reg16::Hl),
+        0xe1 => pop_rr(core, clock, Reg16::Hl),
         0xe2 => {
             let address = 0xff00 | u16::from(core.cpu_registers.c);
-            write8(core, address, core.cpu_registers.a);
+            write8(core, clock, address, core.cpu_registers.a);
             advance_pc(core, 1);
             8
         }
         0xe3 | 0xe4 => invalid_instruction(core, opcode),
-        0xe5 => push_rr(core, Reg16::Hl),
+        0xe5 => push_rr(core, clock, Reg16::Hl),
         0xe6 => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             and_a(core, value);
             advance_pc(core, 2);
             8
         }
-        0xe7 => restart(core, 0x20),
+        0xe7 => restart(core, clock, 0x20),
         0xe8 => {
-            add_signed_to_sp(core);
+            add_signed_to_sp(core, clock);
             advance_pc(core, 2);
             16
         }
@@ -239,34 +251,34 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             4
         }
         0xea => {
-            let address = imm16(core);
-            write8(core, address, core.cpu_registers.a);
+            let address = imm16(core, clock);
+            write8(core, clock, address, core.cpu_registers.a);
             advance_pc(core, 3);
             16
         }
         0xeb | 0xec | 0xed => invalid_instruction(core, opcode),
         0xee => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             xor_a(core, value);
             advance_pc(core, 2);
             8
         }
-        0xef => restart(core, 0x28),
+        0xef => restart(core, clock, 0x28),
         0xf0 => {
-            let address = 0xff00 | u16::from(imm8(core));
-            core.cpu_registers.a = read8(core, address);
+            let address = 0xff00 | u16::from(imm8(core, clock));
+            core.cpu_registers.a = read8(core, clock, address);
             advance_pc(core, 2);
             12
         }
         0xf1 => {
-            let value = pop(core);
+            let value = pop(core, clock);
             set_af(core, value);
             advance_pc(core, 1);
             12
         }
         0xf2 => {
             let address = 0xff00 | u16::from(core.cpu_registers.c);
-            core.cpu_registers.a = read8(core, address);
+            core.cpu_registers.a = read8(core, clock, address);
             advance_pc(core, 1);
             8
         }
@@ -277,28 +289,29 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
             4
         }
         0xf4 => invalid_instruction(core, opcode),
-        0xf5 => push_af(core),
+        0xf5 => push_af(core, clock),
         0xf6 => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             or_a(core, value);
             advance_pc(core, 2);
             8
         }
-        0xf7 => restart(core, 0x30),
+        0xf7 => restart(core, clock, 0x30),
         0xf8 => {
-            let result = sp_plus_signed(core);
+            let result = sp_plus_signed(core, clock);
             set_hl(core, result);
             advance_pc(core, 2);
             12
         }
         0xf9 => {
+            clock.idle(core);
             core.cpu_registers.sp = u32::from(hl(core));
             advance_pc(core, 1);
             8
         }
         0xfa => {
-            let address = imm16(core);
-            core.cpu_registers.a = read8(core, address);
+            let address = imm16(core, clock);
+            core.cpu_registers.a = read8(core, clock, address);
             advance_pc(core, 3);
             16
         }
@@ -309,33 +322,38 @@ fn perform_op_inner(core: &mut GameBoyCore) -> i32 {
         }
         0xfc | 0xfd => invalid_instruction(core, opcode),
         0xfe => {
-            let value = imm8(core);
+            let value = imm8(core, clock);
             cp_a(core, value);
             advance_pc(core, 2);
             8
         }
-        0xff => restart(core, 0x38),
+        0xff => restart(core, clock, 0x38),
         _ => invalid_instruction(core, opcode),
     }
 }
 
-fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
+fn execute_regular_family(
+    core: &mut GameBoyCore,
+    clock: &mut CpuClock<'_>,
+    opcode: u8,
+) -> Option<i32> {
     if matches!(opcode, 0x01 | 0x11 | 0x21 | 0x31) {
         let register = reg16_from_column(opcode >> 4);
-        let value = imm16(core);
+        let value = imm16(core, clock);
         write_reg16(core, register, value);
         advance_pc(core, 3);
         return Some(12);
     }
     if matches!(opcode, 0x02 | 0x12) {
         let address = if opcode == 0x02 { bc(core) } else { de(core) };
-        write8(core, address, core.cpu_registers.a);
+        write8(core, clock, address, core.cpu_registers.a);
         advance_pc(core, 1);
         return Some(8);
     }
     if matches!(opcode, 0x03 | 0x13 | 0x23 | 0x33) {
         let register = reg16_from_column(opcode >> 4);
         let value = read_reg16(core, register).wrapping_add(1);
+        clock.idle(core);
         write_reg16(core, register, value);
         advance_pc(core, 1);
         return Some(8);
@@ -345,9 +363,9 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
         0x04 | 0x0c | 0x14 | 0x1c | 0x24 | 0x2c | 0x34 | 0x3c
     ) {
         let register = reg8_from_opcode_middle(opcode);
-        let value = read_reg8(core, register);
+        let value = read_reg8(core, clock, register);
         let result = inc8(core, value);
-        write_reg8(core, register, result);
+        write_reg8(core, clock, register, result);
         advance_pc(core, 1);
         return Some(if register == Reg8::Hl { 12 } else { 4 });
     }
@@ -356,9 +374,9 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
         0x05 | 0x0d | 0x15 | 0x1d | 0x25 | 0x2d | 0x35 | 0x3d
     ) {
         let register = reg8_from_opcode_middle(opcode);
-        let value = read_reg8(core, register);
+        let value = read_reg8(core, clock, register);
         let result = dec8(core, value);
-        write_reg8(core, register, result);
+        write_reg8(core, clock, register, result);
         advance_pc(core, 1);
         return Some(if register == Reg8::Hl { 12 } else { 4 });
     }
@@ -367,27 +385,29 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
         0x06 | 0x0e | 0x16 | 0x1e | 0x26 | 0x2e | 0x36 | 0x3e
     ) {
         let register = reg8_from_opcode_middle(opcode);
-        let value = imm8(core);
-        write_reg8(core, register, value);
+        let value = imm8(core, clock);
+        write_reg8(core, clock, register, value);
         advance_pc(core, 2);
         return Some(if register == Reg8::Hl { 12 } else { 8 });
     }
     if matches!(opcode, 0x09 | 0x19 | 0x29 | 0x39) {
         let register = reg16_from_column(opcode >> 4);
         let value = read_reg16(core, register);
+        clock.idle(core);
         add_hl(core, value);
         advance_pc(core, 1);
         return Some(8);
     }
     if matches!(opcode, 0x0a | 0x1a) {
         let address = if opcode == 0x0a { bc(core) } else { de(core) };
-        core.cpu_registers.a = read8(core, address);
+        core.cpu_registers.a = read8(core, clock, address);
         advance_pc(core, 1);
         return Some(8);
     }
     if matches!(opcode, 0x0b | 0x1b | 0x2b | 0x3b) {
         let register = reg16_from_column(opcode >> 4);
         let value = read_reg16(core, register).wrapping_sub(1);
+        clock.idle(core);
         write_reg16(core, register, value);
         advance_pc(core, 1);
         return Some(8);
@@ -395,10 +415,10 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
     if matches!(opcode, 0x22 | 0x2a | 0x32 | 0x3a) {
         let address = hl(core);
         match opcode {
-            0x22 => write8(core, address, core.cpu_registers.a),
-            0x2a => core.cpu_registers.a = read8(core, address),
-            0x32 => write8(core, address, core.cpu_registers.a),
-            _ => core.cpu_registers.a = read8(core, address),
+            0x22 => write8(core, clock, address, core.cpu_registers.a),
+            0x2a => core.cpu_registers.a = read8(core, clock, address),
+            0x32 => write8(core, clock, address, core.cpu_registers.a),
+            _ => core.cpu_registers.a = read8(core, clock, address),
         }
         let next_hl = if matches!(opcode, 0x22 | 0x2a) {
             address.wrapping_add(1)
@@ -412,8 +432,8 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
     if (0x40..=0x7f).contains(&opcode) && opcode != 0x76 {
         let destination = reg8_from_index((opcode >> 3) & 0x07);
         let source = reg8_from_index(opcode & 0x07);
-        let value = read_reg8(core, source);
-        write_reg8(core, destination, value);
+        let value = read_reg8(core, clock, source);
+        write_reg8(core, clock, destination, value);
         advance_pc(core, 1);
         return Some(if destination == Reg8::Hl || source == Reg8::Hl {
             8
@@ -423,7 +443,7 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
     }
     if (0x80..=0xbf).contains(&opcode) {
         let source = reg8_from_index(opcode & 0x07);
-        let value = read_reg8(core, source);
+        let value = read_reg8(core, clock, source);
         match (opcode - 0x80) / 8 {
             0 => add_a(core, value, false),
             1 => add_a(core, value, carry(core)),
@@ -440,10 +460,10 @@ fn execute_regular_family(core: &mut GameBoyCore, opcode: u8) -> Option<i32> {
     None
 }
 
-fn execute_cb(core: &mut GameBoyCore) -> i32 {
-    let opcode = read8(core, operand_address(core, 1));
+fn execute_cb(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> i32 {
+    let opcode = read8(core, clock, operand_address(core, 1));
     let register = reg8_from_index(opcode & 0x07);
-    let mut value = read_reg8(core, register);
+    let mut value = read_reg8(core, clock, register);
 
     match opcode {
         0x00..=0x07 => value = rotate_left_circular(core, value, true),
@@ -463,7 +483,7 @@ fn execute_cb(core: &mut GameBoyCore) -> i32 {
         _ => value |= 1_u8 << ((opcode - 0xc0) / 8),
     }
 
-    write_reg8(core, register, value);
+    write_reg8(core, clock, register, value);
     advance_pc(core, 2);
     if register == Reg8::Hl { 16 } else { 8 }
 }
@@ -486,28 +506,36 @@ fn operand_address(core: &GameBoyCore, offset: u16) -> u16 {
     pc(core).wrapping_add(offset.saturating_sub(halt_bug_adjustment))
 }
 
-fn imm8(core: &GameBoyCore) -> u8 {
-    read8(core, operand_address(core, 1))
+fn imm8(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> u8 {
+    read8(core, clock, operand_address(core, 1))
 }
 
-fn imm16(core: &GameBoyCore) -> u16 {
-    u16::from(read8(core, operand_address(core, 1)))
-        | (u16::from(read8(core, operand_address(core, 2))) << 8)
+fn imm16(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> u16 {
+    u16::from(read8(core, clock, operand_address(core, 1)))
+        | (u16::from(read8(core, clock, operand_address(core, 2))) << 8)
 }
 
-fn signed_imm8(core: &GameBoyCore) -> i8 {
-    imm8(core) as i8
+fn signed_imm8(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> i8 {
+    imm8(core, clock) as i8
 }
 
-fn relative_jump(core: &mut GameBoyCore) {
-    let offset = i16::from(signed_imm8(core));
+fn relative_jump(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) {
+    let offset = i16::from(signed_imm8(core, clock));
     let next_pc = pc_after_instruction(core, 2).wrapping_add_signed(offset);
+    clock.idle(core);
     core.cpu_registers.pc = u32::from(next_pc);
 }
 
-fn conditional_relative_jump(core: &mut GameBoyCore, condition: Condition) -> i32 {
+fn conditional_relative_jump(
+    core: &mut GameBoyCore,
+    clock: &mut CpuClock<'_>,
+    condition: Condition,
+) -> i32 {
+    let offset = i16::from(signed_imm8(core, clock));
+    let target = pc_after_instruction(core, 2).wrapping_add_signed(offset);
     if condition_met(core, condition) {
-        relative_jump(core);
+        clock.idle(core);
+        core.cpu_registers.pc = u32::from(target);
         12
     } else {
         advance_pc(core, 2);
@@ -515,9 +543,15 @@ fn conditional_relative_jump(core: &mut GameBoyCore, condition: Condition) -> i3
     }
 }
 
-fn conditional_absolute_jump(core: &mut GameBoyCore, condition: Condition) -> i32 {
+fn conditional_absolute_jump(
+    core: &mut GameBoyCore,
+    clock: &mut CpuClock<'_>,
+    condition: Condition,
+) -> i32 {
+    let target = imm16(core, clock);
     if condition_met(core, condition) {
-        core.cpu_registers.pc = u32::from(imm16(core));
+        clock.idle(core);
+        core.cpu_registers.pc = u32::from(target);
         16
     } else {
         advance_pc(core, 3);
@@ -534,25 +568,35 @@ fn condition_met(core: &GameBoyCore, condition: Condition) -> bool {
     }
 }
 
-fn call(core: &mut GameBoyCore) -> i32 {
-    let target = imm16(core);
+fn call(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> i32 {
+    let target = imm16(core, clock);
     let return_address = pc_after_instruction(core, 3);
-    push(core, return_address);
+    push(core, clock, return_address);
     core.cpu_registers.pc = u32::from(target);
     24
 }
 
-fn conditional_call(core: &mut GameBoyCore, condition: Condition) -> i32 {
+fn conditional_call(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, condition: Condition) -> i32 {
+    let target = imm16(core, clock);
     if condition_met(core, condition) {
-        call(core)
+        let return_address = pc_after_instruction(core, 3);
+        push(core, clock, return_address);
+        core.cpu_registers.pc = u32::from(target);
+        24
     } else {
         advance_pc(core, 3);
         12
     }
 }
 
-fn return_from_call(core: &mut GameBoyCore, enable_interrupts: bool) -> i32 {
-    core.cpu_registers.pc = u32::from(pop(core));
+fn return_from_call(
+    core: &mut GameBoyCore,
+    clock: &mut CpuClock<'_>,
+    enable_interrupts: bool,
+) -> i32 {
+    let target = pop(core, clock);
+    clock.idle(core);
+    core.cpu_registers.pc = u32::from(target);
     if enable_interrupts {
         core.cpu_registers.ime = true;
         core.cpu_registers.ime_enable_delay = 0;
@@ -560,9 +604,16 @@ fn return_from_call(core: &mut GameBoyCore, enable_interrupts: bool) -> i32 {
     16
 }
 
-fn conditional_return(core: &mut GameBoyCore, condition: Condition) -> i32 {
+fn conditional_return(
+    core: &mut GameBoyCore,
+    clock: &mut CpuClock<'_>,
+    condition: Condition,
+) -> i32 {
+    clock.idle(core);
     if condition_met(core, condition) {
-        core.cpu_registers.pc = u32::from(pop(core));
+        let target = pop(core, clock);
+        clock.idle(core);
+        core.cpu_registers.pc = u32::from(target);
         20
     } else {
         advance_pc(core, 1);
@@ -570,44 +621,50 @@ fn conditional_return(core: &mut GameBoyCore, condition: Condition) -> i32 {
     }
 }
 
-fn restart(core: &mut GameBoyCore, address: u16) -> i32 {
+fn restart(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, address: u16) -> i32 {
     let return_address = pc_after_instruction(core, 1);
-    push(core, return_address);
+    push(core, clock, return_address);
     core.cpu_registers.pc = u32::from(address);
     16
 }
 
-fn push_rr(core: &mut GameBoyCore, register: Reg16) -> i32 {
+fn push_rr(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, register: Reg16) -> i32 {
     let value = read_reg16(core, register);
-    push(core, value);
+    push(core, clock, value);
     advance_pc(core, 1);
     16
 }
 
-fn push_af(core: &mut GameBoyCore) -> i32 {
-    push(core, af(core));
+fn push_af(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> i32 {
+    push(core, clock, af(core));
     advance_pc(core, 1);
     16
 }
 
-fn pop_rr(core: &mut GameBoyCore, register: Reg16) -> i32 {
-    let value = pop(core);
+fn pop_rr(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, register: Reg16) -> i32 {
+    let value = pop(core, clock);
     write_reg16(core, register, value);
     advance_pc(core, 1);
     12
 }
 
-fn push(core: &mut GameBoyCore, value: u16) {
-    let sp = (core.cpu_registers.sp as u16).wrapping_sub(2);
+fn push(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, value: u16) {
+    clock.idle(core);
+    let [high, low] = value.to_be_bytes();
+    let sp = (core.cpu_registers.sp as u16).wrapping_sub(1);
     core.cpu_registers.sp = u32::from(sp);
-    write16(core, sp, value);
+    write8(core, clock, sp, high);
+    core.cpu_registers.sp = u32::from(sp.wrapping_sub(1));
+    write8(core, clock, sp.wrapping_sub(1), low);
 }
 
-fn pop(core: &mut GameBoyCore) -> u16 {
+fn pop(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> u16 {
     let sp = core.cpu_registers.sp as u16;
-    let value = read16(core, sp);
+    let low = read8(core, clock, sp);
+    core.cpu_registers.sp = u32::from(sp.wrapping_add(1));
+    let high = read8(core, clock, sp.wrapping_add(1));
     core.cpu_registers.sp = u32::from(sp.wrapping_add(2));
-    value
+    u16::from_le_bytes([low, high])
 }
 
 fn reg8_from_opcode_middle(opcode: u8) -> Reg8 {
@@ -636,7 +693,7 @@ fn reg16_from_column(column: u8) -> Reg16 {
     }
 }
 
-fn read_reg8(core: &GameBoyCore, register: Reg8) -> u8 {
+fn read_reg8(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, register: Reg8) -> u8 {
     match register {
         Reg8::B => core.cpu_registers.b,
         Reg8::C => core.cpu_registers.c,
@@ -644,12 +701,12 @@ fn read_reg8(core: &GameBoyCore, register: Reg8) -> u8 {
         Reg8::E => core.cpu_registers.e,
         Reg8::H => core.cpu_registers.h,
         Reg8::L => core.cpu_registers.l,
-        Reg8::Hl => read8(core, hl(core)),
+        Reg8::Hl => read8(core, clock, hl(core)),
         Reg8::A => core.cpu_registers.a,
     }
 }
 
-fn write_reg8(core: &mut GameBoyCore, register: Reg8, value: u8) {
+fn write_reg8(core: &mut GameBoyCore, clock: &mut CpuClock<'_>, register: Reg8, value: u8) {
     match register {
         Reg8::B => core.cpu_registers.b = value,
         Reg8::C => core.cpu_registers.c = value,
@@ -659,7 +716,7 @@ fn write_reg8(core: &mut GameBoyCore, register: Reg8, value: u8) {
         Reg8::L => core.cpu_registers.l = value,
         Reg8::Hl => {
             let address = hl(core);
-            write8(core, address, value);
+            write8(core, clock, address, value);
         }
         Reg8::A => core.cpu_registers.a = value,
     }
@@ -865,16 +922,18 @@ fn daa(core: &mut GameBoyCore) {
     }
 }
 
-fn add_signed_to_sp(core: &mut GameBoyCore) {
-    let result = sp_plus_signed(core);
+fn add_signed_to_sp(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) {
+    let result = sp_plus_signed(core, clock);
+    clock.idle(core);
     core.cpu_registers.sp = u32::from(result);
 }
 
-fn sp_plus_signed(core: &mut GameBoyCore) -> u16 {
+fn sp_plus_signed(core: &mut GameBoyCore, clock: &mut CpuClock<'_>) -> u16 {
     let sp = core.cpu_registers.sp as u16;
-    let offset = signed_imm8(core);
+    let offset = signed_imm8(core, clock);
     let unsigned_offset = u16::from(offset as u8);
     let result = sp.wrapping_add_signed(i16::from(offset));
+    clock.idle(core);
     set_znhc(
         core,
         false,
@@ -968,7 +1027,8 @@ fn test_bit(core: &mut GameBoyCore, value: u8, bit: u8) {
 fn invalid_instruction(core: &mut GameBoyCore, opcode: u8) -> i32 {
     warn!("invalid Game Boy CPU instruction 0x{opcode:02x}");
     core.runtime.is_running = false;
-    core.cpu_timing.clocks_acc.max(4)
+    core.cpu_timing.clocks_acc = 0;
+    4
 }
 
 fn interrupt_pending(core: &GameBoyCore) -> bool {
@@ -980,6 +1040,10 @@ fn interrupt_pending(core: &GameBoyCore) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn perform_op(core: &mut GameBoyCore) -> i32 {
+        super::perform_op(core, &mut GameBoyFrameRing::default())
+    }
 
     #[test]
     fn loads_and_adds_registers() {

@@ -391,6 +391,8 @@ struct OamDmaSnapshot {
     source_high: u8,
     next_index: u8,
     active: bool,
+    #[serde(default)]
+    startup_pending: bool,
 }
 
 impl From<OamDmaState> for OamDmaSnapshot {
@@ -400,6 +402,7 @@ impl From<OamDmaState> for OamDmaSnapshot {
             source_high: oam.source_high,
             next_index: oam.next_index,
             active: oam.active,
+            startup_pending: oam.startup_pending,
         }
     }
 }
@@ -411,6 +414,7 @@ impl From<OamDmaSnapshot> for OamDmaState {
             source_high: snapshot.source_high,
             next_index: snapshot.next_index,
             active: snapshot.active,
+            startup_pending: snapshot.startup_pending,
         }
     }
 }
@@ -1050,6 +1054,24 @@ fn copy_u32_slice(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dma_startup_phase_round_trips_and_older_states_remain_readable() {
+        let dma = OamDmaState {
+            active: true,
+            startup_pending: true,
+            ..Default::default()
+        };
+        let mut value = serde_json::to_value(OamDmaSnapshot::from(dma)).unwrap();
+        let restored: OamDmaSnapshot = serde_json::from_value(value.clone()).unwrap();
+        assert!(OamDmaState::from(restored).startup_pending);
+
+        value.as_object_mut().unwrap().remove("startup_pending");
+        let legacy: OamDmaSnapshot = serde_json::from_value(value).unwrap();
+        let restored = OamDmaState::from(legacy);
+        assert!(restored.active);
+        assert!(!restored.startup_pending);
+    }
 
     #[test]
     fn save_state_round_trips_representative_core_state() {
