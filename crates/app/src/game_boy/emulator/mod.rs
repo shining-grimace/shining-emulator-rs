@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod audio_unit;
+mod boot;
 mod bus;
 mod cheats;
 mod constants;

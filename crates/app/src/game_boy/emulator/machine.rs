@@ -79,6 +79,11 @@ impl Default for GameBoyCore {
 }
 
 impl GameBoyCore {
+    /// Applies the explicit DMG, SGB, or CGB boot-bypass handoff at $0100.
+    /// The application loader validates the model's logo and header checksum
+    /// before calling this reset; low-level test fixtures may skip validation.
+    /// No boot ROM is mapped: FF50 starts locked, and the boot animation and
+    /// its elapsed time are omitted. Uninitialised RAM uses deterministic zeros.
     pub(crate) fn reset_for_rom_load(
         &mut self,
         properties: RomProperties,
