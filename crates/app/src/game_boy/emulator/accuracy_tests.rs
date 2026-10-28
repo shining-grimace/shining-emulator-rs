@@ -27,6 +27,7 @@ const EXPECTED_PASS_ROMS: &[&str] = &[
     "acceptance/if_ie_registers.gb",
     "acceptance/instr/daa.gb",
     "acceptance/intr_timing.gb",
+    "acceptance/interrupts/ie_push.gb",
     "acceptance/oam_dma/basic.gb",
     "acceptance/oam_dma_timing.gb",
     "acceptance/ppu/intr_1_2_timing-GS.gb",

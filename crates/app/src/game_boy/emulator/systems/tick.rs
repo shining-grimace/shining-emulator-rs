@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::game_boy::emulator::bus::{
-    begin_deferred_oam_dma, run_hblank_dma, step_oam_dma, step_system_counter, write16,
+    begin_deferred_oam_dma, run_hblank_dma, step_oam_dma, step_system_counter,
 };
 use crate::game_boy::emulator::constants::{MAX_ACCUMULATED_CLOCKS, MIN_CLOCKS_TO_EXECUTE};
 use crate::game_boy::emulator::cpu::{CpuMode, CpuTiming};
@@ -16,6 +16,9 @@ use crate::game_boy::emulator::video::select_objects_for_line;
 use crate::game_boy::emulator::{GameBoyCore, GameBoyEmulator};
 use crate::game_boy::frame_buffer::GameBoyFrameRing;
 use crate::storage::LocalStorage;
+
+mod interrupts;
+use interrupts::{InterruptAction, handle_interrupts, service_interrupt};
 
 const JOYP_IO_INDEX: usize = 0x00;
 const SB_IO_INDEX: usize = 0x01;
@@ -177,7 +180,7 @@ fn execute_next_step(emulator: &mut GameBoyCore, frames: &mut GameBoyFrameRing) 
             return;
         }
         InterruptAction::Service => {
-            step_machine_cycles(emulator, frames, INTERRUPT_ACK_MACHINE_CYCLES);
+            service_interrupt(emulator, frames);
             return;
         }
     }
@@ -238,53 +241,6 @@ fn advance_cartridge_rtc(emulator: &mut GameBoyCore) {
     let clock_factor = emulator.gpu_timing.clock_factor.max(1);
     let normal_speed_clocks = (MACHINE_CYCLE_CLOCKS / clock_factor).max(1);
     emulator.sram.advance_rtc(normal_speed_clocks as u32);
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum InterruptAction {
-    None,
-    WakeHalt,
-    Service,
-}
-
-fn handle_interrupts(emulator: &mut GameBoyCore) -> InterruptAction {
-    let cpu_halted = emulator.cpu_mode == CpuMode::Halted;
-    let enabled = io(&emulator.memory, IE_IO_INDEX);
-    let requested = io(&emulator.memory, IF_IO_INDEX);
-    let triggered = enabled & requested & 0x1f;
-    if triggered == 0 {
-        return InterruptAction::None;
-    }
-
-    if cpu_halted {
-        emulator.cpu_mode = CpuMode::Running;
-        if !emulator.cpu_registers.ime {
-            return InterruptAction::WakeHalt;
-        }
-    } else if !emulator.cpu_registers.ime {
-        return InterruptAction::None;
-    }
-
-    let (mask, target) = if triggered & INTERRUPT_VBLANK != 0 {
-        (0x1e, 0x0040)
-    } else if triggered & INTERRUPT_LCD_STAT != 0 {
-        (0x1d, 0x0048)
-    } else if triggered & INTERRUPT_TIMER != 0 {
-        (0x1b, 0x0050)
-    } else if triggered & INTERRUPT_SERIAL != 0 {
-        (0x17, 0x0058)
-    } else {
-        (0x0f, 0x0060)
-    };
-    write_io(&mut emulator.memory, IF_IO_INDEX, requested & mask);
-    emulator.cpu_registers.sp = emulator.cpu_registers.sp.wrapping_sub(2) & 0xffff;
-    let stack_pointer = emulator.cpu_registers.sp as u16;
-    let program_counter = emulator.cpu_registers.pc as u16;
-    write16(emulator, stack_pointer, program_counter);
-    emulator.cpu_registers.pc = target;
-    emulator.cpu_registers.ime = false;
-    emulator.cpu_registers.ime_enable_delay = 0;
-    InterruptAction::Service
 }
 
 fn finish_instruction_interrupt_state(emulator: &mut GameBoyCore) {
