@@ -1013,6 +1013,13 @@ a representation of the GameBoy's screen, writing RBG pixel values to a 160x144
 pixel frame buffer taken from a ring buffer, and further logic (which might
 apply effects such as upscaling) should be decoupled from the emulation.
 
+The Game Boy LCD advances on individual dots. Background/window and object
+fetchers read tile data in stages, queue raw pixels in FIFOs, and mix each
+visible pixel using the current LCD and palette registers. Mode 3 ends after
+160 pixels have been emitted; scrolling, window restarts, and object fetches
+extend it through actual fetch stalls. Save states retain fetcher/FIFO state,
+the internal window line counter, and the partially assembled frame.
+
 # Audio
 
 Audio will be handled using the MIDI Graph tool created by Shining Grimace,

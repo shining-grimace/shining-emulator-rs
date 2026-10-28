@@ -25,6 +25,18 @@ pub(crate) fn apply_save_state(core: &mut GameBoyCore, bytes: &[u8]) -> Result<(
     if state.version != SAVE_STATE_VERSION {
         return Err(SaveStateError::UnsupportedVersion(state.version));
     }
+    if !state.gpu_timing.pixel_pipeline.valid() {
+        return Err(SaveStateError::InvalidPpuState);
+    }
+    if let Some(frame) = &state.video_frame
+        && frame.pixels.len() != crate::dimensions::GAME_BOY_FRAME_BUFFER_BYTES
+    {
+        return Err(SaveStateError::InvalidFieldLength {
+            field: "video_frame.pixels",
+            expected: crate::dimensions::GAME_BOY_FRAME_BUFFER_BYTES,
+            actual: frame.pixels.len(),
+        });
+    }
     if state.rom.current_rom_id != core.rom.current_rom_id {
         return Err(SaveStateError::RomMismatch {
             expected: core.rom.current_rom_id.clone(),
@@ -53,13 +65,18 @@ pub(crate) fn apply_save_state(core: &mut GameBoyCore, bytes: &[u8]) -> Result<(
 
     core.audio_unit
         .reset_for_rom_load(core.cpu_timing.clock_frequency_hz);
-    core.video_frame.reset_for_rom_load();
+    if let Some(frame) = state.video_frame {
+        core.video_frame.restore(frame);
+    } else {
+        core.video_frame.reset_for_rom_load();
+    }
 
     Ok(())
 }
 
 #[derive(Debug)]
 pub(crate) enum SaveStateError {
+    InvalidPpuState,
     Json(serde_json::Error),
     UnsupportedVersion(u32),
     RomMismatch {
@@ -76,6 +93,9 @@ pub(crate) enum SaveStateError {
 impl fmt::Display for SaveStateError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidPpuState => {
+                write!(formatter, "save state contains invalid pixel FIFO state")
+            }
             Self::Json(error) => write!(formatter, "{error}"),
             Self::UnsupportedVersion(version) => {
                 write!(formatter, "unsupported save-state version {version}")
@@ -102,6 +122,8 @@ impl fmt::Display for SaveStateError {
 
 #[derive(Deserialize, Serialize)]
 struct EmulatorSaveState {
+    #[serde(default)]
+    video_frame: Option<crate::game_boy::emulator::video::VideoFrameSnapshot>,
     version: u32,
     runtime: RuntimeSnapshot,
     cpu_registers: CpuRegistersSnapshot,
@@ -126,6 +148,7 @@ impl EmulatorSaveState {
     fn from_core(core: &GameBoyCore) -> Self {
         Self {
             version: SAVE_STATE_VERSION,
+            video_frame: Some(core.video_frame.snapshot()),
             runtime: RuntimeSnapshot::from(core.runtime),
             cpu_registers: CpuRegistersSnapshot::from(core.cpu_registers),
             cpu_timing: CpuTimingSnapshot::from(core.cpu_timing),
@@ -466,6 +489,8 @@ struct GpuTimingSnapshot {
     need_clear: bool,
     #[serde(default)]
     oam_scanline: OamScanline,
+    #[serde(default)]
+    pixel_pipeline: crate::game_boy::emulator::ppu::PixelPipeline,
 }
 
 fn default_line_scan_vram_clocks() -> i32 {
@@ -482,6 +507,7 @@ impl From<GpuTiming> for GpuTimingSnapshot {
             blanked_screen: timing.blanked_screen,
             need_clear: timing.need_clear,
             oam_scanline: timing.oam_scanline,
+            pixel_pipeline: timing.pixel_pipeline,
         }
     }
 }
@@ -496,6 +522,7 @@ impl From<GpuTimingSnapshot> for GpuTiming {
             blanked_screen: snapshot.blanked_screen,
             need_clear: snapshot.need_clear,
             oam_scanline: snapshot.oam_scanline,
+            pixel_pipeline: snapshot.pixel_pipeline,
         }
     }
 }

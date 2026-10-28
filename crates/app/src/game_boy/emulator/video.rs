@@ -1,4 +1,5 @@
 use bevy::prelude::warn;
+use serde::{Deserialize, Serialize};
 
 use crate::dimensions::{
     GAME_BOY_FRAME_BUFFER_BYTES, GAME_BOY_RGB_CHANNELS, GAME_BOY_SCREEN_HEIGHT,
@@ -32,6 +33,12 @@ pub(crate) struct VideoFrameAssembler {
     frame_in_progress: bool,
 }
 
+#[derive(Deserialize, Serialize)]
+pub(crate) struct VideoFrameSnapshot {
+    pub(crate) pixels: Vec<u8>,
+    frame_in_progress: bool,
+}
+
 impl Default for VideoFrameAssembler {
     fn default() -> Self {
         Self {
@@ -42,6 +49,23 @@ impl Default for VideoFrameAssembler {
 }
 
 impl VideoFrameAssembler {
+    pub(crate) fn snapshot(&self) -> VideoFrameSnapshot {
+        VideoFrameSnapshot {
+            pixels: self.pixels.to_vec(),
+            frame_in_progress: self.frame_in_progress,
+        }
+    }
+
+    pub(crate) fn restore(&mut self, snapshot: VideoFrameSnapshot) {
+        self.pixels = snapshot.pixels.into_boxed_slice();
+        self.frame_in_progress = snapshot.frame_in_progress;
+    }
+    pub(crate) fn write_ppu_pixel(&mut self, line: u8, x: u8, colour: u32) {
+        if self.frame_in_progress && line < 144 && x < 160 {
+            self.write_pixel(usize::from(line), usize::from(x), colour);
+        }
+    }
+
     pub(crate) fn reset_for_rom_load(&mut self) {
         self.begin_frame();
     }

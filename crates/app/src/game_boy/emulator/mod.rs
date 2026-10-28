@@ -14,6 +14,7 @@ mod loader;
 mod machine;
 mod memory;
 mod palettes;
+mod ppu;
 mod rom;
 mod runtime;
 mod save_state;

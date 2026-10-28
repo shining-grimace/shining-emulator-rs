@@ -47,6 +47,7 @@ pub(crate) struct GpuTiming {
     pub(crate) blanked_screen: bool,
     pub(crate) need_clear: bool,
     pub(crate) oam_scanline: OamScanline,
+    pub(crate) pixel_pipeline: crate::game_boy::emulator::ppu::PixelPipeline,
 }
 
 impl Default for GpuTiming {
@@ -59,6 +60,7 @@ impl Default for GpuTiming {
             blanked_screen: false,
             need_clear: true,
             oam_scanline: OamScanline::default(),
+            pixel_pipeline: crate::game_boy::emulator::ppu::PixelPipeline::default(),
         }
     }
 }
@@ -72,6 +74,7 @@ impl GpuTiming {
         self.blanked_screen = false;
         self.need_clear = false;
         self.oam_scanline = OamScanline::default();
+        self.pixel_pipeline = crate::game_boy::emulator::ppu::PixelPipeline::default();
     }
 }
 

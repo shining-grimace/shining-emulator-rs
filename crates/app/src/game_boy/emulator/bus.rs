@@ -715,6 +715,8 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
         core.gpu_timing.blanked_screen = false;
         core.gpu_timing.time_in_mode = 0;
         core.gpu_timing.line_scan_vram_clocks = 172;
+        core.gpu_timing.pixel_pipeline = crate::game_boy::emulator::ppu::PixelPipeline::default();
+        core.gpu_timing.oam_scanline.valid = false;
         core.gpu_mode = GpuMode::HBlank;
         core.memory
             .write_io_port(STAT_IO_INDEX, core.memory.io_ports[STAT_IO_INDEX] & 0xfc);
@@ -725,6 +727,8 @@ fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
         core.gpu_timing.blanked_screen = false;
         core.gpu_timing.time_in_mode = 0;
         core.gpu_timing.line_scan_vram_clocks = 172;
+        core.gpu_timing.pixel_pipeline = crate::game_boy::emulator::ppu::PixelPipeline::default();
+        core.gpu_timing.oam_scanline.valid = false;
         core.gpu_mode = GpuMode::ScanOam;
         core.memory.write_io_port(
             STAT_IO_INDEX,
