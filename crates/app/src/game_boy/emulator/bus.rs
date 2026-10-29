@@ -154,6 +154,11 @@ fn read8_unrestricted(core: &GameBoyCore, address: u16) -> u8 {
         return 0xff;
     }
     if address < 0xff00 {
+        if core.rom.properties.cgb_flag && core.memory_access.oam {
+            // CPU CGB E has no writable extra OAM; it echoes this nibble.
+            let nibble = u8::try_from((address >> 4) & 0x0f).unwrap_or_default();
+            return nibble * 0x11;
+        }
         return 0xff;
     }
     if address < 0xff80 {
@@ -706,6 +711,7 @@ fn finish_pending_timer_reload(core: &mut GameBoyCore) {
 }
 
 fn write_lcd_control(core: &mut GameBoyCore, value: u8) {
+    crate::game_boy::emulator::ppu::lcdc_write(core, core.memory.io_ports[LCDC_IO_INDEX], value);
     let was_enabled = core.memory.io_ports[LCDC_IO_INDEX] & 0x80 != 0;
     let will_be_enabled = value & 0x80 != 0;
 

@@ -1020,6 +1020,12 @@ visible pixel using the current LCD and palette registers. Mode 3 ends after
 extend it through actual fetch stalls. Save states retain fetcher/FIFO state,
 the internal window line counter, and the partially assembled frame.
 
+The CGB emulation target is the CPU CGB E hardware revision, with no runtime
+revision selection. Tile addresses and scroll coordinates latch on the first
+fetch dot, data arrives on the second, and coincident LCDC tile-selection writes
+use E's retained-data/tile-index conflicts. The unusable OAM range returns E's
+address-nibble pattern while OAM is accessible.
+
 # Audio
 
 Audio will be handled using the MIDI Graph tool created by Shining Grimace,

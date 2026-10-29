@@ -48,12 +48,26 @@ fn malformed_fifo_and_framebuffer_are_rejected_before_mutating_the_core() {
     let original = core();
     let value: serde_json::Value =
         serde_json::from_slice(&encode_save_state(&original).unwrap()).unwrap();
-    for field in ["fifo", "framebuffer"] {
+    for field in [
+        "fifo",
+        "framebuffer",
+        "tile_address",
+        "plane_address",
+        "tile_row",
+    ] {
         let mut changed = value.clone();
-        if field == "fifo" {
-            changed["gpu_timing"]["pixel_pipeline"]["bg"]["len"] = 17.into();
-        } else {
-            changed["video_frame"]["pixels"] = serde_json::json!([]);
+        match field {
+            "fifo" => changed["gpu_timing"]["pixel_pipeline"]["bg"]["len"] = 17.into(),
+            "framebuffer" => changed["video_frame"]["pixels"] = serde_json::json!([]),
+            "tile_address" => {
+                changed["gpu_timing"]["pixel_pipeline"]["fetcher"]["address"] = 0x2000.into();
+            }
+            "plane_address" => {
+                changed["gpu_timing"]["pixel_pipeline"]["fetcher"]["step"] = "High".into();
+                changed["gpu_timing"]["pixel_pipeline"]["fetcher"]["address"] = 0x4000.into();
+            }
+            "tile_row" => changed["gpu_timing"]["pixel_pipeline"]["fetcher"]["row"] = 8.into(),
+            _ => unreachable!(),
         }
         let mut target = core();
         target.cpu_registers.a = 0x77;

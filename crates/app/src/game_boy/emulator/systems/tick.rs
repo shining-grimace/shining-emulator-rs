@@ -391,8 +391,7 @@ fn advance_ppu_timing_with_dma(
                     emulator.memory_access.oam = false;
                     emulator.memory_access.vram = true;
                     emulator.video_frame.begin_frame();
-                    emulator.gpu_timing.pixel_pipeline =
-                        crate::game_boy::emulator::ppu::PixelPipeline::default();
+                    crate::game_boy::emulator::ppu::frame_start(emulator);
                     if io(&emulator.memory, STAT_IO_INDEX) & 0x20 != 0 {
                         request_lcd_stat_interrupt(&mut emulator.memory);
                     }

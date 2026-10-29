@@ -9,9 +9,11 @@ use super::sgb::SgbState;
 use super::video::VideoFrameAssembler;
 
 mod background;
+mod fetch;
 mod mixer;
 mod objects;
 mod state;
+mod window;
 pub(crate) use state::PixelPipeline;
 
 struct Context<'a> {
@@ -23,6 +25,7 @@ struct Context<'a> {
     renderer: LineRenderer,
     cgb: bool,
     dma_word: [u8; 2],
+    tile_select_change: Option<bool>,
 }
 
 fn context(core: &mut GameBoyCore) -> (Context<'_>, &mut PixelPipeline) {
@@ -36,6 +39,7 @@ fn context(core: &mut GameBoyCore) -> (Context<'_>, &mut PixelPipeline) {
             renderer: core.line_renderer,
             cgb: core.rom.properties.cgb_flag,
             dma_word: core.dma.oam.oam_word,
+            tile_select_change: None,
         },
         &mut core.gpu_timing.pixel_pipeline,
     )
@@ -68,6 +72,7 @@ pub(crate) fn begin(core: &mut GameBoyCore) {
     let window_line = p.window_line;
     let window_y_triggered = p.window_y_triggered;
     *p = PixelPipeline {
+        cgb_fetch: p.cgb_fetch,
         active: true,
         dummy: 8,
         fine: io(&core, 0x43) & 7,
@@ -85,10 +90,11 @@ pub(crate) fn tick(core: &mut GameBoyCore, dma_owned: bool) -> bool {
         begin(core);
     }
     let (mut core, p) = context(core);
+    core.tile_select_change = p.cgb_fetch.tile_select_change.take();
     if p.x >= 160 {
         return true;
     }
-    if p.object.is_none() && p.waiting_object.is_none() && window(&core, p) {
+    if p.object.is_none() && p.waiting_object.is_none() && window::tick(&core, p) {
         background::tick(&core, p);
         return false;
     }
@@ -116,32 +122,24 @@ pub(crate) fn tick(core: &mut GameBoyCore, dma_owned: bool) -> bool {
     false
 }
 
-fn window(core: &Context<'_>, p: &mut PixelPipeline) -> bool {
-    let lcd = io(core, 0x40);
-    let enabled = lcd & 0x20 != 0 && (core.cgb || lcd & 1 != 0);
-    if p.window_active && !enabled {
-        p.window_active = false;
-        p.fine = p.x.wrapping_add(io(core, 0x43)) & 7;
-        background::restart(p, p.x / 8);
-        return true;
-    }
-    let wx = io(core, 0x4b);
-    if !p.window_active
-        && enabled
-        && p.window_y_triggered
-        && wx < 167
-        && p.dummy == 0
-        && p.fine == 0
-        && p.bg.len != 0
-        && p.x == wx.saturating_sub(7)
-    {
-        p.window_active = true;
-        p.fine = 7_u8.saturating_sub(wx);
-        background::restart(p, 0);
-        return true;
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests;
+
+/// Writes are observed on the next PPU dot, even if an object stalls the BG fetcher.
+pub(crate) fn lcdc_write(core: &mut GameBoyCore, old: u8, new: u8) {
+    if core.rom.properties.cgb_flag
+        && core.gpu_mode == super::gpu::GpuMode::ScanVram
+        && old & new & 0x80 != 0
+        && (old ^ new) & 0x10 != 0
+    {
+        core.gpu_timing.pixel_pipeline.cgb_fetch.tile_select_change = Some(new & 0x10 != 0);
+    }
+}
+
+pub(crate) fn frame_start(core: &mut GameBoyCore) {
+    let cgb_fetch = core.gpu_timing.pixel_pipeline.cgb_fetch;
+    core.gpu_timing.pixel_pipeline = PixelPipeline {
+        cgb_fetch,
+        ..Default::default()
+    };
+}

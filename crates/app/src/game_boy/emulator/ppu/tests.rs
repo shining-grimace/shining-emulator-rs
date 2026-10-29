@@ -1,8 +1,10 @@
 use super::*;
 
 mod background;
+mod cgb_e;
 mod objects;
 mod serialization;
+mod window;
 
 const WHITE: u32 = 0xffff_ffff;
 const RED: u32 = 0xffaa_0000;

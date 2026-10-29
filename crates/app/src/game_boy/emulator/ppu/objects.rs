@@ -26,6 +26,9 @@ pub(super) fn tick(core: &mut Context<'_>, p: &mut PixelPipeline, dma_owned: boo
             3 => object.low = read_plane(core, object, false),
             5 => {
                 object.high = read_plane(core, object, true);
+                if core.cgb {
+                    p.cgb_fetch.retained_data = object.high;
+                }
                 merge(core, p, object);
                 core.oam.fetched |= 1 << object.index;
                 return true;

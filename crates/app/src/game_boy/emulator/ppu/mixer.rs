@@ -51,6 +51,10 @@ pub(super) fn emit(core: &mut Context<'_>, p: &mut PixelPipeline, mut bg: Pixel,
     }
     if p.window_active {
         p.window_used = true;
+        // A synthetic WX-glitch pixel does not consume a tile pixel.
+        if bg.index < 8 {
+            p.window_pixels = (bg.index + 1) & 7;
+        }
     }
     p.x += 1;
 }

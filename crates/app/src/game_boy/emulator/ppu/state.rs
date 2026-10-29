@@ -55,6 +55,7 @@ pub(crate) enum FetchStep {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
 pub(crate) struct BackgroundFetcher {
     pub(crate) step: FetchStep,
     pub(crate) phase: u8,
@@ -62,6 +63,8 @@ pub(crate) struct BackgroundFetcher {
     pub(crate) tile: u8,
     pub(crate) attributes: u8,
     pub(crate) row: u8,
+    pub(crate) address: Option<u16>,
+    pub(crate) unsigned_tiles: bool,
     pub(crate) low: u8,
     pub(crate) high: u8,
 }
@@ -76,10 +79,20 @@ pub(crate) struct ObjectFetcher {
     pub(crate) high: u8,
 }
 
+/// CPU CGB E bus latches, retained across scanlines and FIFO restarts.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct CgbFetchLatches {
+    pub(crate) retained_data: u8,
+    pub(crate) tile_select_change: Option<bool>,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 // These independent hardware latches must survive mid-transfer save states.
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct PixelPipeline {
+    #[serde(default)]
+    pub(crate) cgb_fetch: CgbFetchLatches,
     pub(crate) active: bool,
     pub(crate) x: u8,
     pub(crate) dummy: u8,
@@ -93,6 +106,12 @@ pub(crate) struct PixelPipeline {
     pub(crate) window_line: u8,
     pub(crate) window_active: bool,
     pub(crate) window_used: bool,
+    #[serde(default)]
+    pub(crate) window_pixels: u8,
+    #[serde(default)]
+    pub(crate) window_wx: Option<u8>,
+    #[serde(default)]
+    pub(crate) window_glitch_x: Option<u8>,
     pub(crate) dummy_tile: bool,
 }
 
@@ -112,6 +131,15 @@ impl PixelPipeline {
             && self.objects.valid()
             && self.fetcher.phase < 2
             && self.fetcher.tile_x < 32
+            && self.fetcher.row < 8
+            && self.fetcher.address.is_none_or(|a| {
+                a < if self.fetcher.step == FetchStep::Tile {
+                    0x2000
+                } else {
+                    0x4000
+                }
+            })
+            && self.window_pixels < 8
             && self.object.is_none_or(|o| o.index < 40 && o.phase < 6)
             && self.waiting_object.is_none_or(|i| i < 40)
     }
