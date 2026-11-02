@@ -1,8 +1,6 @@
 
 BUGS:
 - The current GameBoy homebrew integration (pull pages indiscriminately from the API) seems to produce duplicates
-- Emulation accuracy fixes:
-  - Replace independent length/envelope/sweep countdowns with hardware frame-sequencer timing tied to DIV. Complete register-driven oscillator details, including the NR43 noise-width setting, and validate channel timing against hardware test ROMs
 - MIDI Graph hardware-accuracy updates:
   - Equal-timestamp events are unordered: BinaryHeap compares only audio frames, allowing NoteOn, NoteOff, and pitch events to be reordered (fix: Add a monotonic sequence number as a secondary ordering key)
   - Pitch starts one frame late: Generators reset pitch on NoteOn; same-frame pitch ordering is currently unsafe (fix: Stable event ordering, then queue NoteOn followed by PitchMultiplier at the same frame, or add an atomic note-with-pitch event)
@@ -10,6 +8,7 @@ BUGS:
   - Wavetable replacement may click: CH3 table changes are instantaneous (fix: Preserve playback phase and optionally crossfade only where appropriate; accurate wave RAM timing is preferable)
   - No Game Boy output filtering: DAC bias and hardware high-pass filtering are absent (fix: Add configurable Game Boy model-specific DC removal/high-pass filtering)
 - Audio emulation fixes:
+  - Replace independent length/envelope/sweep countdowns with hardware frame-sequencer timing tied to DIV. Complete register-driven oscillator details, including the NR43 noise-width setting, and validate channel timing against hardware test ROMs
   - Envelope period zero is wrong: It currently disables envelope progression, potentially causing permanently audible notes; hardware treats zero as period eight (fix: Clock period-zero envelopes as period eight)
   - CH3 wave RAM access is oversimplified: Active writes replace the entire wavetable, ignoring current sample position and DMG/CGB/AGB access rules (fix: Track CH3’s sample index and implement model-specific active-access behavior)
   - CH3 trigger behavior is incomplete: Missing buffered-last-sample output, initial sample-zero skip, playback delay, and DMG retrigger corruption (fix: Model CH3’s sample buffer and period counter directly)
@@ -18,8 +17,13 @@ BUGS:
   - Noise is approximate: The LFSR’s timing and unusual divisor/shift cases are not fully hardware-accurate (fix: Clock the actual 15/7-bit LFSR from NR43 periods, including disabled high shifts)
   - Mixer remains idealized: Hardware DAC polarity, DC offsets, NR32 digital shifting, NR50 behavior, and output-stage coloration are simplified (fix: Mix digital channel outputs through modeled DAC, routing, master-volume, and HPF stages)
   - Potential stuck notes: Unstable MIDI event ordering and period-zero envelopes can both leave sources active (fix: Fix scheduler ordering and envelope semantics; compare NR52 state with MIDI Graph node state when diagnosing remaining cases)
+  - Generic square-wave generation does not capture duty-step sequencing, retrigger semantics, or delayed frequency-register effects
+  - NR52 power-off currently leaves register storage intact, and bus writes still modify powered-off registers. Hardware clears/restricts these registers, with model-specific exceptions
 
 UPDATES:
+- Incorporate Blargg's sound test ROMs and SameSuite APU tests
+- Ensure the app complies with Homebrew Hub's proposed API usage terms, including giving credit to that service, correctly representing ROMs and their authors, and being diligent on which ROMs are fetched
+- Ensure ROM licenses are correctly displayed and can be accessed from the app
 - Ensure test ROMs can be enabled in the ROM providers
 - Update app name, default colour palette, and branding assets
 - Update the placeholder graphics on some settings screens

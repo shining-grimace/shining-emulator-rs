@@ -10,6 +10,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+.kotlin
 
 # Base emulator project
 /ShiningEmulator/

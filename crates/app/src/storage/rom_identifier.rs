@@ -1,7 +1,7 @@
-use sha1::{Digest, Sha1};
+use sha2::{Digest, Sha256};
 
 pub fn rom_identifier(rom_data: &[u8]) -> String {
-    let mut hasher = Sha1::new();
+    let mut hasher = Sha256::new();
     let header_start = 0x0104;
     let header_end_exclusive = 0x0150.min(rom_data.len());
 
@@ -19,6 +19,14 @@ pub fn rom_identifier(rom_data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rom_identifier_uses_sha256() {
+        assert_eq!(
+            rom_identifier(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 
     #[test]
     fn rom_identifier_zeroes_header_bytes() {

@@ -50,7 +50,7 @@ sensible default configuration.
 
 ### ROM Identifier
 
-The identifier string for a given ROM is the SHA-1 hash of the entire
+The identifier string for a given ROM is the SHA-256 hash of the entire
 ROM file but as if the ROM header bytes were all set to zeroes (this
 modification ensures two ROMs with only header content differing are
 treated as the same game). The header bytes should start at 0x0104 for
@@ -1078,7 +1078,7 @@ emulation.
 
 ROM metadata gains a required `platform` value of `gb`, `gbc`, or `nes`. NES
 files normally use the `.nes` extension. ROM identifiers become lowercase
-hexadecimal SHA-1 hashes of platform-canonicalised content. Game Boy hashes
+hexadecimal SHA-256 hashes of platform-canonicalised content. Game Boy hashes
 zero the cartridge header range 0x0104 through 0x014F inclusive. NES iNES/NES
 2.0 hashes omit the validated 16-byte container header while retaining trainer
 and PlayChoice data declared by it. Platform identification must precede
