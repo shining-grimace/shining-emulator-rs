@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "release": "validation-v7.0-1",
+  "collection": "c-sp/game-boy-test-roms v7.0",
+  "cases": [
+    {
+      "path": "same-suite/apu/channel_1/channel_1_duty.gb",
+      "model": "CGB-E",
+      "sha256": "b0eb7bc4fc01d17d96d28362e6e3eab6002a2d93fb5a3e19dbf1ddc2148ca650",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_1_duty [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_1/channel_1_restart.gb",
+      "model": "CGB-E",
+      "sha256": "5be8768834657ddce7286f653068ac2680e2857bd23fd4c1e9f07f6e5577265c",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_1_restart [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_1/channel_1_sweep.gb",
+      "model": "CGB-E",
+      "sha256": "eae5bbb953e814dc0ce6e9568ee0fc731287b6e1356f9695e2063fba8e742ec4",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_1_sweep [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_1/channel_1_volume_div.gb",
+      "model": "CGB-E",
+      "sha256": "82725bff6c14675a96c668fe85e5d0ca681dcea27248e49ccea2cb988e997fee",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_1_volume_div [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_2/channel_2_duty.gb",
+      "model": "CGB-E",
+      "sha256": "a0d866352f61f2f5739e8ada6e6a85eae41ad295a7673fb6bde72cf391a7dc46",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_2_duty [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_3/channel_3_first_sample.gb",
+      "model": "CGB-E",
+      "sha256": "180c0c7c67c41d28080939649d232c378c34792a3606018a0e7337eefa142807",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_3_first_sample [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_3/channel_3_restart_delay.gb",
+      "model": "CGB-E",
+      "sha256": "f01bb28f9d8993108efe1e15d66b0331c95b7843ddb9c04c975f29b1b258c675",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_3_restart_delay [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_3/channel_3_shift_delay.gb",
+      "model": "CGB-E",
+      "sha256": "512fb6fc4551156090a81415b941e1c684ba35f1f7793f4455eec53926748fa5",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_3_shift_delay [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_3/channel_3_wave_ram_locked_write.gb",
+      "model": "CGB-E",
+      "sha256": "44f805b342dcb2f209d4deef603dca0d078c274467493d81f12099c10fc16d31",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_3_wave_ram_locked_write [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_4/channel_4_lfsr.gb",
+      "model": "CGB-E",
+      "sha256": "dd46439f07bdcfff8db0ac0fa49bcda4f9fccb8f722a9aa673325aa45196d98b",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_4_lfsr [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_4/channel_4_lfsr15.gb",
+      "model": "CGB-E",
+      "sha256": "e210a115c06e6bcd5507abfceac5926dbb99eaca3cf10cf8d69d1bf0f3dbae4d",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_4_lfsr15 [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_4/channel_4_lfsr_15_7.gb",
+      "model": "CGB-E",
+      "sha256": "20d6e72c9166d1b4fc94ae70ca1530cebc5ae810df1834db62da404c73a8be9d",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_4_lfsr_15_7 [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/channel_4/channel_4_lfsr_7_15.gb",
+      "model": "CGB-E",
+      "sha256": "734d8be70f25828fb968c1852cf7cc33185fed3222b2b8a8b650a9720e98a557",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / channel_4_lfsr_7_15 [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/div_write_trigger.gb",
+      "model": "CGB-E",
+      "sha256": "437ed80ab7fdbcd6713b3b0633096ac4ba0181b2e1c099944cbfbb5f7dab8e84",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / div_write_trigger [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/div_write_trigger.gb",
+      "model": "DMG",
+      "sha256": "437ed80ab7fdbcd6713b3b0633096ac4ba0181b2e1c099944cbfbb5f7dab8e84",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / div_write_trigger [DMG]"
+    },
+    {
+      "path": "same-suite/apu/div_write_trigger_10.gb",
+      "model": "CGB-E",
+      "sha256": "4294c71882a375d8395c9aa7c1c20127bd285ffa3961521703a1ac69a80a373c",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / div_write_trigger_10 [CGB-E]"
+    },
+    {
+      "path": "same-suite/apu/div_write_trigger_10.gb",
+      "model": "DMG",
+      "sha256": "4294c71882a375d8395c9aa7c1c20127bd285ffa3961521703a1ac69a80a373c",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / div_write_trigger_10 [DMG]"
+    },
+    {
+      "path": "same-suite/apu/div_write_trigger_volume.gb",
+      "model": "CGB-E",
+      "sha256": "c947767c6128afd21754c920eb5329e22e0a4ace0fb7185397e25a9e6f199da5",
+      "author": "Lior Halphon and contributors",
+      "license": "X11",
+      "name": "SameSuite / div_write_trigger_volume [CGB-E]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
+      "model": "DMG",
+      "sha256": "6501bf0c271460c1abc12ab8c97acdccd5aae9bfa394f922f6de74fc8bd7fad3",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / unused_hwio-GS [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
+      "model": "SGB",
+      "sha256": "6501bf0c271460c1abc12ab8c97acdccd5aae9bfa394f922f6de74fc8bd7fad3",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / unused_hwio-GS [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/boot_hwio-S.gb",
+      "model": "SGB",
+      "sha256": "43efe89e26359fceff327ec5c716d0480b4a470debac4c7eaf253fe636d22b2b",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / boot_hwio-S [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/boot_hwio-dmgABCmgb.gb",
+      "model": "DMG",
+      "sha256": "01aa82657e1b4cc8dfa8b2b45ad248de240eab1330a847389453a794c30b2591",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / boot_hwio-dmgABCmgb [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/div_timing.gb",
+      "model": "DMG",
+      "sha256": "26d6c1e66750b56b894131898bc896fc9fe56aa2a46199bcc6514e658cd996bd",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / div_timing [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/div_timing.gb",
+      "model": "SGB",
+      "sha256": "26d6c1e66750b56b894131898bc896fc9fe56aa2a46199bcc6514e658cd996bd",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / div_timing [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/oam_dma/basic.gb",
+      "model": "DMG",
+      "sha256": "7b4c048451510fcb224a23d653edd4bb339a4cf136873e736941d29e6c60b3f9",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / basic [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/oam_dma/basic.gb",
+      "model": "SGB",
+      "sha256": "7b4c048451510fcb224a23d653edd4bb339a4cf136873e736941d29e6c60b3f9",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / basic [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/oam_dma/reg_read.gb",
+      "model": "DMG",
+      "sha256": "ddb2a356f4bfdad7694375e6886003c784b89ef6ef70a1731679a66791314618",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / reg_read [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/oam_dma/reg_read.gb",
+      "model": "SGB",
+      "sha256": "ddb2a356f4bfdad7694375e6886003c784b89ef6ef70a1731679a66791314618",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / reg_read [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/timer/div_write.gb",
+      "model": "DMG",
+      "sha256": "b647f603c71d942a5c4ab92e6d2336af3fd9729e95a845b1561bd8e7c06163b5",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / div_write [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/timer/div_write.gb",
+      "model": "SGB",
+      "sha256": "b647f603c71d942a5c4ab92e6d2336af3fd9729e95a845b1561bd8e7c06163b5",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / div_write [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/timer/tima_reload.gb",
+      "model": "DMG",
+      "sha256": "1999c25db46f28570e23d4cb019bf0e6f5814a947a5a358e7dc25baa52c49f96",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / tima_reload [DMG]"
+    },
+    {
+      "path": "mooneye-test-suite/acceptance/timer/tima_reload.gb",
+      "model": "SGB",
+      "sha256": "1999c25db46f28570e23d4cb019bf0e6f5814a947a5a358e7dc25baa52c49f96",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / tima_reload [SGB]"
+    },
+    {
+      "path": "mooneye-test-suite/misc/bits/unused_hwio-C.gb",
+      "model": "CGB-E",
+      "sha256": "d045dace1e85847456d245d480c085d39cbb34124132fcf13f34c2f7483e0914",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / unused_hwio-C [CGB-E]"
+    },
+    {
+      "path": "mooneye-test-suite/misc/boot_hwio-C.gb",
+      "model": "CGB-E",
+      "sha256": "73b14bf636f1a2fbb8180b23daa28e7e9d0c022a2c0af6a68b78670c226dd12a",
+      "author": "Joonas Javanainen",
+      "license": "MIT",
+      "name": "Mooneye / boot_hwio-C [CGB-E]"
+    }
+  ]
+}

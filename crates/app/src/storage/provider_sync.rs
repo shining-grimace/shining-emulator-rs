@@ -92,6 +92,16 @@ impl ProviderSyncTaskState {
 }
 
 pub fn test_provider(provider: &RomProvider) -> Result<ProviderTestResult, StorageError> {
+    if provider.uuid == super::providers::VALIDATION_PROVIDER_UUID {
+        let roms = super::validation_roms::roms()?;
+        return Ok(ProviderTestResult {
+            rom_count: roms.len(),
+            message: format!(
+                "{} Mooneye/SameSuite diagnostics available from the web catalog.",
+                roms.len()
+            ),
+        });
+    }
     if let Some(path) = &provider.absolute_local_dir_path {
         let roms = local_roms(provider.uuid, path)?;
         return Ok(ProviderTestResult {
@@ -124,7 +134,9 @@ pub fn test_provider(provider: &RomProvider) -> Result<ProviderTestResult, Stora
 }
 
 pub fn sync_provider(provider: &RomProvider) -> Result<ProviderSyncResult, StorageError> {
-    let roms = if let Some(path) = &provider.absolute_local_dir_path {
+    let roms = if provider.uuid == super::providers::VALIDATION_PROVIDER_UUID {
+        super::validation_roms::roms()?
+    } else if let Some(path) = &provider.absolute_local_dir_path {
         local_roms(provider.uuid, path)?
     } else if let Some(url) = &provider.remote_file_url {
         vec![remote_file_rom(provider.uuid, url)?]
@@ -407,6 +419,23 @@ fn http_error_message(url: &str, error: ureq::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validation_provider_is_disabled_by_default_and_selects_only_permitted_diagnostics() {
+        let provider = super::super::providers::default_rom_providers()
+            .into_iter()
+            .find(|provider| provider.uuid == super::super::providers::VALIDATION_PROVIDER_UUID)
+            .unwrap();
+        assert!(!provider.enabled);
+        super::super::providers::validate_rom_provider(&provider).unwrap();
+        let roms = super::super::validation_roms::metadata().unwrap();
+        assert_eq!(roms.len(), 34);
+        assert!(roms.iter().all(|rom| !rom.file_name.contains("blargg")));
+        assert!(
+            roms.iter()
+                .all(|rom| matches!(rom.license.as_deref(), Some("MIT" | "X11")))
+        );
+    }
 
     #[test]
     fn pagination_last_page_uses_page_count_without_limit() {

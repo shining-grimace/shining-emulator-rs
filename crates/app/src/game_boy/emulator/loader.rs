@@ -184,6 +184,12 @@ fn load_rom_into_emulator(
 ) -> Result<i64, GameBoyLoadError> {
     let mut properties = parse_rom_properties(&loaded.bytes)?;
     apply_emulation_model_setting(&mut properties, storage.data.settings.emulation_model);
+    if let Some(model) = &loaded.validation_model {
+        // Diagnostic hardware comes from the curated case, not cartridge flags
+        // or the user's gameplay preference.
+        properties.cgb_flag = model == "CGB-E";
+        properties.sgb_flag = model == "SGB";
+    }
     // Boot is bypassed, so enforce its acceptance checks before mutating the
     // core or restoring an auto-save. Forced models must use their own checks.
     validate_boot_header(&loaded.bytes, &properties)
@@ -209,7 +215,11 @@ fn load_rom_into_emulator(
             "emulated ROM memory is unavailable".to_string(),
         ));
     }
-    if let Some(size_bytes) = emulator.sram.persistence_len() {
+    if let Some(size_bytes) = emulator
+        .sram
+        .persistence_len()
+        .filter(|_| loaded.validation_model.is_none())
+    {
         let saved_data = storage
             .load_sram(&loaded.rom_id, size_bytes)
             .map_err(|error| {
@@ -219,7 +229,7 @@ fn load_rom_into_emulator(
             })?;
         emulator.sram.load_save_data(&saved_data);
     }
-    if resume_auto_save {
+    if resume_auto_save && loaded.validation_model.is_none() {
         restore_auto_save_if_present(emulator, storage, &loaded.rom_id)?;
     }
 
@@ -406,6 +416,18 @@ fn load_rom_bytes(
     provider: RomProvider,
     roms_dir: PathBuf,
 ) -> Result<LoadedRomBytes, GameBoyLoadError> {
+    if provider.uuid == crate::storage::providers::VALIDATION_PROVIDER_UUID {
+        let (case, bytes, opened_file_name) =
+            crate::storage::validation_roms::load(&rom.file_name, rom.id.as_deref(), &roms_dir)
+                .map_err(|error| GameBoyLoadError::OpenFailedMessage(error.to_string()))?;
+        return Ok(LoadedRomBytes {
+            file_name: rom.file_name,
+            opened_file_name,
+            rom_id: rom_identifier(&bytes),
+            bytes,
+            validation_model: Some(case.model),
+        });
+    }
     let opened_file_name;
     let bytes = if let Some(path) = &provider.absolute_local_dir_path {
         opened_file_name = path.join(&rom.file_name).display().to_string();
@@ -436,6 +458,7 @@ fn load_rom_bytes(
         opened_file_name,
         bytes,
         rom_id,
+        validation_model: None,
     })
 }
 
@@ -535,6 +558,7 @@ struct LoadedRomBytes {
     opened_file_name: String,
     bytes: Vec<u8>,
     rom_id: String,
+    validation_model: Option<String>,
 }
 
 #[derive(Debug)]

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "id": "validation-v7.0-1",
+      "collection": "c-sp/game-boy-test-roms v7.0",
+      "catalogs": {
+        "in_app": {
+          "path": "v1/validation-v7.0-1/in-app.json",
+          "sha256": "54e2b812c064f5d64f41ecbd8a8229278938f34336f509f7e433311e1b7db5cb"
+        },
+        "headless": {
+          "path": "v1/validation-v7.0-1/headless.json",
+          "sha256": "f88f028bd86ea3bce304cb1efca30e4076c4c0c6c319e39ad4e4be1284952df6"
+        }
+      },
+      "licenses": [
+        {
+          "path": "v1/validation-v7.0-1/licenses/Collection-MIT.txt",
+          "sha256": "18a1cfd526cbb82554407b3912aea8f155a5ccfb3366fcfca6f15f813cbcadac"
+        },
+        {
+          "path": "v1/validation-v7.0-1/licenses/Mooneye-MIT.txt",
+          "sha256": "8a9a9fe1603b7566d56978c89a6442ae1db2dd96042fb94c20b9647c47afae88"
+        },
+        {
+          "path": "v1/validation-v7.0-1/licenses/SameSuite-X11.txt",
+          "sha256": "f1025d958dbcb938a977b9d5198df379db143cf102df11078ebf032d4de8194c"
+        }
+      ]
+    }
+  ]
+}

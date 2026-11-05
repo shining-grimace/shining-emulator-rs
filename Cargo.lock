@@ -285,6 +285,7 @@ dependencies = [
  "directories",
  "fastrand",
  "hex",
+ "image",
  "jsonpath_lib",
  "libc",
  "serde",

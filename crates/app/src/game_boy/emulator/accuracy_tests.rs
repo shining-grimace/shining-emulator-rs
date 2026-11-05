@@ -13,6 +13,7 @@ mod fixtures;
 mod models;
 mod runner;
 mod tests;
+mod validation;
 
 const EXPECTED_ACCEPTANCE_ROM_COUNT: usize = 75;
 const MAX_STEPS: usize = 2_000_000;

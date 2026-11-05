@@ -3,6 +3,27 @@ use crate::game_boy::emulator::boot::{BootHeaderError, LOGO_START, OFFICIAL_LOGO
 use crate::game_boy::emulator::bus::{read8, write8};
 
 #[test]
+fn validation_roms_select_catalog_hardware_and_ignore_auto_saves() {
+    let mut storage = test_storage(EMULATION_MODEL_SUPER_GAME_BOY);
+    let root = std::env::temp_dir().join(format!("shining-validation-{}", uuid::Uuid::new_v4()));
+    storage.paths = crate::storage::paths::StoragePaths::from_root(root.clone());
+    for rom in crate::storage::validation_roms::metadata().unwrap() {
+        let case = crate::storage::validation_roms::case(&rom.file_name).unwrap();
+        let mut loaded = loaded_test_rom(minimal_rom(0, 0, 0));
+        loaded.validation_model = Some(case.model.clone());
+        let save = storage.auto_save_path(&loaded.rom_id);
+        fs::create_dir_all(save.parent().unwrap()).unwrap();
+        fs::write(save, b"invalid save must not be restored for diagnostics").unwrap();
+        let mut core = GameBoyCore::default();
+        load_rom_into_emulator(&loaded, &mut core, &storage, true).unwrap();
+        assert_eq!(core.rom.properties.cgb_flag, case.model == "CGB-E");
+        assert_eq!(core.rom.properties.sgb_flag, case.model == "SGB");
+        assert_eq!(core.cpu_registers.pc, 0x100);
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn minimal_rom_header_loads_as_plain_game_boy_rom() {
     let rom = minimal_rom(0x00, 0x00, 0x00);
 
@@ -205,6 +226,7 @@ fn loaded_test_rom(bytes: Vec<u8>) -> LoadedRomBytes {
         opened_file_name: "boot-test.gb".to_string(),
         rom_id: "boot-test".to_string(),
         bytes,
+        validation_model: None,
     }
 }
 

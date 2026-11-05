@@ -35,7 +35,7 @@ and RAM size (the acceptance `sources-GS` DMA test requires MBC5 and RAM).
 
 ## Baseline maintenance
 
-`baseline.tsv` records the exact outcome class for each ROM/model pair. Any
+`test-roms/baselines/mooneye-acceptance.tsv` records the exact outcome class for each ROM/model pair. Any
 change fails the regression check, including a failure becoming a timeout,
 an improvement, an unlisted case, or a baseline case no longer being run.
 A successful harness run means the baseline matched; consult the printed
@@ -44,5 +44,5 @@ pass/fail/timeout totals for actual emulation accuracy.
 To produce a candidate for review, set
 `SHINING_MOONEYE_REPORT=/tmp/mooneye-candidate.tsv` when running the script.
 The report is written even when outcomes differ. Review the changes before
-updating `baseline.tsv`; the harness never updates it automatically. Keep
+updating `test-roms/baselines/mooneye-acceptance.tsv`; the harness never updates it automatically. Keep
 the fixture version pinned and review inventory/model changes when upgrading.

@@ -24,7 +24,7 @@ impl Status {
 
 pub(super) fn path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/game_boy/emulator/accuracy_tests/baseline.tsv")
+        .join("../../test-roms/baselines/mooneye-acceptance.tsv")
 }
 
 pub(super) fn parse(text: &str) -> Result<BTreeMap<String, Status>, String> {

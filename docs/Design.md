@@ -70,6 +70,16 @@ an object of key-value pairs where the keys are "forceButtonOverlay",
 
 ### ROM Providers
 
+The built-in **Game Boy validation ROMs** provider is disabled by default. It
+exposes a curated Mooneye/SameSuite diagnostic collection through a versioned
+static web directory at `/home-of-8-bit/rom-catalog/`. ROMs and notices download
+on demand and are verified before use; cached files work offline. Each entry
+has an explicit hardware target. Diagnostics start from reset without restoring persistent
+SRAM or automatic save states. Blargg ROMs are used only by the opt-in headless
+test harness and are excluded from the app. See `test-roms/README.md` for the
+pinned selections, preparation/execution scripts, result protocols and licenses.
+See `test-roms/HOSTING.md` for the upload-ready tree and site configuration.
+
 This is stored in `providers.json`, holding an array where each item is an
 object containing:
 - uuid: a UUID assigned to this provider

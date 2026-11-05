@@ -1478,7 +1478,9 @@ fn provider_row(provider: &RomProvider) -> ListRow {
 }
 
 fn provider_type_label(provider: &RomProvider) -> &'static str {
-    if provider.absolute_local_dir_path.is_some() {
+    if provider.uuid == crate::storage::providers::VALIDATION_PROVIDER_UUID {
+        "Web Catalog"
+    } else if provider.absolute_local_dir_path.is_some() {
         "Local Directory"
     } else if provider.remote_file_url.is_some() {
         "Remote File"

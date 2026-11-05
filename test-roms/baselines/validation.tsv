@@ -1,0 +1,331 @@
+# c-sp/game-boy-test-roms v7.0; initial observed baseline; model<TAB>status<TAB>ROM
+DMG	fail	blargg/dmg_sound/rom_singles/01-registers.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/02-len ctr.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/03-trigger.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/04-sweep.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/05-sweep details.gb
+DMG	pass	blargg/dmg_sound/rom_singles/06-overflow on trigger.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/07-len sweep period sync.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/08-len ctr during power.gb
+DMG	fail	blargg/dmg_sound/rom_singles/09-wave read while on.gb
+DMG	fail	blargg/dmg_sound/rom_singles/10-wave trigger while on.gb
+DMG	timeout	blargg/dmg_sound/rom_singles/11-regs after power.gb
+DMG	fail	blargg/dmg_sound/rom_singles/12-wave write while on.gb
+CGB-E	fail	blargg/cgb_sound/rom_singles/01-registers.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/02-len ctr.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/03-trigger.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/04-sweep.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/05-sweep details.gb
+CGB-E	pass	blargg/cgb_sound/rom_singles/06-overflow on trigger.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/07-len sweep period sync.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/08-len ctr during power.gb
+CGB-E	fail	blargg/cgb_sound/rom_singles/09-wave read while on.gb
+CGB-E	pass	blargg/cgb_sound/rom_singles/10-wave trigger while on.gb
+CGB-E	timeout	blargg/cgb_sound/rom_singles/11-regs after power.gb
+CGB-E	fail	blargg/cgb_sound/rom_singles/12-wave.gb
+DMG	pass	blargg/cpu_instrs/individual/01-special.gb
+CGB-E	pass	blargg/cpu_instrs/individual/01-special.gb
+DMG	pass	blargg/cpu_instrs/individual/02-interrupts.gb
+CGB-E	pass	blargg/cpu_instrs/individual/02-interrupts.gb
+DMG	pass	blargg/cpu_instrs/individual/03-op sp,hl.gb
+CGB-E	pass	blargg/cpu_instrs/individual/03-op sp,hl.gb
+DMG	pass	blargg/cpu_instrs/individual/04-op r,imm.gb
+CGB-E	pass	blargg/cpu_instrs/individual/04-op r,imm.gb
+DMG	pass	blargg/cpu_instrs/individual/05-op rp.gb
+CGB-E	pass	blargg/cpu_instrs/individual/05-op rp.gb
+DMG	pass	blargg/cpu_instrs/individual/06-ld r,r.gb
+CGB-E	pass	blargg/cpu_instrs/individual/06-ld r,r.gb
+DMG	pass	blargg/cpu_instrs/individual/07-jr,jp,call,ret,rst.gb
+CGB-E	pass	blargg/cpu_instrs/individual/07-jr,jp,call,ret,rst.gb
+DMG	pass	blargg/cpu_instrs/individual/08-misc instrs.gb
+CGB-E	pass	blargg/cpu_instrs/individual/08-misc instrs.gb
+DMG	pass	blargg/cpu_instrs/individual/09-op r,r.gb
+CGB-E	pass	blargg/cpu_instrs/individual/09-op r,r.gb
+DMG	pass	blargg/cpu_instrs/individual/10-bit ops.gb
+CGB-E	pass	blargg/cpu_instrs/individual/10-bit ops.gb
+DMG	pass	blargg/cpu_instrs/individual/11-op a,(hl).gb
+CGB-E	pass	blargg/cpu_instrs/individual/11-op a,(hl).gb
+DMG	pass	blargg/mem_timing-2/rom_singles/01-read_timing.gb
+CGB-E	pass	blargg/mem_timing-2/rom_singles/01-read_timing.gb
+DMG	pass	blargg/mem_timing-2/rom_singles/02-write_timing.gb
+CGB-E	pass	blargg/mem_timing-2/rom_singles/02-write_timing.gb
+DMG	pass	blargg/mem_timing-2/rom_singles/03-modify_timing.gb
+CGB-E	pass	blargg/mem_timing-2/rom_singles/03-modify_timing.gb
+DMG	pass	blargg/instr_timing/instr_timing.gb
+CGB-E	pass	blargg/instr_timing/instr_timing.gb
+DMG	pass	blargg/halt_bug.gb
+CGB-E	pass	blargg/halt_bug.gb
+CGB-E	fail	blargg/interrupt_time/interrupt_time.gb
+DMG	pass	mooneye-test-suite/acceptance/add_sp_e_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/add_sp_e_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/bits/mem_oam.gb
+SGB	pass	mooneye-test-suite/acceptance/bits/mem_oam.gb
+DMG	pass	mooneye-test-suite/acceptance/bits/reg_f.gb
+SGB	pass	mooneye-test-suite/acceptance/bits/reg_f.gb
+DMG	fail	mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/boot_div-S.gb
+DMG0	skip	mooneye-test-suite/acceptance/boot_div-dmg0.gb
+DMG	fail	mooneye-test-suite/acceptance/boot_div-dmgABCmgb.gb
+SGB	fail	mooneye-test-suite/acceptance/boot_div2-S.gb
+SGB	fail	mooneye-test-suite/acceptance/boot_hwio-S.gb
+DMG0	skip	mooneye-test-suite/acceptance/boot_hwio-dmg0.gb
+DMG	fail	mooneye-test-suite/acceptance/boot_hwio-dmgABCmgb.gb
+DMG0	skip	mooneye-test-suite/acceptance/boot_regs-dmg0.gb
+DMG	pass	mooneye-test-suite/acceptance/boot_regs-dmgABC.gb
+MGB	skip	mooneye-test-suite/acceptance/boot_regs-mgb.gb
+SGB	pass	mooneye-test-suite/acceptance/boot_regs-sgb.gb
+SGB2	skip	mooneye-test-suite/acceptance/boot_regs-sgb2.gb
+DMG	pass	mooneye-test-suite/acceptance/call_cc_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/call_cc_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/call_cc_timing2.gb
+SGB	pass	mooneye-test-suite/acceptance/call_cc_timing2.gb
+DMG	pass	mooneye-test-suite/acceptance/call_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/call_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/call_timing2.gb
+SGB	pass	mooneye-test-suite/acceptance/call_timing2.gb
+DMG	pass	mooneye-test-suite/acceptance/di_timing-GS.gb
+SGB	pass	mooneye-test-suite/acceptance/di_timing-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/div_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/div_timing.gb
+DMG	fail	mooneye-test-suite/acceptance/ei_sequence.gb
+SGB	fail	mooneye-test-suite/acceptance/ei_sequence.gb
+DMG	pass	mooneye-test-suite/acceptance/ei_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ei_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/halt_ime0_ei.gb
+SGB	pass	mooneye-test-suite/acceptance/halt_ime0_ei.gb
+DMG	pass	mooneye-test-suite/acceptance/halt_ime0_nointr_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/halt_ime0_nointr_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/halt_ime1_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/halt_ime1_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/halt_ime1_timing2-GS.gb
+SGB	pass	mooneye-test-suite/acceptance/halt_ime1_timing2-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/if_ie_registers.gb
+SGB	pass	mooneye-test-suite/acceptance/if_ie_registers.gb
+DMG	pass	mooneye-test-suite/acceptance/instr/daa.gb
+SGB	pass	mooneye-test-suite/acceptance/instr/daa.gb
+DMG	pass	mooneye-test-suite/acceptance/interrupts/ie_push.gb
+SGB	pass	mooneye-test-suite/acceptance/interrupts/ie_push.gb
+DMG	pass	mooneye-test-suite/acceptance/intr_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/intr_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/jp_cc_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/jp_cc_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/jp_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/jp_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/ld_hl_sp_e_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ld_hl_sp_e_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma/basic.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma/basic.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma/reg_read.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma/reg_read.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma/sources-GS.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma/sources-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma_restart.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma_restart.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma_start.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma_start.gb
+DMG	pass	mooneye-test-suite/acceptance/oam_dma_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/oam_dma_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/pop_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/pop_timing.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb
+SGB	pass	mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb
+DMG	pass	mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/stat_irq_blocking.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/stat_irq_blocking.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb
+DMG	fail	mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb
+SGB	fail	mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb
+DMG	pass	mooneye-test-suite/acceptance/push_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/push_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/rapid_di_ei.gb
+SGB	pass	mooneye-test-suite/acceptance/rapid_di_ei.gb
+DMG	pass	mooneye-test-suite/acceptance/ret_cc_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ret_cc_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/ret_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/ret_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/reti_intr_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/reti_intr_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/reti_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/reti_timing.gb
+DMG	pass	mooneye-test-suite/acceptance/rst_timing.gb
+SGB	pass	mooneye-test-suite/acceptance/rst_timing.gb
+DMG	fail	mooneye-test-suite/acceptance/serial/boot_sclk_align-dmgABCmgb.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/div_write.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/div_write.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/rapid_toggle.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/rapid_toggle.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim00.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim00.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim00_div_trigger.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim00_div_trigger.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim01.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim01.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim01_div_trigger.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim01_div_trigger.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim10.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim10.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim10_div_trigger.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim10_div_trigger.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim11.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim11.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tim11_div_trigger.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tim11_div_trigger.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tima_reload.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tima_reload.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tima_write_reloading.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tima_write_reloading.gb
+DMG	pass	mooneye-test-suite/acceptance/timer/tma_write_reloading.gb
+SGB	pass	mooneye-test-suite/acceptance/timer/tma_write_reloading.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/bits_bank1.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/bits_bank1.gb
+DMG	timeout	mooneye-test-suite/emulator-only/mbc1/bits_bank2.gb
+CGB-E	timeout	mooneye-test-suite/emulator-only/mbc1/bits_bank2.gb
+DMG	timeout	mooneye-test-suite/emulator-only/mbc1/bits_mode.gb
+CGB-E	timeout	mooneye-test-suite/emulator-only/mbc1/bits_mode.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc1/bits_ramg.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc1/bits_ramg.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc1/ram_256kb.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc1/ram_256kb.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc1/ram_64kb.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc1/ram_64kb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_16Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_16Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_1Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_1Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_2Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_2Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_4Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_4Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_512kb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_512kb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc1/rom_8Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc1/rom_8Mb.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc2/bits_ramg.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc2/bits_ramg.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc2/bits_romb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc2/bits_romb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc2/bits_unused.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc2/bits_unused.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc2/ram.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc2/ram.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc2/rom_1Mb.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc2/rom_1Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc2/rom_2Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc2/rom_2Mb.gb
+DMG	fail	mooneye-test-suite/emulator-only/mbc2/rom_512kb.gb
+CGB-E	fail	mooneye-test-suite/emulator-only/mbc2/rom_512kb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_16Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_16Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_1Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_1Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_2Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_2Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_32Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_32Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_4Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_4Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_512kb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_512kb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_64Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_64Mb.gb
+DMG	pass	mooneye-test-suite/emulator-only/mbc5/rom_8Mb.gb
+CGB-E	pass	mooneye-test-suite/emulator-only/mbc5/rom_8Mb.gb
+CGB-E	fail	mooneye-test-suite/misc/bits/unused_hwio-C.gb
+AGB	skip	mooneye-test-suite/misc/boot_div-A.gb
+CGB-0	skip	mooneye-test-suite/misc/boot_div-cgb0.gb
+CGB-E	fail	mooneye-test-suite/misc/boot_div-cgbABCDE.gb
+CGB-E	fail	mooneye-test-suite/misc/boot_hwio-C.gb
+AGB	skip	mooneye-test-suite/misc/boot_regs-A.gb
+CGB-E	fail	mooneye-test-suite/misc/boot_regs-cgb.gb
+CGB-E	fail	mooneye-test-suite/misc/ppu/vblank_stat_intr-C.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_align.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_align_cpu.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_delay.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_duty.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_duty_delay.gb
+CGB-0/B	skip	same-suite/apu/channel_1/channel_1_extra_length_clocking-cgb0B.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_freq_change.gb
+AGB	skip	same-suite/apu/channel_1/channel_1_freq_change_timing-A.gb
+CGB-0/B/C	skip	same-suite/apu/channel_1/channel_1_freq_change_timing-cgb0BC.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_freq_change_timing-cgbDE.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_nrx2_glitch.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_nrx2_speed_change.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_restart.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_restart_nrx2_glitch.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_stop_div.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_stop_restart.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_sweep.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_sweep_restart.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_sweep_restart_2.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_volume.gb
+CGB-E	fail	same-suite/apu/channel_1/channel_1_volume_div.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_align.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_align_cpu.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_delay.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_duty.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_duty_delay.gb
+CGB-0/B	skip	same-suite/apu/channel_2/channel_2_extra_length_clocking-cgb0B.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_freq_change.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_nrx2_glitch.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_nrx2_speed_change.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_restart.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_restart_nrx2_glitch.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_stop_div.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_stop_restart.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_volume.gb
+CGB-E	fail	same-suite/apu/channel_2/channel_2_volume_div.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_and_glitch.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_delay.gb
+CGB-0	skip	same-suite/apu/channel_3/channel_3_extra_length_clocking-cgb0.gb
+CGB-B	skip	same-suite/apu/channel_3/channel_3_extra_length_clocking-cgbB.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_first_sample.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_freq_change_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_restart_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_restart_during_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_restart_stop_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_shift_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_shift_skip_delay.gb
+CGB-E	pass	same-suite/apu/channel_3/channel_3_stop_delay.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_stop_div.gb
+CGB-E	pass	same-suite/apu/channel_3/channel_3_wave_ram_dac_on_rw.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_wave_ram_locked_write.gb
+CGB-E	fail	same-suite/apu/channel_3/channel_3_wave_ram_sync.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_align.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_delay.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_equivalent_frequencies.gb
+CGB-0/B	skip	same-suite/apu/channel_4/channel_4_extra_length_clocking-cgb0B.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_freq_change.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_frequency_alignment.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr15.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr_15_7.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr_7_15.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr_restart.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_lfsr_restart_fast.gb
+CGB-E	fail	same-suite/apu/channel_4/channel_4_volume_div.gb
+CGB-E	fail	same-suite/apu/div_trigger_volume_10.gb
+CGB-E	fail	same-suite/apu/div_write_trigger.gb
+DMG	fail	same-suite/apu/div_write_trigger.gb
+CGB-E	fail	same-suite/apu/div_write_trigger_10.gb
+DMG	fail	same-suite/apu/div_write_trigger_10.gb
+CGB-E	fail	same-suite/apu/div_write_trigger_volume.gb
+CGB-E	fail	same-suite/apu/div_write_trigger_volume_10.gb

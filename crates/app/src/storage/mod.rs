@@ -8,6 +8,7 @@ pub mod provider_sync;
 pub mod providers;
 pub mod rom_data;
 pub mod rom_identifier;
+pub(crate) mod validation_roms;
 
 use std::fs;
 use std::io;

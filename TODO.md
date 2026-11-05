@@ -21,7 +21,6 @@ BUGS:
   - NR52 power-off currently leaves register storage intact, and bus writes still modify powered-off registers. Hardware clears/restricts these registers, with model-specific exceptions
 
 UPDATES:
-- Incorporate Blargg's sound test ROMs and SameSuite APU tests
 - Ensure the app complies with Homebrew Hub's proposed API usage terms, including giving credit to that service, correctly representing ROMs and their authors, and being diligent on which ROMs are fetched
 - Ensure ROM licenses are correctly displayed and can be accessed from the app
 - Ensure test ROMs can be enabled in the ROM providers

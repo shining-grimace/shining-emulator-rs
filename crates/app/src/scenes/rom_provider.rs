@@ -292,6 +292,8 @@ fn reset_provider_test_connection(mut state: ResMut<ProviderTestConnectionState>
 }
 
 fn sync_provider_conditional_sections(
+    storage: Res<LocalStorage>,
+    target: Res<RomProviderEditTarget>,
     windows: Query<&Window, With<PrimaryWindow>>,
     selects: Query<(Entity, &ProviderSelect, &UiMultiSelect)>,
     mut nodes: ParamSet<(
@@ -308,7 +310,17 @@ fn sync_provider_conditional_sections(
     let (provider_type, pagination_enabled) = {
         let node_query = nodes.p0();
         (
-            selected_value(&selects, SELECT_TYPE, &node_query, &parents),
+            if target
+                .provider_index
+                .and_then(|index| storage.data.providers.get(index))
+                .is_some_and(|provider| {
+                    provider.uuid == crate::storage::providers::VALIDATION_PROVIDER_UUID
+                })
+            {
+                3
+            } else {
+                selected_value(&selects, SELECT_TYPE, &node_query, &parents)
+            },
             selected_value(&selects, SELECT_PAGINATION, &node_query, &parents) == 0,
         )
     };
@@ -1428,6 +1440,9 @@ fn priority_config(priority: u8) -> MultiSelectConfig {
 }
 
 fn provider_type_config(provider: &RomProvider) -> MultiSelectConfig {
+    if provider.uuid == crate::storage::providers::VALIDATION_PROVIDER_UUID {
+        return select_config(0, vec!["Web catalog"]);
+    }
     let selected = if provider.remote_file_url.is_some() {
         1
     } else if provider.remote_api.is_some() {

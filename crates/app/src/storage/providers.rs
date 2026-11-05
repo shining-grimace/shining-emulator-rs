@@ -7,7 +7,8 @@ use crate::storage::errors::StorageError;
 
 const GBDEV_GB_PROVIDER_UUID: Uuid = Uuid::from_u128(0x1d077a21_b17d_458c_bbbf_410a1d49240a);
 const GBDEV_GBC_PROVIDER_UUID: Uuid = Uuid::from_u128(0x6ef907ab_d667_45d2_9c12_712a3910d134);
-const VALIDATION_PROVIDER_UUID: Uuid = Uuid::from_u128(0x73b51ffd_4149_45d0_b820_a56c64dc9ff0);
+pub(crate) const VALIDATION_PROVIDER_UUID: Uuid =
+    Uuid::from_u128(0x73b51ffd_4149_45d0_b820_a56c64dc9ff0);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +100,10 @@ pub fn provider_from_form_input(
     provider.friendly_name = friendly_name;
     provider.priority = priority;
     provider.enabled = input.enabled;
+    // Built-in ROMs have no editable external source.
+    if provider.uuid == VALIDATION_PROVIDER_UUID {
+        return Ok(provider);
+    }
     provider.absolute_local_dir_path = None;
     provider.remote_file_url = None;
     provider.remote_api = None;
@@ -134,6 +139,9 @@ pub fn validate_rom_provider(provider: &RomProvider) -> Result<(), StorageError>
     let source_count = usize::from(provider.absolute_local_dir_path.is_some())
         + usize::from(provider.remote_file_url.is_some())
         + usize::from(provider.remote_api.is_some());
+    if source_count == 0 && provider.uuid == VALIDATION_PROVIDER_UUID {
+        return Ok(());
+    }
     if source_count != 1 {
         return Err(provider_error(
             "Exactly one ROM provider source type must be configured.",
@@ -303,7 +311,7 @@ pub fn new_provider() -> RomProvider {
     }
 }
 
-pub(super) fn default_rom_providers() -> Vec<RomProvider> {
+pub(crate) fn default_rom_providers() -> Vec<RomProvider> {
     vec![
         gbdev_provider(
             GBDEV_GB_PROVIDER_UUID,
@@ -395,6 +403,40 @@ mod tests {
 
         assert_eq!(providers[0].remote_api_max_pages(), Some(5));
         assert_eq!(providers[1].remote_api_max_pages(), Some(5));
+    }
+
+    #[test]
+    fn validation_provider_can_be_enabled_without_an_external_source() {
+        let provider = default_rom_providers()
+            .into_iter()
+            .find(|provider| provider.uuid == VALIDATION_PROVIDER_UUID)
+            .unwrap();
+        let input = RomProviderFormInput {
+            friendly_name: provider.friendly_name.clone(),
+            priority: "5".to_owned(),
+            enabled: true,
+            source_kind: RomProviderSourceKind::LocalDirectory,
+            local_dir_path: String::new(),
+            remote_file_url: String::new(),
+            api_url: String::new(),
+            download_url: String::new(),
+            items_json_path: String::new(),
+            pagination_enabled: false,
+            page_count_json_path: String::new(),
+            query_page: String::new(),
+            max_pages: String::new(),
+            item_id_json_path: String::new(),
+            item_name_json_path: String::new(),
+            item_author_json_path: String::new(),
+            item_license_json_path: String::new(),
+            item_filename_json_path: String::new(),
+        };
+        let enabled = provider_from_form_input(Some(&provider), input).unwrap();
+        assert!(enabled.enabled);
+        assert!(enabled.locked);
+        validate_rom_provider(&enabled).unwrap();
+        assert!(enabled.absolute_local_dir_path.is_none());
+        assert!(enabled.remote_api.is_none());
     }
 
     #[test]
